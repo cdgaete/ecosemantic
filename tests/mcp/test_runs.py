@@ -149,9 +149,9 @@ async def test_a_start_over_a_record_this_version_cannot_read_names_it(
         )
     )
     folder = context.systems_dir / "runs" / str(posted.id)
-    stored = json.loads((folder / "run.json").read_text())
+    stored = json.loads((folder / "run.json").read_text(encoding="utf-8"))
     del stored["at_hash"]
-    (folder / "run.json").write_text(json.dumps(stored))
+    (folder / "run.json").write_text(json.dumps(stored), encoding="utf-8")
     try:
         async with Client(full_server) as client:
             with pytest.raises(ToolError) as caught:

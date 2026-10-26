@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
 
+from ecosemantic.backends.filesystem import records
 from ecosemantic.errors import NotFound, Unavailable
 from ecosemantic.ports.types import Run, RunDraft, RunPatch, StoreChange, refuse_open
 
@@ -49,7 +49,12 @@ class MemoryRuns:
         return self._runs[run_id]
 
     async def post_run(self, draft: RunDraft) -> Run:
-        run = Run(id=uuid.uuid4(), posted_at=datetime.now(UTC), **draft.model_dump())
+        newest = max((run.posted_at for run in self._runs.values()), default=None)
+        run = Run(
+            id=uuid.uuid4(),
+            posted_at=records.next_posted_at(records.now(), newest),
+            **draft.model_dump(),
+        )
         self._runs[run.id] = run
         self._announce(run)
         return run
@@ -58,7 +63,7 @@ class MemoryRuns:
         return self.read_record(run_id)
 
     async def list_runs(self, product_system_id: uuid.UUID | None = None) -> list[Run]:
-        runs = sorted(self._runs.values(), key=lambda r: (r.posted_at, str(r.id)), reverse=True)
+        runs = records.newest_first(self._runs.values())
         if product_system_id is None:
             return runs
         return [run for run in runs if run.product_system_id == product_system_id]
@@ -85,11 +90,14 @@ class MemoryRuns:
 
 
 class MemoryLauncher:
-    """A launcher with no worker: it refuses to start a run, and no run it is asked about has a
-    live worker."""
+    """A launcher with no worker: it refuses to start a run, and reports the worker alive only
+    when it was built so."""
+
+    def __init__(self, *, alive: bool = False) -> None:
+        self._alive = alive
 
     def start(self, run_id: uuid.UUID) -> int:
         raise Unavailable(f"run {run_id} has no worker in memory")
 
     def alive(self, run_id: uuid.UUID) -> bool:
-        return False
+        return self._alive

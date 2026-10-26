@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
 import time
@@ -11,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from ecosemantic.backends.filesystem.runs import FilesystemRuns
+from ecosemantic.backends.retry import REPLACE_ATTEMPTS
 from ecosemantic.errors import Unavailable
 from ecosemantic.ports.run import RunPort
 from ecosemantic.ports.types import RunPatch
@@ -56,6 +58,7 @@ class TestFilesystemRuns(RunConformance):
             [sys.executable, "-c", writer, str(tmp_path), str(posted.id)],
             stdout=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
         )
         assert process.stdout is not None and process.stdout.readline().strip() == "writing"
         reads = 0
@@ -64,6 +67,38 @@ class TestFilesystemRuns(RunConformance):
             reads += 1
         assert process.returncode == 0 and reads > 0
         assert (await runs.get_run(posted.id)).progress.iterations > 0
+
+    async def test_a_replace_refused_by_a_reader_is_retried_then_raised(
+        self, runs: FilesystemRuns, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        posted = await runs.post_run(draft(uuid.UUID(int=1)))
+        attempts = 0
+        real_replace = os.replace
+
+        def flaky(source: str, destination: str) -> None:
+            nonlocal attempts
+            attempts += 1
+            if attempts <= 2:
+                raise PermissionError("held")
+            real_replace(source, destination)
+
+        monkeypatch.setattr(os, "replace", flaky)
+        await runs.update_run(posted.id, RunPatch(status="running"))
+        assert attempts == 3
+        assert (await runs.get_run(posted.id)).status == "running"
+
+        attempts = 0
+
+        def always(source: str, destination: str) -> None:
+            nonlocal attempts
+            attempts += 1
+            raise PermissionError("held")
+
+        monkeypatch.setattr(os, "replace", always)
+        with pytest.raises(Unavailable) as caught:
+            await runs.update_run(posted.id, RunPatch(status="done"))
+        assert attempts == REPLACE_ATTEMPTS
+        assert isinstance(caught.value.__cause__, PermissionError)
 
     async def test_a_patch_waits_for_a_lock_another_process_holds(
         self, runs: FilesystemRuns, tmp_path: Path
@@ -78,7 +113,10 @@ class TestFilesystemRuns(RunConformance):
         )
         lock_path = tmp_path / "runs" / f"{posted.id}.lock"
         process = subprocess.Popen(
-            [sys.executable, "-c", holder, str(lock_path)], stdout=subprocess.PIPE, text=True
+            [sys.executable, "-c", holder, str(lock_path)],
+            stdout=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
         )
         assert process.stdout is not None and process.stdout.readline().strip() == "held"
         started = time.monotonic()
@@ -100,7 +138,10 @@ class TestFilesystemRuns(RunConformance):
             "asyncio.run(hold())\n"
         )
         process = subprocess.Popen(
-            [sys.executable, "-c", holder, str(tmp_path)], stdout=subprocess.PIPE, text=True
+            [sys.executable, "-c", holder, str(tmp_path)],
+            stdout=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
         )
         assert process.stdout is not None and process.stdout.readline().strip() == "held"
 
@@ -118,9 +159,9 @@ class TestFilesystemRuns(RunConformance):
     ) -> None:
         posted = await runs.post_run(draft(uuid.UUID(int=1)))
         record = tmp_path / "runs" / str(posted.id) / "run.json"
-        stored = json.loads(record.read_text())
+        stored = json.loads(record.read_text(encoding="utf-8"))
         del stored["at_hash"]
-        record.write_text(json.dumps(stored))
+        record.write_text(json.dumps(stored), encoding="utf-8")
         for read in (lambda: runs.get_run(posted.id), runs.list_runs):
             with pytest.raises(Unavailable) as caught:
                 await read()

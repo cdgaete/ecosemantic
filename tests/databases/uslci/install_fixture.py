@@ -134,7 +134,7 @@ def fixture_release(
     released = tmp_path / "releases"
     released.mkdir()
     (released / f"{VERSION}.yaml").write_text(
-        yaml.safe_dump(profile.model_dump(mode="json"), sort_keys=False)
+        yaml.safe_dump(profile.model_dump(mode="json"), sort_keys=False), encoding="utf-8"
     )
     unlinked, left_out = unlinked_rows(), left_out_rows()
     write_unlinked(released / profile.unlinked, unlinked[1:] if drop_unlinked else unlinked)

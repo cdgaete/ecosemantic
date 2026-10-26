@@ -142,5 +142,7 @@ async def test_a_started_install_process_carries_the_install_in_the_data_directo
         await asyncio.sleep(0.2)
         record = installs.read_record(posted.id)
     assert record.status == "done" and record.summary is not None
-    assert "hunter2-secret" not in (install_dir(data, posted.id) / LOG_FILE).read_text()
+    assert "hunter2-secret" not in (install_dir(data, posted.id) / LOG_FILE).read_text(
+        encoding="utf-8"
+    )
     assert list(uploads_dir(data).iterdir()) == []

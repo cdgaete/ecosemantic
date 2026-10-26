@@ -24,7 +24,8 @@ def test_an_edited_value_reassembles_into_a_different_document(
     folder = write_folder(tmp_path, system)
     path = folder / "inputs" / "input_parameters.csv"
     path.write_text(
-        path.read_text().replace("fabric_mass,0.2,", "fabric_mass,0.25,"), encoding="utf-8"
+        path.read_text(encoding="utf-8").replace("fabric_mass,0.2,", "fabric_mass,0.25,"),
+        encoding="utf-8",
     )
     assert content_hash(assemble(folder)) != content_hash(system)
 

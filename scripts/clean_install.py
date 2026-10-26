@@ -105,6 +105,7 @@ def main() -> int:
             check=True,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         workspace = json.loads(opened.stdout)
         version = subprocess.run(
@@ -112,6 +113,7 @@ def main() -> int:
             check=True,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         ).stdout.strip()
     report = {
         "python": version,

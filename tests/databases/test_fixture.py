@@ -239,7 +239,7 @@ def test_the_matrix_export_carries_the_fixtures_own_numbers(tmp_path: Path) -> N
         "ee_index.csv",
         "ie_index.csv",
     ]
-    assert (release.matrix / "A_public.csv").read_text().splitlines()[0] == (
+    assert (release.matrix / "A_public.csv").read_text(encoding="utf-8").splitlines()[0] == (
         "row;column;coefficient;uncertainty type;varianceWithPedigreeUncertainty;"
         "minValue;mostLikelyValue;maxValue"
     )

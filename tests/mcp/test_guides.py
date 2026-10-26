@@ -14,7 +14,9 @@ STEP = re.compile(r"```json\n(.*?)\n```", re.S)
 
 
 def steps(name: str) -> list[dict]:
-    text = (resources.files("ecosemantic.mcp") / "guides" / f"{name}.md").read_text()
+    text = (resources.files("ecosemantic.mcp") / "guides" / f"{name}.md").read_text(
+        encoding="utf-8"
+    )
     return [json.loads(block) for block in STEP.findall(text)]
 
 

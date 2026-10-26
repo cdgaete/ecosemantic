@@ -320,7 +320,7 @@ def test_a_flow_property_and_a_unit_group_records_are_openlcas() -> None:
 def test_a_location_record_carries_its_code_and_its_geometry() -> None:
     read = tables()
     locations = rows("TBL_LOCATIONS")
-    document = json.loads((FIXTURES / "rows.json").read_text())
+    document = json.loads((FIXTURES / "rows.json").read_text(encoding="utf-8"))
 
     assert entities.location(read, read.row("TBL_LOCATIONS", 1)) == {
         "@type": "Location",

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 
+from ecosemantic.backends.filesystem import records
 from ecosemantic.errors import Conflict, NotFound
 from ecosemantic.ports.types import MonteCarloConfig, RunDraft, RunPatch, RunProgress
 
@@ -39,8 +41,11 @@ class RunConformance:
         assert running.at_hash == posted.at_hash and running.config == posted.config
         assert await runs.get_run(posted.id) == running
 
-    async def test_runs_list_newest_first_and_filter_by_product_system(self, runs) -> None:
+    async def test_runs_list_newest_first_and_filter_by_product_system(
+        self, runs, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         one, other = uuid.UUID(int=1), uuid.UUID(int=2)
+        monkeypatch.setattr(records, "now", lambda: datetime(2024, 1, 1, tzinfo=UTC))
         first = await runs.post_run(draft(one))
         second = await runs.post_run(draft(other))
         assert [r.id for r in await runs.list_runs()] == [second.id, first.id]

@@ -8,10 +8,12 @@ import json
 import re
 import sys
 import tomllib
+from collections.abc import Mapping
 from functools import cache
 from importlib.metadata import packages_distributions
 from pathlib import Path
 
+import pytest
 from packaging.requirements import Requirement
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -31,10 +33,12 @@ def canonical(name: str) -> str:
 
 @cache
 def members() -> dict[str, dict]:
-    root = tomllib.loads((REPOSITORY / "pyproject.toml").read_text())
+    root = tomllib.loads((REPOSITORY / "pyproject.toml").read_text(encoding="utf-8"))
     found = {}
     for directory in root["tool"]["uv"]["workspace"]["members"]:
-        project = tomllib.loads((REPOSITORY / directory / "pyproject.toml").read_text())["project"]
+        project = tomllib.loads(
+            (REPOSITORY / directory / "pyproject.toml").read_text(encoding="utf-8")
+        )["project"]
         required = [Requirement(line) for line in project.get("dependencies", [])]
         for extra in project.get("optional-dependencies", {}).values():
             required += [Requirement(line) for line in extra]
@@ -75,7 +79,7 @@ def owner(module: str) -> str | None:
 
 def imported(path: Path) -> set[str]:
     names = set()
-    for node in ast.walk(ast.parse(path.read_text())):
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
         if isinstance(node, ast.Import):
             names |= {alias.name for alias in node.names}
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
@@ -105,17 +109,33 @@ def declared(name: str) -> set[str]:
     return reached
 
 
-def test_every_third_party_import_is_declared() -> None:
-    providers = packages_distributions()
+def undeclared(providers: Mapping[str, list[str]]) -> list[str]:
     missing = []
     for name, path, module in imports():
         top = module.split(".")[0]
         if top in ("ecosemantic", "__future__") or top in sys.stdlib_module_names:
             continue
+        if canonical(top) in declared(name):
+            continue
         provided = {canonical(d) for d in providers.get(top, [])}
         if not provided & declared(name):
             missing.append(f"{path.relative_to(REPOSITORY)}: {module}")
-    assert missing == [], missing
+    return missing
+
+
+def test_every_third_party_import_is_declared() -> None:
+    assert undeclared(packages_distributions()) == []
+
+
+def test_a_marker_declared_dependency_counts_as_declared(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    providers = packages_distributions()
+    without_pypardiso = {top: deps for top, deps in providers.items() if top != "pypardiso"}
+    monkeypatch.setattr(
+        "tests.test_distributions.packages_distributions", lambda: without_pypardiso
+    )
+    assert undeclared(packages_distributions()) == []
 
 
 def test_every_sibling_import_is_declared_and_points_down() -> None:
@@ -138,7 +158,9 @@ def test_every_member_has_a_level() -> None:
 
 def test_one_version_and_every_sibling_pinned_to_it() -> None:
     versions = {member["version"] for member in members().values()}
-    versions.add(json.loads((REPOSITORY / "page" / "package.json").read_text())["version"])
+    versions.add(
+        json.loads((REPOSITORY / "page" / "package.json").read_text(encoding="utf-8"))["version"]
+    )
     assert len(versions) == 1, versions
     (version,) = versions
     loose = [
@@ -158,7 +180,7 @@ def test_only_the_command_s_distribution_ships_the_namespace_s_init() -> None:
     ]
     assert shipped == ["ecosemantic"]
     source = members()["ecosemantic"]["directory"] / "ecosemantic" / "__init__.py"
-    text = source.read_text()
+    text = source.read_text(encoding="utf-8")
     tree = ast.parse(text)
     imported = [ast.unparse(n) for n in tree.body if isinstance(n, ast.Import | ast.ImportFrom)]
     assert imported == ["from typing import TYPE_CHECKING"]

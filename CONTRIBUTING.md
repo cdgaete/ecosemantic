@@ -73,3 +73,5 @@ bash scripts/check.sh
 ## Pull requests
 
 One concern a pull request, with the tests that pin it and the documents it changes. A vulnerability is reported privately, as `SECURITY.md` says; conduct follows `CODE_OF_CONDUCT.md`.
+
+A change made on GitHub is brought into the package repository before the next release.

@@ -66,9 +66,9 @@ class TestFilesystemInstalls(InstallConformance):
     ) -> None:
         posted = await installs.post_install(draft())
         record = install_dir(tmp_path, posted.id) / INSTALL_FILE
-        stored = json.loads(record.read_text())
+        stored = json.loads(record.read_text(encoding="utf-8"))
         del stored["draft"]
-        record.write_text(json.dumps(stored))
+        record.write_text(json.dumps(stored), encoding="utf-8")
         for read in (lambda: installs.get_install(posted.id), installs.list_installs):
             with pytest.raises(Unavailable) as caught:
                 await read()

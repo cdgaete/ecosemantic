@@ -1,6 +1,6 @@
 [project]
 name = "ecosemantic"
-version = "0.1.6"
+version = "0.1.7"
 description = "Agent-driven life cycle assessment on your own machine: the command and the local composition."
 requires-python = ">=3.12"
 license = "PolyForm-Noncommercial-1.0.0"
@@ -20,11 +20,11 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "ecosemantic-engine==0.1.6",
-    "ecosemantic-core==0.1.6",
-    "ecosemantic-databases[ecoinvent]==0.1.6",
-    "ecosemantic-mcp==0.1.6",
-    "ecosemantic-view==0.1.6",
+    "ecosemantic-engine==0.1.7",
+    "ecosemantic-core==0.1.7",
+    "ecosemantic-databases[ecoinvent]==0.1.7",
+    "ecosemantic-mcp==0.1.7",
+    "ecosemantic-view==0.1.7",
     "fastmcp>=4,<5",
     "fastmcp-slim>=4,<5",
     "opentelemetry-api>=1.44,<2",
@@ -36,7 +36,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-mkl = ["ecosemantic-engine[mkl]==0.1.6"]
+mkl = ["ecosemantic-engine[mkl]==0.1.7"]
 
 [project.scripts]
 ecosemantic = "ecosemantic.console:main"

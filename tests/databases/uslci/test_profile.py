@@ -45,12 +45,12 @@ def test_a_version_without_a_profile_names_the_versions_carried() -> None:
 
 
 def test_versions_are_newest_first(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    shipped = (RELEASES / "1.2026-09.0.yaml").read_text()
-    (tmp_path / "1.2026-09.0.yaml").write_text(shipped)
+    shipped = (RELEASES / "1.2026-09.0.yaml").read_text(encoding="utf-8")
+    (tmp_path / "1.2026-09.0.yaml").write_text(shipped, encoding="utf-8")
     later = yaml.safe_load(shipped)
     later["version"] = "1.2027-01.0"
-    (tmp_path / "1.2027-01.0.yaml").write_text(yaml.safe_dump(later))
+    (tmp_path / "1.2027-01.0.yaml").write_text(yaml.safe_dump(later), encoding="utf-8")
     # the releases directory also holds the two lists, which are not versions
-    (tmp_path / "unlinked-1.2026-09.0.csv").write_text("")
+    (tmp_path / "unlinked-1.2026-09.0.csv").write_text("", encoding="utf-8")
     monkeypatch.setattr(uslci_profile, "RELEASES", tmp_path)
     assert versions() == ("1.2027-01.0", "1.2026-09.0")

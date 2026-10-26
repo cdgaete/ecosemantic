@@ -27,7 +27,8 @@ def test_a_changed_value_is_applied(tmp_path: Path, product_system: ProductSyste
     folder = write_folder(tmp_path, system)
     path = folder / "inputs" / "input_parameters.csv"
     path.write_text(
-        path.read_text().replace("fabric_mass,0.2,", "fabric_mass,0.25,"), encoding="utf-8"
+        path.read_text(encoding="utf-8").replace("fabric_mass,0.2,", "fabric_mass,0.25,"),
+        encoding="utf-8",
     )
     changed = apply_inputs(system, folder)
     assert {p.name: p.value for p in changed.parameters}["fabric_mass"] == 0.25
@@ -41,7 +42,8 @@ def test_a_renamed_case_column_is_a_delete_and_a_create(
     folder = write_folder(tmp_path, system)
     path = folder / "inputs" / "cases.csv"
     path.write_text(
-        path.read_text().replace("parameter,small,", "parameter,compact,"), encoding="utf-8"
+        path.read_text(encoding="utf-8").replace("parameter,small,", "parameter,compact,"),
+        encoding="utf-8",
     )
     changed = apply_inputs(system, folder)
     names = [case.name for case in changed.cases]
@@ -65,12 +67,14 @@ def test_a_removed_parameter_row_deletes_the_parameter(
     system = spaced(product_system)
     added = write_folder(tmp_path / "a", system)
     path = added / "inputs" / "input_parameters.csv"
-    path.write_text(path.read_text() + "load_factor,0.8,,\n", encoding="utf-8")
+    path.write_text(path.read_text(encoding="utf-8") + "load_factor,0.8,,\n", encoding="utf-8")
     grown = apply_inputs(system, added)
     assert "load_factor" in {p.name for p in grown.parameters}
     removed = write_folder(tmp_path / "b", grown)
     path = removed / "inputs" / "input_parameters.csv"
-    path.write_text(path.read_text().replace("load_factor,0.8,,\n", ""), encoding="utf-8")
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("load_factor,0.8,,\n", ""), encoding="utf-8"
+    )
     assert "load_factor" not in {p.name for p in apply_inputs(grown, removed).parameters}
 
 
@@ -104,7 +108,7 @@ def test_an_added_parameter_row_is_applied(tmp_path: Path, product_system: Produ
     system = spaced(product_system)
     folder = write_folder(tmp_path, system)
     path = folder / "inputs" / "input_parameters.csv"
-    path.write_text(path.read_text() + "load_factor,0.8,,\n", encoding="utf-8")
+    path.write_text(path.read_text(encoding="utf-8") + "load_factor,0.8,,\n", encoding="utf-8")
     changed = apply_inputs(system, folder)
     assert {p.name: p.value for p in changed.parameters}["load_factor"] == 0.8
 
@@ -116,7 +120,8 @@ def test_a_description_edited_alone_is_written_although_the_hash_did_not_move(
     folder = write_folder(tmp_path, system)
     path = folder / "inputs" / "input_parameters.csv"
     path.write_text(
-        path.read_text().replace("Fabric per shirt", "Fabric mass per shirt"), encoding="utf-8"
+        path.read_text(encoding="utf-8").replace("Fabric per shirt", "Fabric mass per shirt"),
+        encoding="utf-8",
     )
     changed = apply_inputs(system, folder)
     described = {p.name: p.description for p in changed.parameters}

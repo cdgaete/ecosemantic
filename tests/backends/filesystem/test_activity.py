@@ -25,7 +25,9 @@ class TestFilesystemActivity(ActivityConformance):
         first = await activity.record(draft("electricity", "a", 1))
         await activity.record(draft("electricity", "b", 2))
         await activity.record(draft("packaging", "c", 3))
-        lines = (tmp_path / ACTIVITY_DIR / "electricity.jsonl").read_text().splitlines()
+        lines = (
+            (tmp_path / ACTIVITY_DIR / "electricity.jsonl").read_text(encoding="utf-8").splitlines()
+        )
         assert len(lines) == 2 and json.loads(lines[0])["id"] == str(first.id)
         assert (tmp_path / ACTIVITY_DIR / "packaging.jsonl").is_file()
 
@@ -45,7 +47,7 @@ class TestFilesystemActivity(ActivityConformance):
         self, activity: FilesystemActivity, tmp_path: Path
     ) -> None:
         await activity.record(draft("electricity", "a", 1))
-        with (tmp_path / ACTIVITY_DIR / "electricity.jsonl").open("a") as handle:
+        with (tmp_path / ACTIVITY_DIR / "electricity.jsonl").open("a", encoding="utf-8") as handle:
             handle.write('{"agent": "electricity"}\n')
         with pytest.raises(Unavailable, match="electricity.jsonl line 2"):
             await activity.list_calls()

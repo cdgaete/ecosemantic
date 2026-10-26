@@ -72,7 +72,8 @@ def directories(data: Path | None, systems: Path | None) -> tuple[Path, Path]:
 
 def report(data: Path, systems: Path, databases: object) -> dict[str, object]:
     """The install as it stands, with the databases the data directory holds as the command
-    read them; nothing is made, started or written."""
+    read them; reading them may migrate a registry and remove unnamed builds, and the report
+    starts nothing."""
     return {
         "python": {"executable": sys.executable, "version": platform.python_version()},
         "ecosemantic": importlib.metadata.version("ecosemantic"),

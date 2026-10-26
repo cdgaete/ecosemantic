@@ -200,7 +200,7 @@ def yield_route(systems_dir: Path, on_yield: Callable[[], None]) -> Route:
     async def yielded(request: Request) -> Response:
         sent = (await request.json()).get("nonce", "")
         try:
-            held = (systems_dir / YIELD_NONCE_FILE).read_text().strip()
+            held = (systems_dir / YIELD_NONCE_FILE).read_text(encoding="utf-8").strip()
         except FileNotFoundError:
             held = ""
         if not held or not hmac.compare_digest(sent, held):
@@ -213,7 +213,7 @@ def yield_route(systems_dir: Path, on_yield: Callable[[], None]) -> Route:
 
 def _ask_to_yield(settings: ViewSettings, systems_dir: Path) -> None:
     nonce = secrets.token_urlsafe(24)
-    (systems_dir / YIELD_NONCE_FILE).write_text(nonce)
+    (systems_dir / YIELD_NONCE_FILE).write_text(nonce, encoding="utf-8")
     asked = urllib.request.Request(
         f"http://{_reachable(settings.host)}:{settings.port}/yield",
         data=json.dumps({"nonce": nonce}).encode(),
@@ -233,9 +233,9 @@ def token_for(systems_dir: Path, wanted: bool) -> str | None:
     try:
         handle = os.open(stored, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     except FileExistsError:
-        return stored.read_text().strip()
+        return stored.read_text(encoding="utf-8").strip()
     minted = secrets.token_urlsafe(24)
-    with os.fdopen(handle, "w") as opened:
+    with os.fdopen(handle, "w", encoding="utf-8") as opened:
         opened.write(minted)
     return minted
 

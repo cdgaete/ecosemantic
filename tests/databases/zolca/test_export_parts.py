@@ -20,7 +20,7 @@ def tables() -> Tables:
 
 def recorded_geometry(code: str) -> dict[str, object]:
     """The GeoJSON `rows.json` records for one location of the fixture."""
-    document = json.loads((FIXTURES / "rows.json").read_text())
+    document = json.loads((FIXTURES / "rows.json").read_text(encoding="utf-8"))
     return document["databases"]["openlca.zip"]["geometry"][code]
 
 

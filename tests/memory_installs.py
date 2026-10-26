@@ -6,8 +6,8 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
 
+from ecosemantic.backends.filesystem import records
 from ecosemantic.errors import NotFound
 from ecosemantic.ports.types import (
     Account,
@@ -55,7 +55,12 @@ class MemoryInstalls:
         return self._installs[install_id]
 
     async def post_install(self, draft: InstallDraft) -> Install:
-        install = Install(id=uuid.uuid4(), draft=draft, posted_at=datetime.now(UTC))
+        newest = max((install.posted_at for install in self._installs.values()), default=None)
+        install = Install(
+            id=uuid.uuid4(),
+            draft=draft,
+            posted_at=records.next_posted_at(records.now(), newest),
+        )
         self._installs[install.id] = install
         return install
 
@@ -63,7 +68,7 @@ class MemoryInstalls:
         return self.read_record(install_id)
 
     async def list_installs(self) -> list[Install]:
-        return sorted(self._installs.values(), key=lambda i: (i.posted_at, str(i.id)), reverse=True)
+        return records.newest_first(self._installs.values())
 
     async def cancel_install(self, install_id: uuid.UUID) -> Install:
         asked = self.apply_patch(install_id, self.read_record(install_id).cancellation())

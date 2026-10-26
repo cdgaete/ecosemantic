@@ -32,7 +32,7 @@ from ecosemantic.model.entities import (
     method_id,
 )
 from ecosemantic.model.refs import BackgroundRef, ForegroundRef
-from tests.conftest import fixture_system, split_system
+from tests.conftest import fixture_system, needs_pardiso, split_system
 from tests.engine.conftest import GWP_METHOD, SMALL, SMALL_GWP, WATER_METHOD, WIDGET
 from tests.engine_fixture import looped_background
 from tests.fixture_data import CODES, FIXTURE_DB, LOOP_CODES, LOOP_DB, LOOP_GWP
@@ -480,6 +480,7 @@ def test_a_draw_solve_refuses_a_solver_it_does_not_know_when_built() -> None:
         Refactorised("umfpack")
 
 
+@needs_pardiso
 def test_draws_under_pardiso_score_what_draws_under_superlu_score(
     calculation: Calculation,
 ) -> None:

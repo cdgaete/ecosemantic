@@ -78,7 +78,7 @@ def _unlinked_order(row: UnlinkedRow) -> tuple[str, str, str]:
 
 def read_unlinked(path: Path) -> tuple[UnlinkedRow, ...]:
     """The unlinked inputs a list holds, in key order."""
-    with path.open(newline="") as read:
+    with path.open(newline="", encoding="utf-8") as read:
         rows = (
             UnlinkedRow(
                 process_id=record["process_id"],
@@ -95,7 +95,7 @@ def read_unlinked(path: Path) -> tuple[UnlinkedRow, ...]:
 
 def write_unlinked(path: Path, rows: Iterable[UnlinkedRow]) -> None:
     """Write the unlinked inputs as CSV, in key order."""
-    with path.open("w", newline="") as written:
+    with path.open("w", newline="", encoding="utf-8") as written:
         writer = csv.writer(written, lineterminator="\n")
         writer.writerow(UNLINKED_COLUMNS)
         for row in sorted(rows, key=_unlinked_order):
@@ -195,14 +195,14 @@ def _left_out_row(path: Path, record: dict[str, str]) -> LeftOutRow:
 
 def read_left_out(path: Path) -> tuple[LeftOutRow, ...]:
     """The left-out exchanges a list holds, in key order."""
-    with path.open(newline="") as read:
+    with path.open(newline="", encoding="utf-8") as read:
         rows = (_left_out_row(path, record) for record in csv.DictReader(read))
         return tuple(sorted(rows, key=lambda row: row.key))
 
 
 def write_left_out(path: Path, rows: Iterable[LeftOutRow]) -> None:
     """Write the left-out exchanges as CSV, in key order."""
-    with path.open("w", newline="") as written:
+    with path.open("w", newline="", encoding="utf-8") as written:
         writer = csv.writer(written, lineterminator="\n")
         writer.writerow(LEFT_OUT_COLUMNS)
         for row in sorted(rows, key=lambda row: row.key):

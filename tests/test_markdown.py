@@ -54,7 +54,12 @@ def opens_block(line: str) -> bool:
 def tracked_markdown() -> list[str]:
     """Answer the repository's tracked Markdown files, relative to its root."""
     completed = subprocess.run(
-        [GIT, "ls-files", "*.md"], cwd=REPOSITORY, capture_output=True, text=True, check=True
+        [GIT, "ls-files", "*.md"],
+        cwd=REPOSITORY,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
     )
     return completed.stdout.split()
 

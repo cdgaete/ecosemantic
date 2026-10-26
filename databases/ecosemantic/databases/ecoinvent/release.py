@@ -34,9 +34,15 @@ class Release:
 
 
 def sha256(path: Path) -> str:
-    """The SHA-256 of a file, or of a directory's files in sorted relative-path order."""
+    """The SHA-256 of a file, or of a directory's files ordered by their relative path parts."""
     digest = hashlib.sha256()
-    files = sorted(p for p in path.rglob("*") if p.is_file()) if path.is_dir() else [path]
+    if path.is_dir():
+        files = sorted(
+            (file for file in path.rglob("*") if file.is_file()),
+            key=lambda file: file.relative_to(path).parts,
+        )
+    else:
+        files = [path]
     for file in files:
         if path.is_dir():
             digest.update(file.relative_to(path).as_posix().encode())

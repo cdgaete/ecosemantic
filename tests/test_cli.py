@@ -44,6 +44,7 @@ from tests.databases.bafu.test_setup import session_for as bafu_session
 from tests.databases.uslci.install_fixture import fixture_release
 from tests.databases.uslci_fixture import EXPECTED as USLCI_EXPECTED
 from tests.dict_resolver import DictResolver
+from tests.engine_fixture import served_build
 from tests.fixture_data import CODES, FIXTURE_DB, GWP
 from tests.openlca_fixture import METHOD, NAME, build_package
 from tests.openlca_fixture import PROCESSES as OPENLCA_PROCESSES
@@ -163,7 +164,7 @@ def test_setup_openlca_refuses_drops_conflicts_and_replaces(
     summary = json.loads(out)
     assert code == 0 and summary["datasets"] == 6 and summary["methods"] == 2
     assert summary["dropped"] == 1 and summary["unlinked"][0]["flow"] == "imported part"
-    assert (Path(summary["directory"]) / "catalog.duckdb").is_file()
+    assert (served_build(Path(summary["directory"])) / "catalog.duckdb").is_file()
 
     code, out, err = _setup([*base, "--drop-unlinked"], capsys)
     assert code == 1 and json.loads(err)["error"] == "conflict"
@@ -182,7 +183,7 @@ def _uslci(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **overrides: bool) -
 
 def _cut_offs(directory: str) -> list[tuple[object, ...]]:
     """Every cut-off row of an installed catalog, by dataset and position."""
-    catalog = duckdb.connect(Path(directory) / "catalog.duckdb", read_only=True)
+    catalog = duckdb.connect(served_build(Path(directory)) / "catalog.duckdb", read_only=True)
     rows = catalog.execute(
         "SELECT flow, amount, unit, cut_off FROM exchanges WHERE cut_off IS NOT NULL"
         " ORDER BY process, position"
@@ -377,7 +378,7 @@ def test_setup_uslci_installs_the_newest_profile_and_prints_one_document(
     assert summary["notices"] == [
         {"text": text, "datasets": count} for text, count in USLCI_EXPECTED["notices"]
     ]
-    assert (Path(summary["directory"]) / "catalog.duckdb").is_file()
+    assert (served_build(Path(summary["directory"])) / "catalog.duckdb").is_file()
 
 
 def test_setup_uslci_takes_the_version_named(
@@ -407,7 +408,7 @@ def test_setup_uslci_refuses_the_same_name_twice_without_replace(
     directory = Path(json.loads(out)["directory"])
     code, out, err = _setup(["uslci", "--data-dir", str(data)], capsys)
     assert code == 1 and json.loads(err)["error"] == "conflict"
-    assert (directory / "catalog.duckdb").is_file()
+    assert (served_build(directory) / "catalog.duckdb").is_file()
     code, out, err = _setup(["uslci", "--data-dir", str(data), "--replace"], capsys)
     assert code == 0, err
     assert json.loads(out)["directory"] == str(directory)
@@ -455,7 +456,7 @@ def test_setup_bafu_installs_and_names_what_it_does_not_apply(
         "parameters": 2,
         "factor_formulas": 2,
     }
-    assert (Path(summary["directory"]) / "catalog.duckdb").is_file()
+    assert (served_build(Path(summary["directory"])) / "catalog.duckdb").is_file()
 
 
 def test_setup_bafu_without_accept_terms_exits_2_and_installs_nothing(
@@ -529,7 +530,7 @@ def test_a_second_setup_bafu_without_replace_is_refused(
 
     code, _out, err = _setup(["bafu", "--data-dir", str(data), "--accept-terms"], capsys)
     assert code == 1 and json.loads(err)["error"] == "conflict"
-    assert (directory / "catalog.duckdb").is_file()
+    assert (served_build(directory) / "catalog.duckdb").is_file()
 
     code, out, err = _setup(
         ["bafu", "--data-dir", str(data), "--accept-terms", "--replace"], capsys
@@ -822,7 +823,7 @@ def test_compute_names_a_positive_input_to_a_treatment_in_every_table_it_writes(
     written = json.loads(capsys.readouterr().out)["written"]
     named = ["frame · steel at 2.4", "widget · steel at 0.5"]
     for run in written:
-        schema = yaml.safe_load((Path(run) / "schema.yaml").read_text())
+        schema = yaml.safe_load((Path(run) / "schema.yaml").read_text(encoding="utf-8"))
         # the folder's document lists its processes in its own order
         assert sorted(schema["treatments_run_backwards"]) == named
 
@@ -841,7 +842,7 @@ def test_compute_scores_a_case_against_the_base(
     argv = ["compute", "--data-dir", str(bundle_dir), "--folder", str(folder), "--json"]
     assert main([*argv, "--method", GWP_ID, "--variants", "half", "--json"]) == 0
     run = Path(json.loads(capsys.readouterr().out)["folder"])
-    rows = (run / "scores.csv").read_text().splitlines()[1:]
+    rows = (run / "scores.csv").read_text(encoding="utf-8").splitlines()[1:]
     scores = {row.split(",")[0]: float(row.split(",")[5]) for row in rows}
     # electricity 1 kWh at 1.0 kg CO2-Eq, halved by the case
     assert scores[""] == pytest.approx(4.158)
@@ -859,7 +860,10 @@ def test_compute_names_every_refused_cell_in_the_error_it_prints(
     system.parameters = [Parameter(name="elec_kwh", value=1.0)]
     folder = write_folder(tmp_path, system)
     path = folder / "inputs" / "input_parameters.csv"
-    path.write_text(path.read_text().replace("elec_kwh,1.0,", "elec_kwh,plenty,"), encoding="utf-8")
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("elec_kwh,1.0,", "elec_kwh,plenty,"),
+        encoding="utf-8",
+    )
     argv = [
         "compute",
         "--data-dir",
@@ -895,13 +899,15 @@ def test_compute_applies_a_scenario_while_the_folder_is_the_state_it_is_pinned_t
     argv = ["compute", "--data-dir", str(bundle_dir), "--folder", str(folder), "--json"]
     assert main([*argv, "--method", GWP_ID, "--variants", "half", "--json"]) == 0
     run = Path(json.loads(capsys.readouterr().out)["folder"])
-    rows = (run / "scores.csv").read_text().splitlines()[1:]
+    rows = (run / "scores.csv").read_text(encoding="utf-8").splitlines()[1:]
     scores = {row.split(",")[0]: float(row.split(",")[5]) for row in rows}
     assert scores[""] == pytest.approx(4.158)
     assert scores["half"] == pytest.approx(3.658)
     # an edited input is another state, and the pin refuses it as the store does
     path = folder / "inputs" / "input_parameters.csv"
-    path.write_text(path.read_text().replace("elec_kwh,1.0,", "elec_kwh,2.0,"), encoding="utf-8")
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("elec_kwh,1.0,", "elec_kwh,2.0,"), encoding="utf-8"
+    )
     assert main([*argv, "--method", GWP_ID, "--variants", "half", "--json"]) == 1
     printed = json.loads(capsys.readouterr().err.strip().splitlines()[-1])
     assert "is pinned to" in printed["message"]
@@ -1305,7 +1311,9 @@ def test_init_connects_each_chatbot_found_and_ends_with_the_next_step(
     ]
     assert answer["next"] == "Restart your chatbot; the EcoSemantic page opens in your browser."
     assert answer["doctor"]["clients"]["claude-desktop"]["present"] is True
-    assert json.loads(config.read_text())["mcpServers"][SERVER]["command"] == str(command)
+    assert json.loads(config.read_text(encoding="utf-8"))["mcpServers"][SERVER]["command"] == str(
+        command
+    )
     assert not (home / ".cursor" / "mcp.json").exists()
 
 
@@ -1468,7 +1476,9 @@ def test_the_command_records_and_reads_back(
     assert main(["telemetry", "--data-dir", str(tmp_path), "--json"]) == 0
     assert json.loads(capsys.readouterr().out) == recorded
     assert recorded["install_id"] is None
-    assert json.loads((tmp_path / "telemetry.json").read_text()) == {"choice": "off"}
+    assert json.loads((tmp_path / "telemetry.json").read_text(encoding="utf-8")) == {
+        "choice": "off"
+    }
 
 
 def test_the_command_says_the_choice_applies_at_the_next_start(
@@ -1518,7 +1528,7 @@ def test_doctor_names_a_broken_telemetry_file(
     from ecosemantic.cli.text import doctor_text
 
     monkeypatch.delenv("ECOSEMANTIC_TELEMETRY")
-    (tmp_path / "telemetry.json").write_text("{")
+    (tmp_path / "telemetry.json").write_text("{", encoding="utf-8")
     made = report(tmp_path, tmp_path, [])
     assert "error" in made["telemetry"]
     assert "telemetry.json" in doctor_text(made)

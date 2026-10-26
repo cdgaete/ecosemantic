@@ -57,7 +57,7 @@ async def test_import_tables_writes_the_edited_space_and_names_the_channel(
         folder = Path(out.structured_content["value"]["path"])
         path = folder / "inputs" / "input_parameters.csv"
         path.write_text(
-            path.read_text().replace("transport_km,120.0", "transport_km,150.0"),
+            path.read_text(encoding="utf-8").replace("transport_km,120.0", "transport_km,150.0"),
             encoding="utf-8",
         )
         written = await client.call_tool("import_tables", {"path": str(folder)})
@@ -105,7 +105,8 @@ async def test_apply_tables_stores_the_space_for_the_actor_and_message_given(
     folder = Path(out.structured_content["value"]["path"])
     path = folder / "inputs" / "input_parameters.csv"
     path.write_text(
-        path.read_text().replace("transport_km,120.0", "transport_km,150.0"), encoding="utf-8"
+        path.read_text(encoding="utf-8").replace("transport_km,120.0", "transport_km,150.0"),
+        encoding="utf-8",
     )
     person = Actor(kind="person", name="Ana")
     _, changed, entry = await apply_tables(

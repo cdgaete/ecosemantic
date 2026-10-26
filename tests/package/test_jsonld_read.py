@@ -75,12 +75,12 @@ def test_edits_made_in_the_files_come_back_as_changes(
     sidecar = _sidecar(product_system, write_jsonld(product_system, tmp_path, resolver))
     fabric = product_system.process("fabric")
     path = tmp_path / "processes" / f"{fabric.id}.json"
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     data["name"] = "cotton fabric, woven"
     for e in data["exchanges"]:
         if e["flow"]["name"] == "tap water":
             e["amount"] = 40.0
-    co2 = json.loads((tmp_path / "flows" / f"{CO2.id}.json").read_text())
+    co2 = json.loads((tmp_path / "flows" / f"{CO2.id}.json").read_text(encoding="utf-8"))
     data["exchanges"].append(
         {
             "@type": "Exchange",
@@ -97,13 +97,13 @@ def test_edits_made_in_the_files_come_back_as_changes(
             "flowProperty": data["exchanges"][0]["flowProperty"],
         }
     )
-    path.write_text(json.dumps(data))
+    path.write_text(json.dumps(data), encoding="utf-8")
     prefix = sidecar.identities.parameter_prefix
     for p in (tmp_path / "parameters").glob("*.json"):
-        param = json.loads(p.read_text())
+        param = json.loads(p.read_text(encoding="utf-8"))
         if param["name"] == prefix + "waste_rate":
             param["value"] = 0.12
-            p.write_text(json.dumps(param))
+            p.write_text(json.dumps(param), encoding="utf-8")
     back = read_jsonld(tmp_path, sidecar)
     changes = {(c.op, c.entity, c.field) for c in diff_product_systems(product_system, back)}
     assert changes == {
@@ -123,7 +123,7 @@ def test_new_process_gets_a_fresh_activity(
     sidecar = _sidecar(product_system, write_jsonld(product_system, tmp_path, resolver))
     label_id = str(uuid.uuid4())
     tshirt_path = tmp_path / "processes" / f"{product_system.processes[0].id}.json"
-    tshirt = json.loads(tshirt_path.read_text())
+    tshirt = json.loads(tshirt_path.read_text(encoding="utf-8"))
     unit = tshirt["exchanges"][0]["unit"]
     flow_property = tshirt["exchanges"][0]["flowProperty"]
     flow = {"@type": "Flow", "@id": str(uuid.uuid4()), "name": "label", "flowType": "PRODUCT_FLOW"}
@@ -139,7 +139,8 @@ def test_new_process_gets_a_fresh_activity(
                     }
                 ],
             }
-        )
+        ),
+        encoding="utf-8",
     )
     (tmp_path / "processes" / f"{label_id}.json").write_text(
         json.dumps(
@@ -162,7 +163,8 @@ def test_new_process_gets_a_fresh_activity(
                     }
                 ],
             }
-        )
+        ),
+        encoding="utf-8",
     )
     tshirt["exchanges"].append(
         {
@@ -176,7 +178,7 @@ def test_new_process_gets_a_fresh_activity(
             "flowProperty": flow_property,
         }
     )
-    tshirt_path.write_text(json.dumps(tshirt))
+    tshirt_path.write_text(json.dumps(tshirt), encoding="utf-8")
     back = read_jsonld(tmp_path, sidecar)
     assert back.process("label").reference_product == "label"
     assert back.process("tshirt").exchanges[-1].input.code == "label"
@@ -188,9 +190,9 @@ def test_a_parameter_set_taking_a_scenario_s_name_is_invalid(
 ) -> None:
     sidecar = _sidecar(product_system, write_jsonld(product_system, tmp_path, resolver))
     path = tmp_path / "product_systems" / f"{product_system.id}.json"
-    document = json.loads(path.read_text())
+    document = json.loads(path.read_text(encoding="utf-8"))
     document["parameterSets"].append({"@type": "ParameterRedefSet", "name": "organic"})
-    path.write_text(json.dumps(document))
+    path.write_text(json.dumps(document), encoding="utf-8")
     with pytest.raises(Invalid, match=r"cases and scenarios share the names \['organic'\]"):
         read_jsonld(tmp_path, sidecar)
 
@@ -202,17 +204,17 @@ def _transport_flagged(
     flags; a `flowType` among them goes on the flow, in the exchange and in its own file."""
     sidecar = _sidecar(product_system, write_jsonld(product_system, root, resolver))
     path = root / "processes" / f"{product_system.process('tshirt').id}.json"
-    document = json.loads(path.read_text())
+    document = json.loads(path.read_text(encoding="utf-8"))
     transport = next(e for e in document["exchanges"] if e["amount"] == 0.0005)
     flow_type = flags.pop("flowType", None)
     transport.update(flags)
     if flow_type is not None:
         transport["flow"]["flowType"] = flow_type
         flow_path = root / "flows" / f"{transport['flow']['@id']}.json"
-        flow = json.loads(flow_path.read_text())
+        flow = json.loads(flow_path.read_text(encoding="utf-8"))
         flow["flowType"] = flow_type
-        flow_path.write_text(json.dumps(flow))
-    path.write_text(json.dumps(document))
+        flow_path.write_text(json.dumps(flow), encoding="utf-8")
+    path.write_text(json.dumps(document), encoding="utf-8")
     return sidecar
 
 
@@ -291,7 +293,9 @@ def test_a_link_round_trips_as_a_product_system_provider(
     label = label.model_copy(update={"hash": content_hash(label)})
     labelled = tshirt_labelled(product_system, label)
     identities = write_jsonld(labelled, tmp_path, resolver, linked={label.id: label})
-    system = json.loads(next((tmp_path / "product_systems").glob("*.json")).read_text())
+    system = json.loads(
+        next((tmp_path / "product_systems").glob("*.json")).read_text(encoding="utf-8")
+    )
     [provider] = [
         link["provider"]
         for link in system["processLinks"]

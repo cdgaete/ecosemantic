@@ -75,7 +75,9 @@ def _open(root: Path, key: ResultKey, at: datetime, label: str, extra: dict[str,
     }
     schema.update(extra)
     (folder / SCHEMA_FILE).write_text(
-        yaml.safe_dump(schema, sort_keys=False, allow_unicode=True), encoding="utf-8"
+        yaml.safe_dump(schema, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+        newline="\n",
     )
     return folder
 

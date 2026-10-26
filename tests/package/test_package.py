@@ -92,11 +92,11 @@ def test_returned_package_yields_an_openlca_entry(
     shutil.copytree(retained, exported)
     shutil.rmtree(exported / SIDECAR_DIR)
     (exported / "olca-schema.json").unlink()
-    (exported / "openlca.json").write_text('{"schemaVersion": 2}')
+    (exported / "openlca.json").write_text('{"schemaVersion": 2}', encoding="utf-8")
     path = exported / "processes" / f"{product_system.process('fabric').id}.json"
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     data["name"] = "cotton fabric, woven"
-    path.write_text(json.dumps(data))
+    path.write_text(json.dumps(data), encoding="utf-8")
     entry = write_returned(exported, retained, PERSON, resolver)
     assert entry.source == "openlca" and entry.seq == 2 and entry.actor == PERSON
     assert [(c.entity, c.field) for c in entry.changes] == [("process", "name")]
@@ -127,7 +127,9 @@ def test_a_stored_package_names_its_state_in_a_base_tag(
     product_system: ProductSystem, resolver: DictResolver, tmp_path: Path
 ) -> None:
     entry = write_package(product_system, tmp_path, AGENT, "created", resolver)
-    document = json.loads((tmp_path / "product_systems" / f"{product_system.id}.json").read_text())
+    document = json.loads(
+        (tmp_path / "product_systems" / f"{product_system.id}.json").read_text(encoding="utf-8")
+    )
     assert document["tags"] == [f"ecosemantic:base={entry.result_hash}:1"]
 
 
@@ -161,16 +163,16 @@ def test_a_return_naming_no_state_is_invalid_and_one_never_reached_is_refused(
 ) -> None:
     retained, exported = _exported_then_written(product_system, resolver, tmp_path, False)
     path = exported / "product_systems" / f"{product_system.id}.json"
-    document = json.loads(path.read_text())
+    document = json.loads(path.read_text(encoding="utf-8"))
     stated = document["tags"][0]
     del document["tags"]
-    path.write_text(json.dumps(document))
+    path.write_text(json.dumps(document), encoding="utf-8")
     with pytest.raises(Invalid, match="names no entry it was exported at"):
         write_returned(exported, retained, PERSON, resolver)
     with pytest.raises(Conflict, match="has no entry #7; its last is #2"):
         write_returned(exported, retained, PERSON, resolver, at_entry=7)
     document["tags"] = [stated.replace(":1", ":2")]
-    path.write_text(json.dumps(document))
+    path.write_text(json.dumps(document), encoding="utf-8")
     with pytest.raises(Conflict, match="never reached entry #2 at"):
         write_returned(exported, retained, PERSON, resolver)
 

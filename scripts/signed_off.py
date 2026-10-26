@@ -34,6 +34,7 @@ def unsigned(repository: Path, base: str, head: str) -> list[str]:
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     ).stdout
     lacking = []

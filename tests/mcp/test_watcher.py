@@ -54,7 +54,9 @@ async def test_the_watcher_publishes_each_change_and_stops_when_the_run_does(
     )
     bus = EventBus()
     queue = bus.subscribe(system)
-    watching = asyncio.create_task(watch(bus, runs, MemoryLauncher(), posted.id, interval=0.01))
+    watching = asyncio.create_task(
+        watch(bus, runs, MemoryLauncher(alive=True), posted.id, interval=0.01)
+    )
     await runs.update_run(posted.id, RunPatch(status="running"))
     await runs.update_run(posted.id, RunPatch(progress=RunProgress(iterations=1)))
     await runs.update_run(posted.id, RunPatch(status="done"))

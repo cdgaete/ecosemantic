@@ -52,7 +52,9 @@ def test_claude_desktop_on_macos_gains_the_server_beside_the_ones_it_holds(
     folder = home / "Library" / "Application Support" / "Claude"
     folder.mkdir(parents=True)
     config = folder / "claude_desktop_config.json"
-    config.write_text(json.dumps({"mcpServers": {"other": {"command": "x"}}, "theme": "dark"}))
+    config.write_text(
+        json.dumps({"mcpServers": {"other": {"command": "x"}}, "theme": "dark"}), encoding="utf-8"
+    )
     answer = connected(["connect", "claude-desktop", "--command", str(command)], capsys)
     assert answer == {
         "client": "claude-desktop",
@@ -61,11 +63,13 @@ def test_claude_desktop_on_macos_gains_the_server_beside_the_ones_it_holds(
         "command": str(command),
         "replaced": False,
     }
-    held = json.loads(config.read_text())
+    held = json.loads(config.read_text(encoding="utf-8"))
     assert held["theme"] == "dark" and held["mcpServers"]["other"] == {"command": "x"}
     assert held["mcpServers"][SERVER] == {"command": str(command), "args": ["serve"]}
     # json escapes every backslash of the path, and reading it answers the path itself
-    assert "\\\\" in config.read_text() and json.dumps(str(command)) in config.read_text()
+    assert "\\\\" in config.read_text(encoding="utf-8") and json.dumps(
+        str(command)
+    ) in config.read_text(encoding="utf-8")
 
 
 def test_claude_desktop_on_windows_is_kept_under_appdata(
@@ -82,7 +86,7 @@ def test_claude_desktop_on_windows_is_kept_under_appdata(
     answer = connected(["connect", "claude-desktop", "--command", str(command)], capsys)
     config = roaming / "Claude" / "claude_desktop_config.json"
     assert answer["path"] == str(config)
-    assert json.loads(config.read_text()) == {
+    assert json.loads(config.read_text(encoding="utf-8")) == {
         "mcpServers": {SERVER: {"command": str(command), "args": ["serve"]}}
     }
 
@@ -101,11 +105,12 @@ def test_claude_desktop_on_linux_is_kept_under_the_config_home(
     folder.mkdir(parents=True)
     config = folder / "claude_desktop_config.json"
     config.write_text(
-        json.dumps({"mcpServers": {"PyPSA MCP": {"command": "uv"}}, "preferences": {"a": 1}})
+        json.dumps({"mcpServers": {"PyPSA MCP": {"command": "uv"}}, "preferences": {"a": 1}}),
+        encoding="utf-8",
     )
     answer = connected(["connect", "claude-desktop", "--command", str(command)], capsys)
     assert answer["path"] == str(config)
-    held = json.loads(config.read_text())
+    held = json.loads(config.read_text(encoding="utf-8"))
     assert held["preferences"] == {"a": 1}
     assert held["mcpServers"]["PyPSA MCP"] == {"command": "uv"}
     assert held["mcpServers"][SERVER] == {"command": str(command), "args": ["serve"]}
@@ -132,12 +137,12 @@ def test_an_entry_on_linux_carries_the_display_it_was_connected_under(
     monkeypatch.setenv("DISPLAY", ":0")
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
     connected(["connect", "claude-desktop", "--command", str(command)], capsys)
-    written = json.loads(config.read_text())["mcpServers"][SERVER]
+    written = json.loads(config.read_text(encoding="utf-8"))["mcpServers"][SERVER]
     assert written == {"command": str(command), "args": ["serve"], "env": {"DISPLAY": ":0"}}
     assert list(written) == ["command", "args", "env"]
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
     connected(["connect", "claude-desktop", "--command", str(command)], capsys)
-    assert json.loads(config.read_text())["mcpServers"][SERVER]["env"] == {
+    assert json.loads(config.read_text(encoding="utf-8"))["mcpServers"][SERVER]["env"] == {
         "DISPLAY": ":0",
         "WAYLAND_DISPLAY": "wayland-0",
     }
@@ -150,7 +155,7 @@ def test_an_entry_on_linux_without_a_display_carries_no_env(
     monkeypatch.delenv("DISPLAY", raising=False)
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
     connected(["connect", "claude-desktop", "--command", str(command)], capsys)
-    assert json.loads(config.read_text())["mcpServers"][SERVER] == {
+    assert json.loads(config.read_text(encoding="utf-8"))["mcpServers"][SERVER] == {
         "command": str(command),
         "args": ["serve"],
     }
@@ -163,7 +168,7 @@ def test_an_empty_display_is_not_written(
     monkeypatch.setenv("DISPLAY", "")
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
     connected(["connect", "claude-desktop", "--command", str(command)], capsys)
-    written = json.loads(config.read_text())["mcpServers"][SERVER]
+    written = json.loads(config.read_text(encoding="utf-8"))["mcpServers"][SERVER]
     assert written == {"command": str(command), "args": ["serve"]}
 
 
@@ -176,7 +181,7 @@ def test_an_entry_on_macos_carries_no_env(
     folder.mkdir(parents=True)
     config = folder / "claude_desktop_config.json"
     connected(["connect", "claude-desktop", "--command", str(command)], capsys)
-    assert json.loads(config.read_text())["mcpServers"][SERVER] == {
+    assert json.loads(config.read_text(encoding="utf-8"))["mcpServers"][SERVER] == {
         "command": str(command),
         "args": ["serve"],
     }
@@ -206,7 +211,7 @@ def test_cursor_gains_a_typed_stdio_entry_in_its_home_folder(
     answer = connected(["connect", "cursor", "--command", str(command)], capsys)
     config = home / ".cursor" / "mcp.json"
     assert answer["path"] == str(config)
-    assert json.loads(config.read_text()) == {
+    assert json.loads(config.read_text(encoding="utf-8")) == {
         "mcpServers": {SERVER: {"type": "stdio", "command": str(command), "args": ["serve"]}}
     }
     again = connected(["connect", "cursor", "--command", str(command)], capsys)
@@ -223,7 +228,7 @@ def test_vs_code_is_configured_for_the_workspace_it_names(
     )
     config = folder / ".vscode" / "mcp.json"
     assert answer["path"] == str(config)
-    assert json.loads(config.read_text()) == {
+    assert json.loads(config.read_text(encoding="utf-8")) == {
         "servers": {SERVER: {"type": "stdio", "command": str(command), "args": ["serve"]}}
     }
 
@@ -240,11 +245,11 @@ def test_a_malformed_configuration_is_refused_and_left_as_it_was(
 ) -> None:
     (home / ".cursor").mkdir()
     config = home / ".cursor" / "mcp.json"
-    config.write_text('{"mcpServers": {')
+    config.write_text('{"mcpServers": {', encoding="utf-8")
     payload = refused(["connect", "cursor", "--command", str(command)], capsys)
     assert payload["error"] == "invalid" and str(config) in payload["message"]
-    assert config.read_text() == '{"mcpServers": {'
-    config.write_text('{"mcpServers": []}')
+    assert config.read_text(encoding="utf-8") == '{"mcpServers": {'
+    config.write_text('{"mcpServers": []}', encoding="utf-8")
     payload = refused(["connect", "cursor", "--command", str(command)], capsys)
     assert payload["error"] == "invalid" and "mcpServers" in payload["message"]
 

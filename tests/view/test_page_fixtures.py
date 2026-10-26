@@ -22,7 +22,9 @@ async def test_every_committed_fixture_has_the_shape_of_a_fresh_recording(
     fresh = build_context(bundle_dir, tmp_path)
     recorded = await record_fixtures(fresh)
     fresh.close()
-    committed = {path.stem: json.loads(path.read_text()) for path in FIXTURES.glob("*.json")}
+    committed = {
+        path.stem: json.loads(path.read_text(encoding="utf-8")) for path in FIXTURES.glob("*.json")
+    }
     assert sorted(committed) == sorted(recorded)
     for name, payload in recorded.items():
         assert shape(committed[name]) == shape(payload), name

@@ -6,7 +6,7 @@ import asyncio
 import shutil
 import uuid
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 from filelock import AsyncFileLock
@@ -38,8 +38,10 @@ class FilesystemRuns:
             return self.records.write(run_id, patch.applied_to(self.read_record(run_id)))
 
     async def post_run(self, draft: RunDraft) -> Run:
-        run = Run(id=uuid.uuid4(), posted_at=datetime.now(UTC), **draft.model_dump())
-        return await asyncio.to_thread(self.records.write, run.id, run)
+        def construct(posted_at: datetime) -> Run:
+            return Run(id=uuid.uuid4(), posted_at=posted_at, **draft.model_dump())
+
+        return await asyncio.to_thread(self.records.post, construct)
 
     async def get_run(self, run_id: uuid.UUID) -> Run:
         return await asyncio.to_thread(self.read_record, run_id)

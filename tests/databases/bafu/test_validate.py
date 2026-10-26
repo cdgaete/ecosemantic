@@ -215,7 +215,7 @@ def test_record_writes_the_list_and_the_block(tmp_path: Path) -> None:
     assert read_differences(directory / profile.differences) == (
         Difference(process_id=PROCESSES["elec"], column=CLIMATE),
     )
-    written = yaml.safe_load(path.read_text())
+    written = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert written["validated"] == {
         "processes": 4,
         "columns": 2,

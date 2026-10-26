@@ -4,8 +4,10 @@ import asyncio
 import contextlib
 import dataclasses
 import ipaddress
+import os
 import socket
 import subprocess
+import sys
 import threading
 import time
 import urllib.request
@@ -151,20 +153,30 @@ def test_nothing_opens_over_http_with_no_open_with_the_page_off_or_without_a_dis
     assert opens(ViewSettings(), {}, "darwin") is True
 
 
+@pytest.mark.parametrize(
+    ("platform", "opener"),
+    [("linux", "xdg-open"), ("darwin", "open"), ("win32", None)],
+)
 def test_the_browser_is_started_with_its_output_away_from_standard_output(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, platform: str, opener: str | None
 ) -> None:
-    started: list[tuple[list[str], dict[str, object]]] = []
+    url = "http://127.0.0.1:1/?token=abc"
+    started: list[tuple[object, dict[str, object]]] = []
 
-    def recorder(command: list[str], **named: object) -> object:
+    def recorder(command: object, **named: object) -> object:
         started.append((command, named))
         return object()
 
+    monkeypatch.setattr(sys, "platform", platform)
     monkeypatch.setattr(subprocess, "Popen", recorder)
-    open_in_browser("http://127.0.0.1:1/?token=abc")
+    monkeypatch.setattr(os, "startfile", recorder, raising=False)
+    open_in_browser(url)
+    if platform == "win32":
+        assert started == [(url, {})]
+        return
     assert started == [
         (
-            ["xdg-open", "http://127.0.0.1:1/?token=abc"],
+            [opener, url],
             {
                 "stdin": subprocess.DEVNULL,
                 "stdout": subprocess.DEVNULL,
@@ -175,15 +187,20 @@ def test_the_browser_is_started_with_its_output_away_from_standard_output(
     ]
 
 
+@pytest.mark.parametrize("platform", ["linux", "win32"])
 def test_a_browser_that_fails_to_start_is_reported_and_the_server_serves_on(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    platform: str,
 ) -> None:
-    def failing(command: list[str], **named: object) -> object:
-        raise OSError("xdg-open is missing")
+    def failing(command: object, **named: object) -> object:
+        raise OSError("the opener is missing")
 
+    monkeypatch.setattr(sys, "platform", platform)
     monkeypatch.setattr(subprocess, "Popen", failing)
+    monkeypatch.setattr(os, "startfile", failing, raising=False)
     open_in_browser("http://127.0.0.1:1/")
-    assert capsys.readouterr().err.strip() == "the page could not be opened: xdg-open is missing"
+    assert capsys.readouterr().err.strip() == "the page could not be opened: the opener is missing"
 
 
 def test_the_wait_is_longer_than_the_page_s_retry_interval() -> None:
@@ -411,8 +428,9 @@ def test_the_token_is_the_workspace_s_and_survives_a_restart(tmp_path: Path) -> 
     assert minted is not None
     assert token_for(tmp_path, True) == minted
     stored = tmp_path / "token"
-    assert stored.read_text().strip() == minted
-    assert stored.stat().st_mode & 0o777 == 0o600
+    assert stored.read_text(encoding="utf-8").strip() == minted
+    if os.name == "posix":
+        assert stored.stat().st_mode & 0o777 == 0o600
 
 
 def test_deleting_the_file_rotates_the_token(tmp_path: Path) -> None:
@@ -606,7 +624,7 @@ def test_yield_needs_the_nonce_from_the_directory(context: ServerContext, tmp_pa
             "details": {},
         }
         assert released == []
-        (tmp_path / "yield-nonce").write_text("the-real-nonce")
+        (tmp_path / "yield-nonce").write_text("the-real-nonce", encoding="utf-8")
         assert client.post("/yield", json={"nonce": "guessed"}).status_code == 401
         assert released == []
         answered = client.post("/yield", json={"nonce": "the-real-nonce"})

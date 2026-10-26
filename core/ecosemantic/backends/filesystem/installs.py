@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 from filelock import AsyncFileLock
@@ -50,8 +50,10 @@ class FilesystemInstalls:
         return self.records.patch(install_id, patch.applied_to)
 
     async def post_install(self, draft: InstallDraft) -> Install:
-        install = Install(id=uuid.uuid4(), draft=draft, posted_at=datetime.now(UTC))
-        return await asyncio.to_thread(self.records.write, install.id, install)
+        def construct(posted_at: datetime) -> Install:
+            return Install(id=uuid.uuid4(), draft=draft, posted_at=posted_at)
+
+        return await asyncio.to_thread(self.records.post, construct)
 
     async def get_install(self, install_id: uuid.UUID) -> Install:
         return await asyncio.to_thread(self.read_record, install_id)

@@ -65,7 +65,7 @@ def _scored(
     if bridged is not None:
         given += ["--bridged", str(bridged)]
     assert independent_scores.main(given) == 0
-    with out.open(newline="") as read:
+    with out.open(newline="", encoding="utf-8") as read:
         written = list(csv.DictReader(read))
     return [
         (row["code"], row["method"], row["category"], float(row["score"]), row["unit"])
@@ -74,7 +74,7 @@ def _scored(
 
 
 def test_the_script_imports_nothing_of_ecosemantic() -> None:
-    tree = ast.parse(SCRIPT.read_text())
+    tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
     named = [
         alias.name
         for node in ast.walk(tree)
@@ -125,7 +125,7 @@ def test_an_unlinked_input_of_a_process_with_two_products_is_written_once(
     sources: tuple[Path, Path, Path], tmp_path: Path
 ) -> None:
     _, unlinked = _scored(sources, tmp_path)
-    with unlinked.open(newline="") as read:
+    with unlinked.open(newline="", encoding="utf-8") as read:
         rows = list(csv.DictReader(read))
     keys = [(row["process_id"], row["flow_id"], row["provider_id"] or None) for row in rows]
     assert len(keys) == len(set(keys)) == len(EXPECTED["unlinked"])
@@ -136,7 +136,7 @@ def test_its_unlinked_inputs_are_the_core_s(
 ) -> None:
     inventory, method, bundle = sources
     _, unlinked = _scored(sources, tmp_path)
-    with unlinked.open(newline="") as read:
+    with unlinked.open(newline="", encoding="utf-8") as read:
         rows = list(csv.DictReader(read))
     assert tuple(rows[0]) == independent_scores.UNLINKED_COLUMNS
     imported = read_background(
@@ -178,7 +178,7 @@ def test_its_unlinked_inputs_are_the_core_s_on_the_merged_bundle(
         inventory, (method,), version=VERSION, out_dir=tmp_path / "merged", bridged=(bridged,)
     )
     _, unlinked = _scored((inventory, method, built.bundle), tmp_path, bridged)
-    with unlinked.open(newline="") as read:
+    with unlinked.open(newline="", encoding="utf-8") as read:
         rows = list(csv.DictReader(read))
     imported = read_background(built.bundle, "uslci", foreground=frozenset())
     theirs = {(miss.process_id, miss.flow_id, miss.provider_id) for miss in imported.unlinked}

@@ -9,12 +9,12 @@ from scripts.signed_off import unsigned
 
 def git(repo: Path, *args: str) -> str:
     command = [str(shutil.which("git")), "-C", str(repo), *args]
-    done = subprocess.run(command, capture_output=True, text=True, check=True)
+    done = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", check=True)
     return done.stdout.strip()
 
 
 def commit(repo: Path, name: str, message: str) -> str:
-    (repo / name).write_text(name)
+    (repo / name).write_text(name, encoding="utf-8")
     git(repo, "add", name)
     git(repo, "commit", "-q", "-m", message)
     return git(repo, "rev-parse", "HEAD")

@@ -81,7 +81,9 @@ def write_lines(root: Path, filename: str, lines: Iterable[str]) -> None:
     """Write one file of JSON lines under root/ecosemantic/, each line ended."""
     folder = root / SIDECAR_DIR
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / filename).write_text("".join(line + "\n" for line in lines), encoding="utf-8")
+    (folder / filename).write_text(
+        "".join(line + "\n" for line in lines), encoding="utf-8", newline="\n"
+    )
 
 
 def read_lines(root: Path, filename: str) -> list[str]:

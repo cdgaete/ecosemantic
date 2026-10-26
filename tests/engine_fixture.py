@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from ecosemantic.backends.native.install import install
+from ecosemantic.backends.native.store import served_build as served_build_id
 from ecosemantic.engine.background import Background
 from ecosemantic.model.entities import Uncertainty
 from ecosemantic.model.refs import Database
@@ -205,3 +206,10 @@ def install_fixtures(data_dir: Path, sources: Path) -> None:
     ):
         imported = read_background(bundle, name, foreground=frozenset())
         install(data_dir, imported, bundle, version="1", system_model="unit process")
+
+
+def served_build(database_dir: Path) -> Path:
+    """The directory of the build a database directory's pointer names."""
+    build_id = served_build_id(database_dir)
+    assert build_id is not None
+    return database_dir / "builds" / build_id

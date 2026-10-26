@@ -131,7 +131,7 @@ async def test_the_licence_route_serves_the_terms_file_of_an_install_stopped_at_
     assert early.status_code == 404 and early.json()["error"] == "not_found"
     terms = over.data_dir / "installs" / "bafu-terms.txt"
     terms.parent.mkdir(parents=True, exist_ok=True)
-    terms.write_text("BAFU release terms\n")
+    terms.write_text("BAFU release terms\n", encoding="utf-8", newline="\n")
     installs.apply_patch(
         install_id,
         InstallPatch(

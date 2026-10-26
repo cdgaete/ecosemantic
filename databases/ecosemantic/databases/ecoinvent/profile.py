@@ -82,7 +82,7 @@ def _cached(path: str) -> Path:
 
 def read_profile(path: Path) -> Profile:
     """The profile a YAML file holds; a file named by an absolute path is invalid."""
-    profile = Profile.model_validate(yaml.safe_load(path.read_text()))
+    profile = Profile.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
     for role, file in profile.files.items():
         if Path(file.path).is_absolute():
             raise Invalid(f"{role} names {file.path}, which is not under the cache directory")

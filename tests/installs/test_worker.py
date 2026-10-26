@@ -89,7 +89,7 @@ async def test_a_finished_install_counts_its_unlinked_inputs_and_keeps_their_row
     assert record.summary["unlinked"] == 1
     path = install_dir(data, posted.id) / "unlinked.json"
     assert record.summary["unlinked_file"] == str(path)
-    rows = json.loads(path.read_text())
+    rows = json.loads(path.read_text(encoding="utf-8"))
     assert isinstance(rows, list) and len(rows) == 1
     assert rows[0]["process"] == "widget production"
 
@@ -114,7 +114,7 @@ async def test_an_install_with_no_unlinked_inputs_counts_none_and_keeps_an_empty
     assert record.summary["unlinked"] == 0
     path = install_dir(data, posted.id) / "unlinked.json"
     assert record.summary["unlinked_file"] == str(path)
-    assert json.loads(path.read_text()) == []
+    assert json.loads(path.read_text(encoding="utf-8")) == []
 
 
 async def test_a_record_holds_no_list_of_its_summary(
@@ -150,7 +150,7 @@ async def test_a_record_holds_no_list_of_its_summary(
         path = folder / f"{name}.json"
         assert summary[name] == len(rows)
         assert summary[f"{name}_file"] == str(path)
-        assert json.loads(path.read_text()) == rows
+        assert json.loads(path.read_text(encoding="utf-8")) == rows
 
 
 async def test_a_summary_without_a_list_writes_no_file(
@@ -230,14 +230,18 @@ async def test_a_refused_login_leaves_the_password_in_no_record_and_no_log(
     folder = install_dir(data, posted.id)
     folder.mkdir(parents=True, exist_ok=True)
     log = folder / LOG_FILE
-    with log.open("w") as written, redirect_stdout(written), redirect_stderr(written):
+    with (
+        log.open("w", encoding="utf-8") as written,
+        redirect_stdout(written),
+        redirect_stderr(written),
+    ):
         carry(data, posted.id, account)
 
     record = installs.read_record(posted.id)
     assert record.status == "failed"
     assert record.error is not None and record.error.message == "login refused"
-    assert "hunter2-secret" not in (folder / INSTALL_FILE).read_text()
-    assert "hunter2-secret" not in log.read_text()
+    assert "hunter2-secret" not in (folder / INSTALL_FILE).read_text(encoding="utf-8")
+    assert "hunter2-secret" not in log.read_text(encoding="utf-8")
 
 
 async def test_a_failure_that_is_no_typed_error_is_recorded_and_raised_on(
@@ -292,6 +296,7 @@ def test_the_module_runs_as_a_subprocess() -> None:
         [sys.executable, "-m", "ecosemantic.installs.worker", "--help"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     assert out.returncode == 0 and "--install" in out.stdout
 
@@ -325,7 +330,9 @@ async def test_main_carries_the_install_named_and_reads_the_account_from_stdin(
         return {"database": NAME, "unlinked": []}
 
     monkeypatch.setattr(worker, "install_source", install_source)
-    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(encoded(account))))
+    monkeypatch.setattr(
+        sys, "stdin", io.TextIOWrapper(io.BytesIO(encoded(account)), encoding="utf-8")
+    )
 
     assert worker.main(["--data-dir", str(data), "--install", str(posted.id)]) == 0
 

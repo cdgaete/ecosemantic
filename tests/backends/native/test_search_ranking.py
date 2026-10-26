@@ -132,10 +132,12 @@ def imported() -> Import:
 def search(tmp_path_factory: pytest.TempPathFactory) -> Iterator[NativeSearch]:
     data = tmp_path_factory.mktemp("ranking")
     target = data / "databases" / NAME
-    target.mkdir(parents=True)
-    write_catalog(target / "catalog.duckdb", catalog_rows(imported()))
+    build = target / "builds" / "fixed"
+    build.mkdir(parents=True)
+    write_catalog(build / "catalog.duckdb", catalog_rows(imported()))
     entry = Entry(format=FORMAT, database=DATABASE, bundle="0" * 64)
-    (target / "entry.json").write_text(entry.model_dump_json())
+    (build / "entry.json").write_text(entry.model_dump_json(), encoding="utf-8")
+    (target / "current").write_text("fixed", encoding="utf-8")
     store = NativeStore(data)
     yield NativeSearch(store)
     store.close()

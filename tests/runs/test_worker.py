@@ -172,6 +172,7 @@ def test_the_module_runs_as_a_subprocess() -> None:
         [sys.executable, "-m", "ecosemantic.runs.worker", "--help"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     assert out.returncode == 0 and "--run" in out.stdout
 

@@ -84,5 +84,5 @@ def test_the_json_carries_open_and_the_file_does_not(tmp_path: Path) -> None:
     assert request.model_dump(mode="json")["open"] is True
     root = tmp_path / "pkg"
     write_requests(root, [request])
-    assert '"open"' not in (root / SIDECAR_DIR / REQUESTS_FILE).read_text()
+    assert '"open"' not in (root / SIDECAR_DIR / REQUESTS_FILE).read_text(encoding="utf-8")
     assert read_requests(root)[0].open is True

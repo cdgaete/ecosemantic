@@ -32,6 +32,7 @@ def tracked_tree(tmp_path: Path) -> Path:
         [str(shutil.which("git")), "-C", str(REPOSITORY), "ls-files"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     ).stdout.splitlines()
     root = tmp_path / "repository"

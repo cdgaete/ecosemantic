@@ -30,6 +30,7 @@ from tests.databases.bafu.test_download import CITATION as BAFU_CITATION
 from tests.databases.bafu.test_download import INVENTORY_UUID as BAFU_INVENTORY_UUID
 from tests.databases.bafu.test_setup import fixture_release
 from tests.databases.bafu.test_setup import session_for as bafu_session
+from tests.engine_fixture import served_build
 from tests.openlca_fixture import NAME, build_package
 from tests.package.conftest import AGENT
 
@@ -62,7 +63,7 @@ def test_install_source_installs_the_fixture_package_and_answers_its_summary(
     assert summary["database"] == NAME
     assert summary["datasets"] == 6
     assert summary["dropped"] == 1
-    assert (Path(str(summary["directory"])) / "catalog.duckdb").is_file()
+    assert (served_build(Path(str(summary["directory"]))) / "catalog.duckdb").is_file()
 
 
 def test_install_source_reports_installing_last(tmp_path: Path) -> None:
@@ -162,4 +163,4 @@ def test_ecoinvent_installs_the_release_a_profile_pins_with_the_account_s_client
         "account": ("someone", "secret"),
     }
     assert isinstance(summary, dict) and summary["database"] == NAME
-    assert (Path(str(summary["directory"])) / "catalog.duckdb").is_file()
+    assert (served_build(Path(str(summary["directory"]))) / "catalog.duckdb").is_file()

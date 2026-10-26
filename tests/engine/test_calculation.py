@@ -11,7 +11,7 @@ from ecosemantic.engine.calculation import NOISE_FLOOR, Calculation
 from ecosemantic.errors import Invalid, NotFound
 from ecosemantic.model.entities import DemandItem, Exchange, Method, ProductSystem, method_id
 from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef, ForegroundRef
-from tests.conftest import fixture_system, split_system
+from tests.conftest import fixture_system, needs_pardiso, split_system
 from tests.engine.conftest import GWP_METHOD, WATER_METHOD, WIDGET
 from tests.fixture_data import CODES, FIXTURE_DB, FLOW_IDS
 
@@ -262,6 +262,7 @@ def test_a_linked_system_scores_as_the_one_system_it_came_from(calculation: Calc
     assert calculation.inventory(solution).sources[FLOW_IDS["ch4"]] == f"{frame_id}/frame"
 
 
+@needs_pardiso
 def test_the_two_solvers_agree_and_each_solution_names_its_solver(background: Background) -> None:
     results = {}
     for name in ("superlu", "pardiso"):

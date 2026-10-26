@@ -4,20 +4,21 @@ whole under a lock both processes take."""
 from __future__ import annotations
 
 import asyncio
-import os
 import uuid
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterable
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 from filelock import AsyncFileLock, FileLock
 from pydantic import BaseModel, ValidationError
 
 from ecosemantic.backends.filesystem.watching import touched
+from ecosemantic.backends.retry import read_bytes, replace
 from ecosemantic.errors import NotFound, Unavailable
 
 SLOT_FILE = "slot.lock"
+POST_LOCK = "post.lock"
 
 
 class Posted(Protocol):
@@ -30,6 +31,19 @@ class Posted(Protocol):
 def newest_first[T: Posted](records: Iterable[T]) -> list[T]:
     """Records newest first, the id breaking a tie between two posted at once."""
     return sorted(records, key=lambda record: (record.posted_at, str(record.id)), reverse=True)
+
+
+def now() -> datetime:
+    """The current instant in UTC, the clock a record's posted time is measured from."""
+    return datetime.now(UTC)
+
+
+def next_posted_at(now: datetime, newest: datetime | None) -> datetime:
+    """A new record's posted time, newest-first independent of the clock's resolution: the
+    clock, or one microsecond past the store's newest when the clock would tie two."""
+    if newest is None:
+        return now
+    return max(now, newest + timedelta(microseconds=1))
 
 
 class RecordFolder[T: BaseModel]:
@@ -56,6 +70,12 @@ class RecordFolder[T: BaseModel]:
         folder.mkdir(parents=True, exist_ok=True)
         return FileLock(folder / f"{record_id}.lock")
 
+    def post_lock(self) -> FileLock:
+        """The lock every poster of this kind takes, so two cannot mint the same posted time."""
+        folder = self.root / self.kind
+        folder.mkdir(parents=True, exist_ok=True)
+        return FileLock(folder / POST_LOCK)
+
     def read(self, record_id: uuid.UUID) -> T:
         """One record, or NotFound when no folder holds it."""
         record = self.folder(record_id) / self.record_file
@@ -64,19 +84,33 @@ class RecordFolder[T: BaseModel]:
         return self._parsed(record)
 
     def write(self, record_id: uuid.UUID, record: T) -> T:
-        """The record written, staged beside its file and moved over it, so a reader sees the
-        whole of one version or the whole of the other."""
+        """The record written, staged beside its file and moved over it within the bounded
+        retry, so a reader sees the whole of one version or the whole of the other."""
         folder = self.folder(record_id)
         folder.mkdir(parents=True, exist_ok=True)
         staged = folder / f"{self.record_file}.tmp"
         staged.write_bytes(record.model_dump_json(indent=1).encode("utf-8"))
-        os.replace(staged, folder / self.record_file)
+        replace(staged, folder / self.record_file)
         return record
 
     def patch(self, record_id: uuid.UUID, change: Callable[[T], T]) -> T:
         """The record with the change applied, read and written under its lock."""
         with self.lock(record_id):
             return self.write(record_id, change(self.read(record_id)))
+
+    def post(self, construct: Callable[[datetime], T]) -> T:
+        """A new record posted under the kind's lock, its posted time advanced past the newest
+        stored so two posters cannot mint the same instant."""
+        with self.post_lock():
+            record = construct(self._next_posted_at())
+            return self.write(cast(Posted, record).id, record)
+
+    def _next_posted_at(self) -> datetime:
+        """The posted time of the next record of this kind: the clock, advanced past the newest."""
+        newest = max(
+            (record.posted_at for record in cast(Iterable[Posted], self.all())), default=None
+        )
+        return next_posted_at(now(), newest)
 
     def all(self) -> list[T]:
         """Every record of this kind."""
@@ -138,7 +172,7 @@ class RecordFolder[T: BaseModel]:
         """The record parsed, or Unavailable naming it and the first field this version cannot
         read in it."""
         try:
-            return self.model.model_validate_json(record.read_bytes())
+            return self.model.model_validate_json(read_bytes(record))
         except ValidationError as error:
             first = error.errors(include_url=False)[0]
             field = ".".join(str(part) for part in first["loc"])

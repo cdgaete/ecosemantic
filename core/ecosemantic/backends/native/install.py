@@ -14,12 +14,18 @@ from pathlib import Path
 from ecosemantic.backends.native.catalog import catalog_rows, write_catalog
 from ecosemantic.backends.native.store import (
     BACKGROUND_DIR,
+    BUILDS_DIR,
     BUNDLES_DIR,
     CATALOG_FILE,
     DATABASES_DIR,
     ENTRY_FILE,
     FORMAT,
     Entry,
+    install_lock,
+    migrate,
+    point,
+    remove_unnamed_builds,
+    served_build,
     slug,
 )
 from ecosemantic.errors import Conflict
@@ -51,11 +57,14 @@ def _keep(directory: Path, bundle: Path) -> str:
 
 
 def _refuse_taken(target: Path, name: str, replace: bool) -> None:
-    """Conflict for a directory another database holds, and for this one's without replace."""
-    entry_path = target / ENTRY_FILE
+    """Conflict for a database another name holds, and for this one's without replace."""
+    build_id = served_build(target)
+    if build_id is None:
+        return
+    entry_path = target / BUILDS_DIR / build_id / ENTRY_FILE
     if not entry_path.is_file():
         return
-    held = json.loads(entry_path.read_text())["database"]["name"]
+    held = json.loads(entry_path.read_text(encoding="utf-8"))["database"]["name"]
     if held != name:
         raise Conflict(f"{target} holds {held!r}; {name!r} cannot be installed there")
     if not replace:
@@ -87,27 +96,27 @@ def install(
     )
     rows = catalog_rows(imported, dropped)
     target = directory / DATABASES_DIR / slug(database.name)
-    _refuse_taken(target, database.name, replace)
+    migrate(directory)
     digest = _keep(directory, bundle)
-    partial = target.parent / f".{target.name}.partial-{uuid.uuid4().hex}"
-    partial.mkdir(parents=True)
-    try:
-        background = compile_background(imported, database)
-        database = database.model_copy(update={"fingerprint": background.fingerprint()})
-        background.save(partial / BACKGROUND_DIR)
-        write_catalog(partial / CATALOG_FILE, rows)
-        entry = Entry(format=FORMAT, database=database, bundle=digest)
-        (partial / ENTRY_FILE).write_text(entry.model_dump_json(indent=1) + "\n")
-        if target.exists():
-            old = target.parent / f".{target.name}.old-{uuid.uuid4().hex}"
-            target.rename(old)
-            partial.rename(target)
-            shutil.rmtree(old)
-        else:
-            partial.rename(target)
-    finally:
-        if partial.exists():
-            shutil.rmtree(partial)
+    build_id = uuid.uuid4().hex
+    build = target / BUILDS_DIR / build_id
+    with install_lock(target):
+        _refuse_taken(target, database.name, replace)
+        build.mkdir(parents=True)
+        try:
+            background = compile_background(imported, database)
+            database = database.model_copy(update={"fingerprint": background.fingerprint()})
+            background.save(build / BACKGROUND_DIR)
+            write_catalog(build / CATALOG_FILE, rows)
+            entry = Entry(format=FORMAT, database=database, bundle=digest)
+            (build / ENTRY_FILE).write_text(
+                entry.model_dump_json(indent=1) + "\n", encoding="utf-8"
+            )
+            point(target, build_id)
+        finally:
+            if served_build(target) != build_id:
+                shutil.rmtree(build)
+        remove_unnamed_builds(target, build_id)
     return Installed(
         database=database,
         directory=target,

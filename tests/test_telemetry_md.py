@@ -27,7 +27,7 @@ def started_attributes(tmp_path: Path) -> list[str]:
 
 
 def test_the_page_names_what_the_code_sends(started):
-    page = (ROOT / "TELEMETRY.md").read_text()
+    page = (ROOT / "TELEMETRY.md").read_text(encoding="utf-8")
     names = [
         telemetry.STARTS,
         TOOL_CALLS,
@@ -47,7 +47,7 @@ def test_the_page_names_what_the_code_sends(started):
 
 
 def test_the_readme_links_the_page():
-    assert "(TELEMETRY.md)" in (ROOT / "README.md").read_text()
+    assert "(TELEMETRY.md)" in (ROOT / "README.md").read_text(encoding="utf-8")
 
 
 def test_the_page_names_the_meter_and_the_descriptions_sent(tmp_path):
@@ -62,6 +62,6 @@ def test_the_page_names_the_meter_and_the_descriptions_sent(tmp_path):
     assert [item.scope.name for item in scope] == ["ecosemantic"]
     sent = {metric.name: metric.description for metric in scope[0].metrics}
     assert set(sent) == {telemetry.STARTS, TOOL_CALLS}
-    page = (ROOT / "TELEMETRY.md").read_text()
+    page = (ROOT / "TELEMETRY.md").read_text(encoding="utf-8")
     assert "meter named `ecosemantic`" in page
     assert [d for d in sent.values() if f"`{d}`" not in page] == []

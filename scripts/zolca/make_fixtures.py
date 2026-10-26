@@ -40,7 +40,6 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import jpype
 import jpype.imports
 
 if TYPE_CHECKING:
@@ -1290,7 +1289,11 @@ def _shut_down(path: Path) -> None:
 
 def _statements(schema: Path) -> list[str]:
     """The schema's statements, its whole-line comments dropped."""
-    lines = [line for line in schema.read_text().splitlines() if not line.strip().startswith("--")]
+    lines = [
+        line
+        for line in schema.read_text(encoding="utf-8").splitlines()
+        if not line.strip().startswith("--")
+    ]
     return [statement.strip() for statement in "\n".join(lines).split(";") if statement.strip()]
 
 
@@ -1522,7 +1525,9 @@ def main(argv: list[str] | None = None) -> None:
     _write_encrypted(out=arguments.out)
     _write_unclean(out=arguments.out)
     jpype.shutdownJVM()
-    (arguments.out / "rows.json").write_text(json.dumps(fixtures, indent=2) + "\n")
+    (arguments.out / "rows.json").write_text(
+        json.dumps(fixtures, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 if __name__ == "__main__":

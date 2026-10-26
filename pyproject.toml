@@ -14,6 +14,7 @@ dev = [
     "ecosemantic[mkl]",
     "ecosemantic-databases[ecoinvent]",
     "pytest>=8",
+    "packaging>=24",
     "pytest-asyncio>=1.1",
     "ruff>=0.16",
     "ty>=0.0.78",
@@ -30,7 +31,22 @@ target-version = "py312"
 extend-exclude = ["page"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "W", "S", "B", "SIM114", "C416", "PIE790", "ANN"]
+preview = true
+explicit-preview-rules = true
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "W",
+    "S",
+    "B",
+    "SIM114",
+    "C416",
+    "PIE790",
+    "ANN",
+    "PLW1514",
+]
 ignore = ["ANN401", "UP046", "UP047"]
 
 [tool.ruff.lint.isort]
@@ -115,6 +131,7 @@ sort_by_size = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+filterwarnings = ["error::EncodingWarning"]
 testpaths = ["tests"]
 markers = [
     "zolca_live: exports BAFU:2026 and imports it; set ECOSEMANTIC_BAFU_ZOLCA and run with -m zolca_live",

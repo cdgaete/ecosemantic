@@ -40,4 +40,4 @@ def read_profile(model: type[M], directory: Path, version: str) -> M:
     if not path.is_file():
         carried = ", ".join(versions(directory))
         raise NotFound(f"{path} does not exist; the releases carried are {carried}")
-    return model.model_validate(yaml.safe_load(path.read_text()))
+    return model.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))

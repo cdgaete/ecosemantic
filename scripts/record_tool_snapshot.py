@@ -31,7 +31,7 @@ async def main() -> None:
         finally:
             context.close()
     RECORDED.parent.mkdir(parents=True, exist_ok=True)
-    RECORDED.write_text(json.dumps(tools, indent=2, sort_keys=True) + "\n")
+    RECORDED.write_text(json.dumps(tools, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"{len(tools)} tools recorded in {RECORDED}")
 
 

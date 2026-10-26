@@ -63,7 +63,9 @@ def test_writer_derives_background_ids_and_prefixes_parameters(
     assert identities.suppliers[elec_key] == ELEC_CH
     assert COTTON in identities.suppliers.values()
     tshirt = json.loads(
-        (tmp_path / "processes" / f"{product_system.processes[0].id}.json").read_text()
+        (tmp_path / "processes" / f"{product_system.processes[0].id}.json").read_text(
+            encoding="utf-8"
+        )
     )
     electricity = next(
         e for e in tshirt["exchanges"] if "elec_per_kg" in (e.get("amountFormula") or "")
@@ -72,7 +74,9 @@ def test_writer_derives_background_ids_and_prefixes_parameters(
     key = supplier_key(electricity["defaultProvider"]["@id"], electricity["flow"]["@id"])
     assert identities.suppliers[key] == ELEC_CH
     assert tshirt["location"]["@id"] == keygen("CH")
-    parameters = [json.loads(p.read_text()) for p in (tmp_path / "parameters").glob("*.json")]
+    parameters = [
+        json.loads(p.read_text(encoding="utf-8")) for p in (tmp_path / "parameters").glob("*.json")
+    ]
     assert {p["name"] for p in parameters} == {
         "cotton_tshirt__fabric_mass",
         "cotton_tshirt__organic_share",
@@ -82,7 +86,9 @@ def test_writer_derives_background_ids_and_prefixes_parameters(
     }
     derived = next(p for p in parameters if p["name"].endswith("fibre_mass"))
     assert derived["formula"] == "cotton_tshirt__fabric_mass * (1 + cotton_tshirt__waste_rate)"
-    system = json.loads(next((tmp_path / "product_systems").glob("*.json")).read_text())
+    system = json.loads(
+        next((tmp_path / "product_systems").glob("*.json")).read_text(encoding="utf-8")
+    )
     assert [s["name"] for s in system["parameterSets"]] == ["small", "large"]
     assert system["parameterSets"][0]["parameters"][0]["name"] == "cotton_tshirt__fabric_mass"
 
@@ -111,12 +117,16 @@ def test_writer_takes_the_reference_from_the_field_and_leaves_it_out_without_one
     # fabric is no root: the t-shirt uses it
     named = product_system.model_copy(update={"reference_process": "fabric"})
     write_jsonld(named, tmp_path / "a", resolver)
-    system = json.loads(next((tmp_path / "a" / "product_systems").glob("*.json")).read_text())
+    system = json.loads(
+        next((tmp_path / "a" / "product_systems").glob("*.json")).read_text(encoding="utf-8")
+    )
     assert system["refProcess"]["name"] == named.process("fabric").name
     assert system["targetAmount"] == 1.0
     unset = product_system.model_copy(update={"reference_process": None})
     write_jsonld(unset, tmp_path / "b", resolver)
-    system = json.loads(next((tmp_path / "b" / "product_systems").glob("*.json")).read_text())
+    system = json.loads(
+        next((tmp_path / "b" / "product_systems").glob("*.json")).read_text(encoding="utf-8")
+    )
     assert "refProcess" not in system and len(system["processes"]) == 4
 
 
@@ -125,12 +135,16 @@ def test_writer_makes_natural_resources_inputs_and_emissions_outputs(
 ) -> None:
     write_jsonld(product_system, tmp_path, resolver)
     fabric = json.loads(
-        (tmp_path / "processes" / f"{product_system.processes[1].id}.json").read_text()
+        (tmp_path / "processes" / f"{product_system.processes[1].id}.json").read_text(
+            encoding="utf-8"
+        )
     )
     river = next(e for e in fabric["exchanges"] if e["flow"]["name"] == "Water, river")
     assert river["isInput"] is True
     tshirt = json.loads(
-        (tmp_path / "processes" / f"{product_system.processes[0].id}.json").read_text()
+        (tmp_path / "processes" / f"{product_system.processes[0].id}.json").read_text(
+            encoding="utf-8"
+        )
     )
     co2 = next(e for e in tshirt["exchanges"] if e["flow"]["name"] == "Carbon dioxide, fossil")
     assert co2["isInput"] is False
@@ -197,7 +211,9 @@ def test_writer_places_an_indicator_flow_by_its_sub_compartment(tmp_path: Path) 
         },
     )
     write_jsonld(system, tmp_path, resolver)
-    mill = json.loads((tmp_path / "processes" / f"{system.processes[0].id}.json").read_text())
+    mill = json.loads(
+        (tmp_path / "processes" / f"{system.processes[0].id}.json").read_text(encoding="utf-8")
+    )
     by_name = {e["flow"]["name"]: e["isInput"] for e in mill["exchanges"]}
     assert by_name["Secondary materials"] is True
     assert by_name["Exported energy - heat"] is False

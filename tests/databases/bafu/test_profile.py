@@ -79,7 +79,7 @@ def test_the_differences_round_trip_in_process_and_column_order(tmp_path: Path) 
     path = tmp_path / "differences-2026-v1.csv"
     write_differences(path, reversed(PAIRS))
     assert read_differences(path) == PAIRS
-    assert path.read_text().splitlines()[0] == "process_id,column"
+    assert path.read_text(encoding="utf-8").splitlines()[0] == "process_id,column"
 
 
 def test_a_pair_listed_twice_is_invalid(tmp_path: Path) -> None:
@@ -87,7 +87,8 @@ def test_a_pair_listed_twice_is_invalid(tmp_path: Path) -> None:
     path.write_text(
         "process_id,column\n"
         f"{PAIRS[0].process_id},Energy resources [UBP]\n"
-        f"{PAIRS[0].process_id},Energy resources [UBP]\n"
+        f"{PAIRS[0].process_id},Energy resources [UBP]\n",
+        encoding="utf-8",
     )
     with pytest.raises(Invalid) as refused:
         read_differences(path)

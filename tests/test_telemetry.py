@@ -32,7 +32,7 @@ def clean(monkeypatch):
 
 
 def kept(data_dir: Path) -> dict:
-    return json.loads((data_dir / telemetry.FILE).read_text())
+    return json.loads((data_dir / telemetry.FILE).read_text(encoding="utf-8"))
 
 
 def test_on_by_default(tmp_path):
@@ -74,7 +74,9 @@ KEPT_ID = "6f1c0b52-2d57-4c1e-9a54-0c3f6f0d8a11"
 
 
 def test_record_keeps_the_other_keys(tmp_path):
-    (tmp_path / telemetry.FILE).write_text(json.dumps({"install_id": KEPT_ID, "told": True}))
+    (tmp_path / telemetry.FILE).write_text(
+        json.dumps({"install_id": KEPT_ID, "told": True}), encoding="utf-8"
+    )
     record({}, tmp_path, True)
     assert kept(tmp_path) == {"choice": "on", "install_id": KEPT_ID, "told": True}
 
@@ -98,7 +100,7 @@ def test_record_refuses_a_mistyped_switch_before_writing(tmp_path):
     ],
 )
 def test_a_broken_file_is_refused_with_its_remedy(tmp_path, text):
-    (tmp_path / telemetry.FILE).write_text(text)
+    (tmp_path / telemetry.FILE).write_text(text, encoding="utf-8")
     with pytest.raises(Invalid, match="telemetry.json") as refused:
         chosen({}, tmp_path)
     assert "delete it" in str(refused.value)
@@ -122,7 +124,7 @@ def test_a_file_that_cannot_be_read_is_unavailable(tmp_path):
 
 def test_a_recorded_choice_and_identifier_are_read_back(tmp_path):
     (tmp_path / telemetry.FILE).write_text(
-        json.dumps({"choice": "on", "install_id": KEPT_ID, "told": True})
+        json.dumps({"choice": "on", "install_id": KEPT_ID, "told": True}), encoding="utf-8"
     )
     assert status({}, tmp_path)["install_id"] == KEPT_ID
 
@@ -132,7 +134,7 @@ def test_a_recorded_choice_and_identifier_are_read_back(tmp_path):
     [{}, {"ECOSEMANTIC_TELEMETRY": "on"}, {"ECOSEMANTIC_TELEMETRY": "off"}, {"DO_NOT_TRACK": "1"}],
 )
 def test_chosen_and_begin_agree_on_a_broken_file(tmp_path, environ):
-    (tmp_path / telemetry.FILE).write_text("{broken")
+    (tmp_path / telemetry.FILE).write_text("{broken", encoding="utf-8")
     outcomes = []
     reader = InMemoryMetricReader()
     for decide in (
@@ -388,7 +390,7 @@ def test_a_given_reader_builds_the_provider(tmp_path):
     ],
 )
 def test_the_off_switch_wins_over_a_broken_file(tmp_path, environ, reason):
-    (tmp_path / telemetry.FILE).write_text("{broken")
+    (tmp_path / telemetry.FILE).write_text("{broken", encoding="utf-8")
     assert chosen(environ, tmp_path) == Choice(False, reason)
     assert begin(environ, tmp_path, "stdio", io.StringIO()) is None
 

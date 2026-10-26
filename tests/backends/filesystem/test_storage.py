@@ -4,11 +4,13 @@ import asyncio
 import json
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
 
 import pytest
+from filelock import FileLock
 
 from ecosemantic.backends.filesystem.storage import FilesystemStorage
 from ecosemantic.errors import Conflict, NotFound
@@ -103,7 +105,28 @@ class TestFilesystemStorage(StorageConformance):
         kinds = sorted(type(o).__name__ for o in outcomes)
         assert kinds == sorted((Conflict.__name__, LogEntry.__name__))
         assert [e.seq for e in await a.log(product_system.id)] == [1, 2]
-        assert (tmp_path / "shared" / f"{product_system.id}.lock").is_file()
+
+        current = await a.get_product_system(product_system.id)
+        current.parameters[1].value = 0.20
+        lock = FileLock(tmp_path / "shared" / f"{product_system.id}.lock")
+        held = threading.Event()
+        release = threading.Event()
+
+        def hold() -> None:
+            with lock:
+                held.set()
+                release.wait(timeout=10)
+
+        thread = threading.Thread(target=hold, daemon=True)
+        thread.start()
+        assert held.wait(timeout=5)
+        task = asyncio.create_task(a.put_product_system(current, agent, "blocked"))
+        await asyncio.sleep(0.1)
+        assert not task.done()
+        release.set()
+        await asyncio.wait_for(task, timeout=5)
+        thread.join()
+
         assert [s.id for s in await b.list_product_systems()] == [product_system.id]
 
     async def test_a_read_waits_for_a_lock_another_process_holds(
@@ -120,7 +143,10 @@ class TestFilesystemStorage(StorageConformance):
         )
         lock_path = storage.root / f"{product_system.id}.lock"
         process = subprocess.Popen(
-            [sys.executable, "-c", holder, str(lock_path)], stdout=subprocess.PIPE, text=True
+            [sys.executable, "-c", holder, str(lock_path)],
+            stdout=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
         )
         assert process.stdout is not None and process.stdout.readline().strip() == "held"
         started = time.monotonic()

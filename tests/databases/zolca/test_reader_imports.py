@@ -45,7 +45,7 @@ def test_every_module_of_the_derby_reader_is_read() -> None:
 def test_the_derby_reader_imports_the_standard_library_and_ecosemantic_errors_alone() -> None:
     offenders: dict[str, list[str]] = {}
     for path in sorted(DERBY.glob("*.py")):
-        for module in sorted(modules(ast.parse(path.read_text()))):
+        for module in sorted(modules(ast.parse(path.read_text(encoding="utf-8")))):
             if module.split(".")[0] in sys.stdlib_module_names:
                 continue
             if module.startswith(ALLOWED):
@@ -69,7 +69,7 @@ def test_every_module_of_the_export_is_read() -> None:
 def test_the_export_imports_the_standard_library_olca_schema_and_the_reader_alone() -> None:
     offenders: dict[str, list[str]] = {}
     for path in sorted(EXPORT.glob("*.py")):
-        for module in sorted(modules(ast.parse(path.read_text()))):
+        for module in sorted(modules(ast.parse(path.read_text(encoding="utf-8")))):
             if module.split(".")[0] in sys.stdlib_module_names:
                 continue
             if module.startswith(EXPORT_ALLOWED):

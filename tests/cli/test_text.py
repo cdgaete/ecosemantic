@@ -68,7 +68,7 @@ def test_a_refusal_without_a_hint_is_its_message_alone() -> None:
 
 def test_the_terms_name_the_licence_file_the_citation_and_the_flag() -> None:
     text = terms_text(Path("/downloads/licence.txt"), "a citation")
-    assert "a citation" in text and "/downloads/licence.txt" in text
+    assert "a citation" in text and str(Path("/downloads/licence.txt")) in text
     assert "Run the command again with --accept-terms to accept them." in text
 
 

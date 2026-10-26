@@ -13,9 +13,12 @@ from ecosemantic.local import DATA_DIR, build_context, default_directories
 
 @pytest.fixture
 def clean(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    home = tmp_path / "home"
     monkeypatch.delenv(DATA_DIR, raising=False)
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setattr(Path, "home", lambda: home)
     return tmp_path
 
 

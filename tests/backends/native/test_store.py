@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 
 from ecosemantic.backends.native.store import NativeStore, slug
+from ecosemantic.backends.native.store import served_build as served_build_id
 from ecosemantic.errors import NotFound, Unavailable
+from tests.engine_fixture import served_build
 from tests.fixture_data import CODES, FIXTURE_BIO, FIXTURE_DB, LOOP_DB
 
 
@@ -71,10 +73,11 @@ def test_a_directory_whose_name_starts_with_a_dot_is_not_read(
 def test_an_entry_of_format_3_is_refused_with_its_remedy(tmp_path: Path, bundle_dir: Path) -> None:
     target = tmp_path / "databases" / "fixture"
     shutil.copytree(bundle_dir / "databases" / "fixture", target)
-    entry = json.loads((target / "entry.json").read_text())
+    build = served_build(target)
+    entry = json.loads((build / "entry.json").read_text(encoding="utf-8"))
     held = {"format": 3, "database": entry["database"], "bundle": entry["bundle"]}
-    (target / "entry.json").write_text(json.dumps(held))
-    with pytest.raises(Unavailable, match="entry format 3; this store reads format 4") as raised:
+    (build / "entry.json").write_text(json.dumps(held), encoding="utf-8")
+    with pytest.raises(Unavailable, match="entry format 3; this store reads format 5") as raised:
         NativeStore(tmp_path)
     assert raised.value.hint == (
         "install it again from its bundle with `ecosemantic setup openlca --replace`"
@@ -88,3 +91,24 @@ def test_a_store_under_pardiso_without_pypardiso_is_refused_when_built(
     monkeypatch.setitem(sys.modules, "pypardiso", None)
     with pytest.raises(Unavailable, match="pypardiso"):
         NativeStore(tmp_path, solver="pardiso")
+
+
+def test_the_pointer_read_retries_a_refused_open(
+    tmp_path: Path, bundle_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "databases" / "fixture"
+    shutil.copytree(bundle_dir / "databases" / "fixture", target)
+    build_id = (target / "current").read_text(encoding="utf-8").strip()
+    real_read = Path.read_bytes
+    attempts = 0
+
+    def flaky(self: Path) -> bytes:
+        nonlocal attempts
+        attempts += 1
+        if attempts <= 2:
+            raise PermissionError("held")
+        return real_read(self)
+
+    monkeypatch.setattr(Path, "read_bytes", flaky)
+    assert served_build_id(target) == build_id
+    assert attempts == 3

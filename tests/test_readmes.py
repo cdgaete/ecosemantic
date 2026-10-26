@@ -70,7 +70,11 @@ def invocation(program: str) -> tuple[str, ...]:
 def help_text(path: tuple[str, ...]) -> str:
     """Answer what a command path answers `--help`, as the installed command prints it."""
     completed = subprocess.run(
-        [*invocation(path[0]), *path[1:], "--help"], capture_output=True, text=True, check=False
+        [*invocation(path[0]), *path[1:], "--help"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
     )
     assert completed.returncode == 0, f"{' '.join(path)} --help fails: {completed.stderr}"
     return completed.stdout

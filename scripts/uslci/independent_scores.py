@@ -140,7 +140,7 @@ def read_zip(path: Path) -> dict[str, dict[str, dict[str, object]]]:
 def read_left_out(path: Path) -> set[tuple[str, int]]:
     """The process and exchange pairs a left-out list drops, from the rows whose kind is an
     exchange; a process may carry one flow in two exchanges, so the exchange's id names it."""
-    with path.open(newline="") as read:
+    with path.open(newline="", encoding="utf-8") as read:
         return {
             (record["process_id"], int(record["exchange_id"]))
             for record in csv.DictReader(read)
@@ -580,7 +580,7 @@ def scores(
 
 def _written(path: Path, columns: Sequence[str], rows: Iterable[Sequence[object]]) -> None:
     """Write rows as CSV under a header, one line each."""
-    with path.open("w", newline="") as written:
+    with path.open("w", newline="", encoding="utf-8") as written:
         writer = csv.writer(written, lineterminator="\n")
         writer.writerow(columns)
         writer.writerows(rows)

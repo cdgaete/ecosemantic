@@ -12,7 +12,7 @@ from ecosemantic.errors import NotFound
 from ecosemantic.model.entities import DemandItem, Method
 from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef
 from ecosemantic.package.background import read_background
-from tests.engine_fixture import fixture_bundle
+from tests.engine_fixture import fixture_bundle, served_build
 from tests.fixture_data import CODES, FIXTURE_BIO, FIXTURE_DB, FLOW_IDS, LOOP_DB
 from tests.openlca_fixture import FLOW_IDS as OPENLCA_FLOWS
 from tests.openlca_fixture import PROCESSES as OPENLCA_PROCESSES
@@ -247,21 +247,25 @@ def test_a_cut_off_is_never_scored(tmp_path: Path) -> None:
     bundle = build_package(tmp_path / "package.zip")
     imported = read_background(bundle, OLCA, foreground=frozenset())
     key = next(m.key for m in imported.methods if m.key[2] == "climate change")
-    today = install(
-        tmp_path / "today",
-        dataclasses.replace(imported, unlinked=[]),
-        bundle,
-        version="1",
-        system_model="unit process",
-    ).directory
-    dropped = install(
-        tmp_path / "dropped",
-        dataclasses.replace(imported, unlinked=[]),
-        bundle,
-        version="1",
-        system_model="unit process",
-        dropped=imported.unlinked,
-    ).directory
+    today = served_build(
+        install(
+            tmp_path / "today",
+            dataclasses.replace(imported, unlinked=[]),
+            bundle,
+            version="1",
+            system_model="unit process",
+        ).directory
+    )
+    dropped = served_build(
+        install(
+            tmp_path / "dropped",
+            dataclasses.replace(imported, unlinked=[]),
+            bundle,
+            version="1",
+            system_model="unit process",
+            dropped=imported.unlinked,
+        ).directory
+    )
     assert (
         Background.load(dropped / "background").fingerprint()
         == Background.load(today / "background").fingerprint()

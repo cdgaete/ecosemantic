@@ -289,7 +289,9 @@ class Background:
             "methods": [method.model_dump(mode="json") for method in self.methods],
             "counts": {name: int(values.shape[-1]) for name, values in arrays.items()},
         }
-        (directory / "background.json").write_text(json.dumps(manifest, indent=1) + "\n")
+        (directory / "background.json").write_text(
+            json.dumps(manifest, indent=1) + "\n", encoding="utf-8"
+        )
 
     @classmethod
     def load(cls, directory: Path) -> Background:
@@ -298,7 +300,7 @@ class Background:
         manifest_path = directory / "background.json"
         if not manifest_path.is_file():
             raise NotFound(f"{directory} holds no saved background")
-        manifest = json.loads(manifest_path.read_text())
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if manifest.get("format") != FORMAT:
             raise Invalid(
                 f"{directory} holds background format {manifest.get('format')!r}; "

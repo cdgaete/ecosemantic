@@ -1,6 +1,6 @@
 [project]
 name = "ecosemantic-databases"
-version = "0.1.6"
+version = "0.1.7"
 description = "Native EcoSemantic bundles built from a source database's own files."
 requires-python = ">=3.12"
 license = "PolyForm-Noncommercial-1.0.0"
@@ -20,11 +20,11 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "ecosemantic-engine==0.1.6",
-    "ecosemantic-core==0.1.6",
+    "ecosemantic-engine==0.1.7",
+    "ecosemantic-core==0.1.7",
     "pydantic>=2.7,<3",
     "olca-schema==2.4.0",
-    "pyyaml>=6,<7",
+    "pyyaml>=6.0.1,<7",
     "numpy>=2.5",
     "scipy>=1.16",
     "lca-data-interface~=0.1",

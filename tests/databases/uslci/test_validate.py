@@ -111,14 +111,14 @@ def _first(prepared: Prepared) -> Validation:
 
 def _changed(prepared: Prepared, tmp_path: Path, factor: float) -> tuple[Path, float]:
     """The independent scores with the widget's climate score multiplied by a factor."""
-    with prepared.independent.open(newline="") as read:
+    with prepared.independent.open(newline="", encoding="utf-8") as read:
         rows = list(csv.DictReader(read))
     changed = 0.0
     for row in rows:
         if (row["code"], row["category"]) == (WIDGET, CLIMATE):
             changed = float(row["score"]) * factor
             row["score"] = repr(changed)
-    with (tmp_path / "changed.csv").open("w", newline="") as written:
+    with (tmp_path / "changed.csv").open("w", newline="", encoding="utf-8") as written:
         writer = csv.DictWriter(written, fieldnames=list(rows[0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
@@ -230,13 +230,13 @@ def test_a_left_out_exchange_not_in_the_list_is_named(prepared: Prepared, tmp_pa
 def _renamed(prepared: Prepared, tmp_path: Path, field: str, old: str, new: str) -> Path:
     """The independent scores with one column's value replaced, as a dataset or category a side
     does not hold."""
-    with prepared.independent.open(newline="") as read:
+    with prepared.independent.open(newline="", encoding="utf-8") as read:
         rows = list(csv.DictReader(read))
     for row in rows:
         if row[field] == old:
             row[field] = new
     path = tmp_path / f"renamed-{field}.csv"
-    with path.open("w", newline="") as written:
+    with path.open("w", newline="", encoding="utf-8") as written:
         writer = csv.DictWriter(written, fieldnames=list(rows[0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
@@ -382,7 +382,7 @@ def test_record_writes_the_lists_the_tolerance_and_the_validated_block(
     assert profile.tolerance is not None
     assert profile.tolerance >= 1e-9
     assert math.log10(profile.tolerance).is_integer()
-    written = yaml.safe_load(path.read_text())
+    written = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert list(written) == [
         "version",
         "server",
@@ -454,7 +454,7 @@ def test_the_validate_command_exits_one_on_a_mismatch(
     monkeypatch.setattr(releases, "RELEASES", shipped)
     recorded = read_profile(VERSION).model_copy(update={"tolerance": 1e-9})
     (shipped / f"{VERSION}.yaml").write_text(
-        yaml.safe_dump(recorded.model_dump(mode="json"), sort_keys=False)
+        yaml.safe_dump(recorded.model_dump(mode="json"), sort_keys=False), encoding="utf-8"
     )
     changed, _ = _changed(prepared, tmp_path, 1.01)
     assert (

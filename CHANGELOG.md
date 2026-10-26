@@ -2,6 +2,15 @@
 
 Each release names what it adds, changes and removes, newest first.
 
+## 0.1.7
+
+- Windows and macOS are tested on every change, beside Linux, at Python 3.12 and 3.14.
+- Text is read and written as UTF-8 on every platform, so the tables a person opens on Windows carry their characters (e.g. `·`, accents).
+- A database's fingerprint, and the digest of an ecoinvent release's files, are the same on every platform.
+- Each install writes its build into its own directory and points the database at it, so a database installs again while a server on Windows serves it; the previous build's files are removed once nothing holds them.
+- A data directory written by 0.1.6 opens without reinstalling: the first open moves each database into the new layout, keeping its fingerprint.
+- After upgrading, restart every running EcoSemantic server: a server started before the upgrade starts its run and install workers from the upgraded files, which move the data directory into the new layout, and that server then lists no databases until it is restarted.
+
 ## 0.1.6
 
 - The licence is the PolyForm Noncommercial License 1.0.0 in every distribution: any noncommercial purpose is permitted, by individuals and by charities, schools, public research and government bodies; commercial use needs a separate licence from Carlos Gaete-Morales.

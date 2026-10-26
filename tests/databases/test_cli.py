@@ -155,7 +155,7 @@ def test_the_build_command_reads_the_profile_of_a_named_release(
     releases = tmp_path / "releases"
     releases.mkdir()
     (releases / "3.10-cutoff.yaml").write_text(
-        yaml.safe_dump(default_profile(release).model_dump(mode="json"))
+        yaml.safe_dump(default_profile(release).model_dump(mode="json")), encoding="utf-8"
     )
     assert main(["build", "3.10", "--system-model", "cutoff", "--out", str(tmp_path / "out")]) == 0
     assert json.loads(capsys.readouterr().out)["processes"] == 4
@@ -192,7 +192,9 @@ def test_the_probe_command_reads_the_profile_named_for_the_release(
     releases = tmp_path / "releases"
     releases.mkdir()
     profile = default_profile(release).model_copy(update={"expected_unmatched_factors": 1})
-    (releases / "3.10-cutoff.yaml").write_text(yaml.safe_dump(profile.model_dump(mode="json")))
+    (releases / "3.10-cutoff.yaml").write_text(
+        yaml.safe_dump(profile.model_dump(mode="json")), encoding="utf-8"
+    )
     monkeypatch.setenv("EI_USERNAME", "someone@example.com")
     monkeypatch.setenv("EI_PASSWORD", "not-the-real-one")
     monkeypatch.setattr(cli, "EcoinventRelease", lambda settings: object())

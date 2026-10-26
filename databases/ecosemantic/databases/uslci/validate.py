@@ -124,7 +124,7 @@ def list_mismatches(
 def _independent(path: Path) -> dict[tuple[str, str, str], tuple[float, str]]:
     """The scores another computation wrote, one per dataset code, method and category, with the
     unit each is per."""
-    with path.open(newline="") as read:
+    with path.open(newline="", encoding="utf-8") as read:
         return {
             (row["code"], row["method"], row["category"]): (float(row["score"]), row["unit"])
             for row in csv.DictReader(read)
@@ -286,5 +286,7 @@ def record(profile: Profile, validation: Validation) -> Path:
         }
     )
     path = releases.RELEASES / f"{profile.version}.yaml"
-    path.write_text(yaml.safe_dump(updated.model_dump(mode="json"), sort_keys=False))
+    path.write_text(
+        yaml.safe_dump(updated.model_dump(mode="json"), sort_keys=False), encoding="utf-8"
+    )
     return path

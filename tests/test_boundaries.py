@@ -38,7 +38,7 @@ OLCA_ENCODINGS = (
 
 def modules() -> dict[str, ast.Module]:
     return {
-        path.relative_to(root).as_posix(): ast.parse(path.read_text())
+        path.relative_to(root).as_posix(): ast.parse(path.read_text(encoding="utf-8"))
         for root in ROOTS_ON_PATH
         for path in sorted(root.rglob("*.py"))
         if "__pycache__" not in path.parts
@@ -141,7 +141,7 @@ def test_no_module_names_brightway() -> None:
 
 
 def test_the_lock_holds_nothing_of_brightway() -> None:
-    lock = tomllib.loads((REPOSITORY / "uv.lock").read_text())
+    lock = tomllib.loads((REPOSITORY / "uv.lock").read_text(encoding="utf-8"))
     held = {package["name"] for package in lock["package"]}
     assert held & {*BRIGHTWAY, "bw-processing", "ecosemantic-brightway"} == set()
 

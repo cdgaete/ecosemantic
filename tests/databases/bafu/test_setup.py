@@ -60,7 +60,7 @@ def fixture_release(
     released = tmp_path / "releases"
     released.mkdir()
     (released / f"{profile.version}.yaml").write_text(
-        yaml.safe_dump(profile.model_dump(mode="json"), sort_keys=False)
+        yaml.safe_dump(profile.model_dump(mode="json"), sort_keys=False), encoding="utf-8"
     )
     write_unlinked(released / profile.unlinked, unlinked)
     return server, profile, released

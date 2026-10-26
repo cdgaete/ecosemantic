@@ -91,7 +91,9 @@ def write_folder(root: Path, system: ProductSystem) -> Path:
     inputs.mkdir(parents=True, exist_ok=True)
     model = system.model_dump(mode="json", exclude={"parameters", "cases", "hash"})
     (folder / MODEL_FILE).write_text(
-        yaml.safe_dump(model, sort_keys=False, allow_unicode=True), encoding="utf-8"
+        yaml.safe_dump(model, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+        newline="\n",
     )
     write_csv(
         inputs / INPUT_PARAMETERS,
@@ -132,7 +134,9 @@ def write_folder(root: Path, system: ProductSystem) -> Path:
         ],
     )
     (inputs / SCHEMA_FILE).write_text(
-        yaml.safe_dump(_schema(system), sort_keys=False, allow_unicode=True), encoding="utf-8"
+        yaml.safe_dump(_schema(system), sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+        newline="\n",
     )
     return folder
 

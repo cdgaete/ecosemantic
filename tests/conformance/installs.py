@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 
+from ecosemantic.backends.filesystem import records
 from ecosemantic.errors import Conflict, NotFound
 from ecosemantic.model.entities import Actor
 from ecosemantic.ports.types import InstallDraft, InstallPatch, InstallProgress
@@ -44,7 +46,10 @@ class InstallConformance:
         assert running.draft == posted.draft and running.posted_at == posted.posted_at
         assert await installs.get_install(posted.id) == running
 
-    async def test_installs_list_newest_first(self, installs) -> None:
+    async def test_installs_list_newest_first(
+        self, installs, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(records, "now", lambda: datetime(2024, 1, 1, tzinfo=UTC))
         first = await installs.post_install(draft())
         second = await installs.post_install(draft(version="2026"))
         assert [install.id for install in await installs.list_installs()] == [second.id, first.id]

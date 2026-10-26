@@ -117,7 +117,7 @@ def _unit_refs(unit: str) -> tuple[o.Ref, o.Ref, o.Ref]:
 def _write_entity(root: Path, entity: o.RootEntity) -> None:
     folder = root / _FOLDERS[type(entity)]
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"{entity.id}.json").write_text(entity.to_json(), encoding="utf-8")
+    (folder / f"{entity.id}.json").write_text(entity.to_json(), encoding="utf-8", newline="\n")
 
 
 def _ref(entity_type: o.RefType, entity_id: str, name: str, **extra: object) -> o.Ref:
@@ -451,7 +451,7 @@ class _Writer:
         for folder in _FOLDERS.values():
             shutil.rmtree(root / folder, ignore_errors=True)
         root.mkdir(parents=True, exist_ok=True)
-        (root / DESCRIPTOR).write_text('{"version": 2}', encoding="utf-8")
+        (root / DESCRIPTOR).write_text('{"version": 2}', encoding="utf-8", newline="\n")
         for entity in entities:
             _write_entity(root, entity)
         return self.identities

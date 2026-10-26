@@ -193,7 +193,7 @@ def test_the_page_and_the_command_record_one_key_for_one_calculation(
     ]
     assert main(argv) == 0
     run = Path(json.loads(capsys.readouterr().out)["folder"])
-    from_the_command = yaml.safe_load((run / "schema.yaml").read_text())["key"]
+    from_the_command = yaml.safe_load((run / "schema.yaml").read_text(encoding="utf-8"))["key"]
     assert from_the_page == from_the_command
     # the demand a calculation defaulted to is the demand its key records
     assert from_the_page["demand"] == [

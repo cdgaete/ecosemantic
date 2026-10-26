@@ -74,6 +74,6 @@ def test_entries_chain_on_hashes(product_system: ProductSystem) -> None:
 def test_log_round_trips_through_jsonl(product_system: ProductSystem, tmp_path: Path) -> None:
     entry = next_entry([], AGENT, "mcp", None, product_system, "created")
     write_log(tmp_path, [entry])
-    assert (tmp_path / "ecosemantic" / "log.jsonl").read_text().count("\n") == 1
+    assert (tmp_path / "ecosemantic" / "log.jsonl").read_text(encoding="utf-8").count("\n") == 1
     assert read_log(tmp_path) == [entry]
     assert read_log(tmp_path / "missing") == []

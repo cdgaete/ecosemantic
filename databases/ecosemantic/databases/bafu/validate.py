@@ -317,5 +317,7 @@ def record(profile: Profile, validation: Validation, *, directory: Path) -> Path
         }
     )
     path = directory / f"{profile.version}.yaml"
-    path.write_text(yaml.safe_dump(updated.model_dump(mode="json"), sort_keys=False))
+    path.write_text(
+        yaml.safe_dump(updated.model_dump(mode="json"), sort_keys=False), encoding="utf-8"
+    )
     return path

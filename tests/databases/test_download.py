@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import pytest
 
@@ -151,3 +151,25 @@ def test_sha256_of_a_directory_covers_every_file_in_sorted_relative_path_order(
     )
     (tmp_path / "datasets" / "activity.spold").write_bytes(b"<tampered/>")
     assert sha256(tmp_path) != digest
+
+
+def test_a_directory_digest_orders_files_by_their_parts_case_sensitively(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "MasterData").mkdir()
+    (tmp_path / "MasterData" / "Units.xml").write_bytes(b"<units/>")
+    (tmp_path / "datasets").mkdir()
+    (tmp_path / "datasets" / "activity.spold").write_bytes(b"<spold/>")
+
+    monkeypatch.setattr(
+        PurePath,
+        "__lt__",
+        lambda self, other: str(self).casefold() < str(other).casefold(),
+    )
+
+    assert (
+        sha256(tmp_path)
+        == hashlib.sha256(
+            b"MasterData/Units.xml<units/>datasets/activity.spold<spold/>"
+        ).hexdigest()
+    )

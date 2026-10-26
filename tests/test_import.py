@@ -21,7 +21,7 @@ DISTRIBUTIONS = (
 
 def test_every_distribution_answers_the_version_the_command_declares() -> None:
     project = Path(__file__).resolve().parents[1] / "app" / "pyproject.toml"
-    declared = tomllib.loads(project.read_text())["project"]["version"]
+    declared = tomllib.loads(project.read_text(encoding="utf-8"))["project"]["version"]
     assert {version(name) for name in DISTRIBUTIONS} == {declared}
     pins = {
         (name, str(required.specifier))
@@ -55,7 +55,9 @@ def test_the_command_offers_the_mkl_extra_of_the_engine() -> None:
 
 
 def _printed(code: str) -> str:
-    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    done = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, encoding="utf-8", check=True
+    )
     return done.stdout.strip()
 
 

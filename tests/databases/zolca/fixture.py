@@ -13,7 +13,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 def recorded(archive: str = "openlca.zip") -> dict[str, list[dict[str, object]]]:
     """The live rows `rows.json` records for one archive, by table name."""
-    document = json.loads((FIXTURES / "rows.json").read_text())
+    document = json.loads((FIXTURES / "rows.json").read_text(encoding="utf-8"))
     return document["databases"][archive]["tables"]
 
 

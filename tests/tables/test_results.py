@@ -76,9 +76,9 @@ def test_the_scores_table_carries_the_base_and_each_variant(tmp_path: Path) -> N
         ],
     )
     folder = write_impact(tmp_path, key(), result, AT)
-    schema = yaml.safe_load((folder / "schema.yaml").read_text())
+    schema = yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))
     assert schema["database"] == FIXTURE_DATABASE.model_dump(mode="json")
-    rows = list(csv.DictReader((folder / "scores.csv").open()))
+    rows = list(csv.DictReader((folder / "scores.csv").open(encoding="utf-8")))
     assert rows[0]["variant"] == "" and rows[0]["score"] == "4.21" and rows[0]["delta"] == ""
     assert rows[0]["method_id"] == method_id(SPEC)
     assert rows[1]["variant"] == "lean" and rows[1]["delta"] == "-1.19"
@@ -90,7 +90,7 @@ def test_the_run_schema_carries_the_key_it_was_computed_on(tmp_path: Path) -> No
         database=FIXTURE_DATABASE, product_system="Battery pack", scores=[], credit_loops=[]
     )
     folder = write_impact(tmp_path, key(), result, AT)
-    schema = yaml.safe_load((folder / "schema.yaml").read_text())
+    schema = yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))
     assert schema["format"] == 1
     assert schema["key"]["hash"] == key().hash
     assert schema["key"]["product_system_id"] == str(uuid.UUID(int=1))
@@ -116,9 +116,9 @@ def test_a_contribution_over_processes_writes_its_own_columns(tmp_path: Path) ->
         ],
     )
     folder = write_contribution(tmp_path, key(), result, AT)
-    rows = list(csv.DictReader((folder / "contributions.csv").open()))
+    rows = list(csv.DictReader((folder / "contributions.csv").open(encoding="utf-8")))
     assert rows[0]["rank"] == "1" and rows[0]["name"] == "transport"
-    schema = yaml.safe_load((folder / "schema.yaml").read_text())
+    schema = yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))
     assert schema["by"] == "process"
 
 
@@ -156,14 +156,14 @@ def test_a_monte_carlo_block_writes_the_summary_and_the_samples(tmp_path: Path) 
         ),
     )
     folder = write_impact(tmp_path, key(), result, AT)
-    summary = list(csv.DictReader((folder / "uncertainty.csv").open()))
+    summary = list(csv.DictReader((folder / "uncertainty.csv").open(encoding="utf-8")))
     assert summary[0]["n"] == "6" and summary[0]["stopped"] == "target"
     assert summary[0]["normals_at_amount"] == "4"
     assert summary[0]["median"] == "4.2" and summary[0]["mean"] == "4.2"
     assert summary[0]["median_ci95_low"] == "4.0" and summary[0]["median_ci95_high"] == "4.4"
     assert summary[0]["rel_se"] == "0.02"
     assert summary[0]["p2_5"] == "4.01" and summary[0]["p97_5"] == "4.39"
-    samples = list(csv.DictReader((folder / "samples.csv").open()))
+    samples = list(csv.DictReader((folder / "samples.csv").open(encoding="utf-8")))
     assert [row["iteration"] for row in samples] == ["0", "1", "2", "3", "4", "5"]
     assert [row["value"] for row in samples] == ["4.0", "4.2", "4.4", "4.1", "4.3", "4.2"]
 
@@ -188,9 +188,9 @@ def test_a_contribution_over_flows_writes_its_own_columns(tmp_path: Path) -> Non
         ],
     )
     folder = write_contribution(tmp_path, key(), result, AT)
-    rows = list(csv.DictReader((folder / "contributions.csv").open()))
+    rows = list(csv.DictReader((folder / "contributions.csv").open(encoding="utf-8")))
     assert rows[0]["compartment"] == "air" and rows[0]["amount"] == "3.0"
-    assert yaml.safe_load((folder / "schema.yaml").read_text())["by"] == "flow"
+    assert yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))["by"] == "flow"
 
 
 def test_a_contribution_over_paths_flattens_the_tree_in_walk_order(tmp_path: Path) -> None:
@@ -207,12 +207,14 @@ def test_a_contribution_over_paths_flattens_the_tree_in_walk_order(tmp_path: Pat
         truncated=False,
     )
     folder = write_contribution(tmp_path, key(), result, AT)
-    rows = list(csv.DictReader((folder / "contributions.csv").open()))
+    rows = list(csv.DictReader((folder / "contributions.csv").open(encoding="utf-8")))
     assert [row["level"] for row in rows] == ["0", "1"]
     assert [row["name"] for row in rows] == ["battery", "transport"]
     # a node with no reference leaves the cell blank
     assert rows[0]["ref"] == ""
-    assert yaml.safe_load((folder / "schema.yaml").read_text())["truncated"] is False
+    assert (
+        yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))["truncated"] is False
+    )
 
 
 def test_a_result_is_labelled_by_its_method_id_then_its_impact_method_then_nothing() -> None:
@@ -235,7 +237,9 @@ def test_each_run_schema_names_the_loops_holding_a_credit(tmp_path: Path) -> Non
         linked_credit_loops=linked,
         variants=[VariantScores(name="lean", scores=[total], deltas=[0.0], credit_loops=[])],
     )
-    schema = yaml.safe_load((write_impact(tmp_path, key(), impact, AT) / "schema.yaml").read_text())
+    schema = yaml.safe_load(
+        (write_impact(tmp_path, key(), impact, AT) / "schema.yaml").read_text(encoding="utf-8")
+    )
     assert schema["credit_loops"] == loop and schema["linked_credit_loops"] == dumped
     assert schema["variant_credit_loops"] == {"lean": []}
     decomposed = ContributionResult(
@@ -247,11 +251,11 @@ def test_each_run_schema_names_the_loops_holding_a_credit(tmp_path: Path) -> Non
         linked_credit_loops=linked,
     )
     folder = write_contribution(tmp_path / "c", key(), decomposed, AT)
-    schema = yaml.safe_load((folder / "schema.yaml").read_text())
+    schema = yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))
     assert schema["credit_loops"] == loop and schema["linked_credit_loops"] == dumped
     rows = Page[InventoryRow](items=[], has_more=False)
     folder = write_inventory(tmp_path / "i", key(), FIXTURE_DATABASE, rows, loop, linked, [], AT)
-    schema = yaml.safe_load((folder / "schema.yaml").read_text())
+    schema = yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))
     assert schema["credit_loops"] == loop and schema["linked_credit_loops"] == dumped
     assert schema["database"] == FIXTURE_DATABASE.model_dump(mode="json")
 
@@ -273,7 +277,9 @@ def test_each_run_schema_names_the_exchanges_running_a_treatment_backwards(
         treatments_run_backwards=named,
         variants=[variant],
     )
-    schema = yaml.safe_load((write_impact(tmp_path, key(), impact, AT) / "schema.yaml").read_text())
+    schema = yaml.safe_load(
+        (write_impact(tmp_path, key(), impact, AT) / "schema.yaml").read_text(encoding="utf-8")
+    )
     assert schema["treatments_run_backwards"] == named
     assert schema["variant_treatments_run_backwards"] == {"lean": doubled}
     decomposed = ContributionResult(
@@ -285,10 +291,20 @@ def test_each_run_schema_names_the_exchanges_running_a_treatment_backwards(
         treatments_run_backwards=named,
     )
     folder = write_contribution(tmp_path / "c", key(), decomposed, AT)
-    assert yaml.safe_load((folder / "schema.yaml").read_text())["treatments_run_backwards"] == named
+    assert (
+        yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))[
+            "treatments_run_backwards"
+        ]
+        == named
+    )
     rows = Page[InventoryRow](items=[], has_more=False)
     folder = write_inventory(tmp_path / "i", key(), FIXTURE_DATABASE, rows, [], [], named, AT)
-    assert yaml.safe_load((folder / "schema.yaml").read_text())["treatments_run_backwards"] == named
+    assert (
+        yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))[
+            "treatments_run_backwards"
+        ]
+        == named
+    )
 
 
 def test_the_uncertainty_tables_count_the_dropped_draws_and_number_samples_by_draw(
@@ -328,13 +344,13 @@ def test_the_uncertainty_tables_count_the_dropped_draws_and_number_samples_by_dr
         ),
     )
     folder = write_impact(tmp_path, key(), result, AT)
-    summary = list(csv.DictReader((folder / "uncertainty.csv").open()))
+    summary = list(csv.DictReader((folder / "uncertainty.csv").open(encoding="utf-8")))
     assert summary[0]["n"] == "2" and summary[0]["dropped"] == "1"
     # below six samples the median has no interval and no relative error, and the cells are blank
     assert summary[0]["median_ci95_low"] == "" and summary[0]["median_ci95_high"] == ""
     assert summary[0]["rel_se"] == ""
-    samples = list(csv.DictReader((folder / "samples.csv").open()))
+    samples = list(csv.DictReader((folder / "samples.csv").open(encoding="utf-8")))
     assert [row["iteration"] for row in samples] == ["0", "2"]
-    schema = yaml.safe_load((folder / "schema.yaml").read_text())
+    schema = yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))
     assert schema["dropped_loops"] == [["widget"]]
     assert schema["dropped_background"] == ["pellet production [GLO]"]

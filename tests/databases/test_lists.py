@@ -73,7 +73,8 @@ def test_a_left_out_row_of_an_unknown_kind_is_invalid(tmp_path: Path) -> None:
     path = tmp_path / "left-out.csv"
     path.write_text(
         "process_id,process_name,exchange_id,flow_id,flow_name,what,reason\n"
-        "p1,Corn at field,4,f4,Natural gas,other,refused\n"
+        "p1,Corn at field,4,f4,Natural gas,other,refused\n",
+        encoding="utf-8",
     )
     with pytest.raises(Invalid) as refused:
         read_left_out(path)
@@ -89,9 +90,9 @@ def test_the_lists_carry_the_specification_s_columns(tmp_path: Path) -> None:
     left_out = tmp_path / "left-out.csv"
     write_unlinked(unlinked, UNLINKED)
     write_left_out(left_out, LEFT_OUT)
-    assert unlinked.read_text().splitlines()[0] == (
+    assert unlinked.read_text(encoding="utf-8").splitlines()[0] == (
         "process_id,process_name,flow_id,flow_name,flow_category,provider_id"
     )
-    assert left_out.read_text().splitlines()[0] == (
+    assert left_out.read_text(encoding="utf-8").splitlines()[0] == (
         "process_id,process_name,exchange_id,flow_id,flow_name,what,reason"
     )

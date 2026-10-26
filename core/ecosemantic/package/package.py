@@ -35,7 +35,7 @@ def _versions(root: Path) -> Path:
 def _snapshot(root: Path, product_system: ProductSystem) -> None:
     _versions(root).mkdir(parents=True, exist_ok=True)
     (_versions(root) / f"{product_system.hash}.json").write_text(
-        product_system.model_dump_json(), encoding="utf-8"
+        product_system.model_dump_json(), encoding="utf-8", newline="\n"
     )
 
 

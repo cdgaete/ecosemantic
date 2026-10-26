@@ -166,7 +166,7 @@ async def record_installs(context: ServerContext) -> None:
     context.client.update(CLIENT)
     licence = context.data_dir / "installs" / "bafu-terms.txt"
     licence.parent.mkdir(parents=True, exist_ok=True)
-    licence.write_text(BAFU_TERMS)
+    licence.write_text(BAFU_TERMS, encoding="utf-8")
     posted = await context.installs.post_install(
         InstallDraft(source="bafu", actor=PERSON, version="2026-v1")
     )
@@ -379,7 +379,9 @@ async def main() -> None:
         context.close()
     FIXTURES.mkdir(parents=True, exist_ok=True)
     for name, payload in recorded.items():
-        (FIXTURES / f"{name}.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        (FIXTURES / f"{name}.json").write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
     print(f"wrote {len(recorded)} fixtures to {FIXTURES}")
 
 

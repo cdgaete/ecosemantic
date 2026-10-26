@@ -148,8 +148,8 @@ def test_a_format_the_engine_does_not_read_is_invalid(
 ) -> None:
     background.save(tmp_path / "saved")
     manifest = tmp_path / "saved" / "background.json"
-    written = json.loads(manifest.read_text())
-    manifest.write_text(json.dumps(written | {"format": 99}))
+    written = json.loads(manifest.read_text(encoding="utf-8"))
+    manifest.write_text(json.dumps(written | {"format": 99}), encoding="utf-8")
     with pytest.raises(Invalid, match="format 99"):
         Background.load(tmp_path / "saved")
 
@@ -194,10 +194,10 @@ def test_a_background_s_fingerprint_reads_its_arrays_and_its_category_keys(
     background = small(["mill", "energy"], ["mill", "energy"], [1.0, 1.0], [False, False])
     background.save(tmp_path / "saved")
     manifest_path = tmp_path / "saved" / "background.json"
-    manifest = json.loads(manifest_path.read_text())
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["database"]["version"] = "2"
     manifest["methods"] = [{**method, "indicator": "other"} for method in manifest["methods"]]
-    manifest_path.write_text(json.dumps(manifest))
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     assert Background.load(tmp_path / "saved").fingerprint() == background.fingerprint()
     # one amount changed is another build
     other = small(["mill", "energy"], ["mill", "energy"], [1.0, 0.9], [False, False])

@@ -49,7 +49,7 @@ def test_the_model_file_holds_the_model_without_the_parameter_space(
 ) -> None:
     system = spaced(product_system)
     folder = write_folder(tmp_path, system)
-    raw = yaml.safe_load((folder / "model.yaml").read_text())
+    raw = yaml.safe_load((folder / "model.yaml").read_text(encoding="utf-8"))
     assert "parameters" not in raw and "cases" not in raw and "hash" not in raw
     assert raw["id"] == str(system.id)
     assert len(raw["processes"]) == len(system.processes)
@@ -61,7 +61,9 @@ def test_the_input_tables_split_literal_from_formula(
     tmp_path: Path, product_system: ProductSystem
 ) -> None:
     folder = write_folder(tmp_path, spaced(product_system))
-    literal = list(csv.DictReader((folder / "inputs" / "input_parameters.csv").open()))
+    literal = list(
+        csv.DictReader((folder / "inputs" / "input_parameters.csv").open(encoding="utf-8"))
+    )
     assert [row["name"] for row in literal] == [
         "fabric_mass",
         "waste_rate",
@@ -74,7 +76,9 @@ def test_the_input_tables_split_literal_from_formula(
         "unit": "kg",
         "description": "Fabric per shirt",
     }
-    formula = list(csv.DictReader((folder / "inputs" / "dependent_parameters.csv").open()))
+    formula = list(
+        csv.DictReader((folder / "inputs" / "dependent_parameters.csv").open(encoding="utf-8"))
+    )
     assert formula == [
         {
             "name": "fibre_mass",
@@ -89,7 +93,7 @@ def test_the_case_table_is_a_grid_with_a_blank_for_the_base_value(
     tmp_path: Path, product_system: ProductSystem
 ) -> None:
     folder = write_folder(tmp_path, spaced(product_system))
-    rows = list(csv.reader((folder / "inputs" / "cases.csv").open()))
+    rows = list(csv.reader((folder / "inputs" / "cases.csv").open(encoding="utf-8")))
     assert rows[0] == ["parameter", "small", "large"]
     assert rows[1] == ["fabric_mass", "0.15", "0.25"]
     # blank where the case leaves the base value
@@ -101,7 +105,7 @@ def test_the_schema_carries_the_hash_the_files_were_rendered_at(
 ) -> None:
     system = spaced(product_system)
     folder = write_folder(tmp_path, system)
-    schema = yaml.safe_load((folder / "inputs" / "schema.yaml").read_text())
+    schema = yaml.safe_load((folder / "inputs" / "schema.yaml").read_text(encoding="utf-8"))
     assert schema["format"] == 1
     assert schema["product_system"]["at_hash"] == content_hash(system)
     assert schema["product_system"]["id"] == str(system.id)

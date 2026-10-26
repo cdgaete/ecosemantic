@@ -100,7 +100,9 @@ def main(argv: list[str] | None = None) -> int:
     ]
     found = findings(arguments.tree, arguments.forbid, secrets)
     for finding in found:
-        print(f"{finding.path.relative_to(arguments.tree)}:{finding.line}: {finding.rule}")
+        print(
+            f"{finding.path.relative_to(arguments.tree).as_posix()}:{finding.line}: {finding.rule}"
+        )
     print(f"{len(found)} finding{'' if len(found) == 1 else 's'}")
     return 1 if found else 0
 

@@ -30,7 +30,7 @@ def _order(row: Difference) -> tuple[str, str]:
 def read_differences(path: Path) -> tuple[Difference, ...]:
     """The pairs a list holds, in process and column order; a pair the list holds twice is
     `Invalid`."""
-    with path.open(newline="") as read:
+    with path.open(newline="", encoding="utf-8") as read:
         rows = [
             Difference(process_id=record["process_id"], column=record["column"])
             for record in csv.DictReader(read)
@@ -45,7 +45,7 @@ def read_differences(path: Path) -> tuple[Difference, ...]:
 
 def write_differences(path: Path, rows: Iterable[Difference]) -> None:
     """Write the pairs as CSV, in process and column order."""
-    with path.open("w", newline="") as written:
+    with path.open("w", newline="", encoding="utf-8") as written:
         writer = csv.writer(written, lineterminator="\n")
         writer.writerow(COLUMNS)
         for row in sorted(rows, key=_order):

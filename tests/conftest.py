@@ -4,10 +4,12 @@ import math
 import sys
 import uuid
 from collections.abc import Iterator
+from importlib.metadata import requires
 from pathlib import Path
 
 import pytest
 from fastmcp import FastMCP
+from packaging.requirements import Requirement
 
 from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.local import build_context
@@ -41,6 +43,23 @@ from tests.fixture_data import FIXTURE_BIO, FIXTURE_DATABASE, FIXTURE_DB
 from tests.fixture_data import FLOW_IDS as FIXTURE_FLOWS
 
 NS = uuid.UUID("6f1b5a5e-0c3e-4b52-9a1e-2f0d6c1a7d10")
+
+
+def _pardiso_installs() -> bool:
+    """Whether the `mkl` extra's marker names pypardiso on this platform, as the package
+    declares."""
+    for declared in requires("ecosemantic-engine") or []:
+        requirement = Requirement(declared)
+        if requirement.name == "pypardiso":
+            return requirement.marker is None or requirement.marker.evaluate({"extra": "mkl"})
+    return False
+
+
+needs_pardiso = pytest.mark.skipif(
+    not _pardiso_installs(),
+    reason="pypardiso installs on Linux x86_64 and Windows AMD64 only",
+)
+
 EI = "ecoinvent-3.11-cutoff"
 BIO = "ecoinvent-3.11-biosphere"
 DATABASE = Database(
@@ -358,7 +377,7 @@ def command(tmp_path: Path) -> Path:
     folder = tmp_path / ("tools" if sys.platform == "win32" else "C:\\tools\\ecosemantic")
     folder.mkdir()
     made = folder / "ecosemantic.exe"
-    made.write_text("")
+    made.write_text("", encoding="utf-8")
     return made
 
 

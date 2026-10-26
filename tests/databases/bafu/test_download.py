@@ -101,7 +101,7 @@ class StubNexus:
         self.calls.append(("licence", pack.uuid))
         self._raised()
         path = self.root / f"{pack.uuid}-licence.txt"
-        path.write_text("the pack's terms")
+        path.write_text("the pack's terms", encoding="utf-8")
         return path
 
     def download(

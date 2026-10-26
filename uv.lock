@@ -29,6 +29,7 @@ dev = [
     { name = "ecosemantic", extras = ["mkl"], editable = "app" },
     { name = "ecosemantic-databases", extras = ["ecoinvent"], editable = "databases" },
     { name = "opentelemetry-sdk", specifier = ">=1.44,<2" },
+    { name = "packaging", specifier = ">=24" },
     { name = "pre-commit", specifier = ">=4.6" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-asyncio", specifier = ">=1.1" },
@@ -755,7 +756,7 @@ wheels = [
 
 [[package]]
 name = "ecosemantic"
-version = "0.1.6"
+version = "0.1.7"
 source = { editable = "app" }
 dependencies = [
     { name = "ecosemantic-core" },
@@ -799,7 +800,7 @@ provides-extras = ["mkl"]
 
 [[package]]
 name = "ecosemantic-core"
-version = "0.1.6"
+version = "0.1.7"
 source = { editable = "core" }
 dependencies = [
     { name = "asteval" },
@@ -823,14 +824,14 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.5" },
     { name = "olca-schema", specifier = "==2.4.0" },
     { name = "pydantic", specifier = ">=2.7,<3" },
-    { name = "pyyaml", specifier = ">=6,<7" },
+    { name = "pyyaml", specifier = ">=6.0.1,<7" },
     { name = "scipy", specifier = ">=1.16" },
     { name = "watchfiles", specifier = ">=1.0,<2" },
 ]
 
 [[package]]
 name = "ecosemantic-databases"
-version = "0.1.6"
+version = "0.1.7"
 source = { editable = "databases" }
 dependencies = [
     { name = "ecosemantic-core" },
@@ -859,14 +860,14 @@ requires-dist = [
     { name = "olca-schema", specifier = "==2.4.0" },
     { name = "pydantic", specifier = ">=2.7,<3" },
     { name = "python-calamine", marker = "extra == 'ecoinvent'", specifier = ">=0.3,<1" },
-    { name = "pyyaml", specifier = ">=6,<7" },
+    { name = "pyyaml", specifier = ">=6.0.1,<7" },
     { name = "scipy", specifier = ">=1.16" },
 ]
 provides-extras = ["ecoinvent"]
 
 [[package]]
 name = "ecosemantic-engine"
-version = "0.1.6"
+version = "0.1.7"
 source = { editable = "engine" }
 dependencies = [
     { name = "nimblend" },
@@ -892,7 +893,7 @@ provides-extras = ["mkl"]
 
 [[package]]
 name = "ecosemantic-mcp"
-version = "0.1.6"
+version = "0.1.7"
 source = { editable = "mcp" }
 dependencies = [
     { name = "ecosemantic-core" },
@@ -917,7 +918,7 @@ requires-dist = [
 
 [[package]]
 name = "ecosemantic-view"
-version = "0.1.6"
+version = "0.1.7"
 source = { editable = "view" }
 dependencies = [
     { name = "ecosemantic-core" },
