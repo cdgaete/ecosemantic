@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 import subprocess
 import sys
 import threading
 import time
 import uuid
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
@@ -21,7 +23,7 @@ from ecosemantic.package.package import unzip_package
 from ecosemantic.package.requests import REQUESTS_FILE
 from ecosemantic.package.sidecar import SIDECAR_DIR
 from ecosemantic.ports.storage import StoragePort
-from ecosemantic.ports.types import LogEntry, RequestDraft
+from ecosemantic.ports.types import LogEntry, RequestDraft, StoreChange
 from tests.conformance.storage import PackageConformance, StorageConformance
 from tests.conftest import label_system, tshirt_labelled
 from tests.dict_resolver import DictResolver
@@ -191,6 +193,42 @@ async def test_a_write_by_another_instance_over_one_directory_is_announced(
     change = await asyncio.wait_for(anext(changes), 5)
     assert change.product_system_id == product_system.id
     assert not change.gone
+
+
+async def _watch_batch(storage: FilesystemStorage, batch: set[Path]) -> list[StoreChange]:
+    queue: asyncio.Queue[StoreChange] = asyncio.Queue()
+
+    async def batches() -> AsyncIterator[set[Path]]:
+        yield batch
+
+    await storage._watch(batches(), queue)
+    changes = []
+    while not queue.empty():
+        changes.append(queue.get_nowait())
+    return changes
+
+
+async def test_a_directory_without_its_sidecar_announces_nothing(
+    tmp_path: Path, resolver: DictResolver
+) -> None:
+    storage = FilesystemStorage(tmp_path / "store", resolver)
+    system = uuid.uuid4()
+    directory = storage.root / str(system)
+    in_progress = directory / "processes"
+    in_progress.mkdir(parents=True)
+
+    assert await _watch_batch(storage, {in_progress}) == []
+
+    shutil.rmtree(directory)
+    (gone,) = await _watch_batch(storage, {directory})
+    assert gone.product_system_id == system
+    assert gone.gone
+
+    sidecar = directory / SIDECAR_DIR
+    sidecar.mkdir(parents=True)
+    (present,) = await _watch_batch(storage, {sidecar})
+    assert present.product_system_id == system
+    assert not present.gone
 
 
 class TestFilesystemPackages(PackageConformance):

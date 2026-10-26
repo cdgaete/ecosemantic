@@ -167,12 +167,10 @@ class FilesystemStorage:
         async for batch in batches:
             owners = {owner for path in batch if (owner := self._owner(path)) is not None}
             for owner in sorted(owners, key=str):
-                queue.put_nowait(
-                    StoreChange(
-                        product_system_id=owner,
-                        gone=not (self.root / str(owner) / SIDECAR_DIR).is_dir(),
-                    )
-                )
+                directory = self.root / str(owner)
+                if directory.is_dir() and not (directory / SIDECAR_DIR).is_dir():
+                    continue
+                queue.put_nowait(StoreChange(product_system_id=owner, gone=not directory.is_dir()))
 
     def changes(self) -> AsyncIterator[StoreChange]:
         """What any process wrote under the root, from the moment this is called: the watch is

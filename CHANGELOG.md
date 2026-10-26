@@ -2,6 +2,10 @@
 
 Each release names what it adds, changes and removes, newest first.
 
+## 0.1.8
+
+- A product system another server process is writing for the first time is announced to the page when its package is whole, never as deleted.
+
 ## 0.1.7
 
 - Windows and macOS are tested on every change, beside Linux, at Python 3.12 and 3.14.
