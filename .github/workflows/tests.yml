@@ -1,0 +1,100 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  sign-off:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - run: python3 scripts/signed_off.py ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}
+  page:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: page
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: 10
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm build
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: page-static
+          path: view/ecosemantic/view/static
+          if-no-files-found: error
+  check:
+    runs-on: ubuntu-latest
+    needs: page
+    strategy:
+      matrix:
+        include:
+          - resolution: locked
+            python: "3.13"
+          - resolution: lowest-direct
+            python: "3.12"
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: page-static
+          path: view/ecosemantic/view/static
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: ${{ matrix.python }}
+      - if: matrix.resolution == 'locked'
+        run: uv sync --frozen --all-packages --all-extras
+      - if: matrix.resolution == 'lowest-direct'
+        run: uv sync --all-packages --all-extras --resolution lowest-direct
+      - if: matrix.resolution == 'locked'
+        run: bash scripts/check.sh
+      - if: matrix.resolution == 'lowest-direct'
+        run: bash scripts/check.sh
+        env:
+          UV_RESOLUTION: lowest-direct
+      - if: matrix.resolution == 'locked'
+        run: uv build --all-packages
+      - if: matrix.resolution == 'locked'
+        run: uv run python scripts/release_contents.py dist
+  platforms:
+    runs-on: ${{ matrix.os }}
+    needs: page
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+        python: ["3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: page-static
+          path: view/ecosemantic/view/static
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --frozen --all-packages --all-extras
+      - run: uv run pytest
+      - run: uv run python scripts/end_to_end.py
+      - run: uv build --all-packages
+      - run: uv run python scripts/clean_install.py dist --python ${{ matrix.python }}
+      - run: uv run python scripts/cold_start.py dist --python ${{ matrix.python }} > cold_start.json
+        shell: bash
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: cold-start-${{ matrix.os }}-${{ matrix.python }}
+          path: cold_start.json
+          if-no-files-found: error

@@ -1,0 +1,48 @@
+{
+  "hint": null,
+  "value": {
+    "cases": [
+      {
+        "description": "a heavier frame",
+        "name": "heavy",
+        "values": {
+          "frame_mass": 0.5
+        }
+      }
+    ],
+    "matrix": {
+      "cases": [
+        "heavy"
+      ],
+      "rows": [
+        {
+          "parameter": "frame_mass",
+          "values": [
+            0.5
+          ]
+        }
+      ]
+    },
+    "parameters": [
+      {
+        "description": "",
+        "formula": "frame_mass * 2.4",
+        "name": "frame_steel",
+        "unit": "kilogram",
+        "value": null
+      },
+      {
+        "description": "frame per widget",
+        "formula": null,
+        "name": "frame_mass",
+        "unit": "kilogram",
+        "value": 0.25
+      }
+    ],
+    "values": {
+      "frame_mass": 0.25,
+      "frame_steel": 0.6
+    }
+  },
+  "view_url": null
+}

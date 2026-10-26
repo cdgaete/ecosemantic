@@ -1,0 +1,180 @@
+{
+  "hint": null,
+  "value": {
+    "by": "path",
+    "credit_loops": [],
+    "database": {
+      "elementary_flows": "fixture-biosphere",
+      "fingerprint": "ab4a4851ae4bc8a41d356d0da3b12a8727e59dcd7f46776f7016caa670b616d9",
+      "name": "fixture",
+      "scheme": "olca",
+      "system_model": "unit process",
+      "version": "1"
+    },
+    "flows": null,
+    "linked_credit_loops": [],
+    "processes": null,
+    "root": {
+      "children": [
+        {
+          "children": [
+            {
+              "children": [],
+              "fraction": 0.40115440115440115,
+              "kind": "process",
+              "level": 2,
+              "location": "GLO",
+              "name": "steel production",
+              "ref": {
+                "database": "fixture",
+                "id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c",
+                "kind": "background"
+              },
+              "score": 1.6680000000000001
+            }
+          ],
+          "fraction": 0.40115440115440115,
+          "kind": "process",
+          "level": 1,
+          "location": "GLO",
+          "name": "frame production",
+          "ref": {
+            "code": "frame",
+            "kind": "foreground"
+          },
+          "score": 1.6680000000000001
+        },
+        {
+          "children": [
+            {
+              "children": [],
+              "fraction": 0.2405002405002405,
+              "kind": "process",
+              "level": 2,
+              "location": "GLO",
+              "name": "electricity production",
+              "ref": {
+                "database": "fixture",
+                "id": "4a018168-2ca8-56de-a7f7-c7ce8f6a5040_81c36885-6d13-58e3-ba9a-869123a0f84c",
+                "kind": "background"
+              },
+              "score": 1.0
+            },
+            {
+              "children": [],
+              "fraction": 0.06012506012506012,
+              "kind": "elementary_flow",
+              "level": 2,
+              "location": "air",
+              "name": "Carbon dioxide, fossil",
+              "ref": {
+                "database": "fixture-biosphere",
+                "id": "7033761e-a295-5042-bedc-164a1623396b",
+                "kind": "elementary_flow"
+              },
+              "score": 0.25
+            },
+            {
+              "children": [],
+              "fraction": 0.03367003367003367,
+              "kind": "elementary_flow",
+              "level": 2,
+              "location": "air",
+              "name": "Methane, fossil",
+              "ref": {
+                "database": "fixture-biosphere",
+                "id": "0c722450-3926-581f-8be4-c0360f458cde",
+                "kind": "elementary_flow"
+              },
+              "score": 0.14
+            }
+          ],
+          "fraction": 0.3342953342953343,
+          "kind": "process",
+          "level": 1,
+          "location": "GLO",
+          "name": "steel production",
+          "ref": {
+            "database": "fixture",
+            "id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c",
+            "kind": "background"
+          },
+          "score": 1.3900000000000001
+        },
+        {
+          "children": [
+            {
+              "children": [],
+              "fraction": 0.2405002405002405,
+              "kind": "elementary_flow",
+              "level": 2,
+              "location": "air",
+              "name": "Carbon dioxide, fossil",
+              "ref": {
+                "database": "fixture-biosphere",
+                "id": "7033761e-a295-5042-bedc-164a1623396b",
+                "kind": "elementary_flow"
+              },
+              "score": 1.0
+            }
+          ],
+          "fraction": 0.2405002405002405,
+          "kind": "process",
+          "level": 1,
+          "location": "GLO",
+          "name": "electricity production",
+          "ref": {
+            "database": "fixture",
+            "id": "4a018168-2ca8-56de-a7f7-c7ce8f6a5040_81c36885-6d13-58e3-ba9a-869123a0f84c",
+            "kind": "background"
+          },
+          "score": 1.0
+        },
+        {
+          "children": [],
+          "fraction": 0.02405002405002405,
+          "kind": "elementary_flow",
+          "level": 1,
+          "location": "air",
+          "name": "Carbon dioxide, fossil",
+          "ref": {
+            "database": "fixture-biosphere",
+            "id": "7033761e-a295-5042-bedc-164a1623396b",
+            "kind": "elementary_flow"
+          },
+          "score": 0.1
+        }
+      ],
+      "fraction": 1.0,
+      "kind": "process",
+      "level": 0,
+      "location": "GLO",
+      "name": "widget assembly",
+      "ref": {
+        "code": "widget",
+        "kind": "foreground"
+      },
+      "score": 4.158
+    },
+    "total": {
+      "method": {
+        "id": "m_bff077f3bd",
+        "impact_category": "climate change",
+        "impact_method": "gwp",
+        "indicator": "GWP100",
+        "spec": "fixture > gwp > climate change > GWP100",
+        "tuple": [
+          "fixture",
+          "gwp",
+          "climate change > GWP100"
+        ],
+        "unit": "kg CO2-Eq"
+      },
+      "unit": "kg CO2-Eq",
+      "value": 4.158
+    },
+    "treatments_run_backwards": [],
+    "truncated": true
+  },
+  "view_url": null
+}

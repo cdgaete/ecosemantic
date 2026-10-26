@@ -1,0 +1,45 @@
+[project]
+name = "ecosemantic-engine"
+version = "0.1.6"
+description = "The EcoSemantic product-system vocabulary, its typed errors, and the exact LCA computation."
+requires-python = ">=3.12"
+license = "PolyForm-Noncommercial-1.0.0"
+license-files = ["LICENSE", "NOTICE"]
+readme = "README.md"
+authors = [{ name = "Carlos Gaete-Morales", email = "cdgaete@gmail.com" }]
+keywords = ["life cycle assessment", "LCA", "environmental impact", "Monte Carlo", "sparse linear algebra"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pydantic>=2.7,<3",
+    "numpy>=2.5",
+    "scipy>=1.16",
+    "nimblend>=0.20261012.0",
+]
+
+[project.optional-dependencies]
+mkl = [
+    "pypardiso>=0.4.6; (sys_platform == 'linux' and platform_machine == 'x86_64') or (sys_platform == 'win32' and platform_machine == 'AMD64')",
+]
+
+[project.urls]
+Homepage = "https://github.com/cdgaete/ecosemantic"
+Repository = "https://github.com/cdgaete/ecosemantic"
+Issues = "https://github.com/cdgaete/ecosemantic/issues"
+Changelog = "https://github.com/cdgaete/ecosemantic/blob/main/CHANGELOG.md"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ecosemantic"]

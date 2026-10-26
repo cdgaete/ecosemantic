@@ -1,0 +1,20 @@
+{
+  "has_more": false,
+  "hint": null,
+  "items": [
+    {
+      "location": "GLO",
+      "name": "steel production",
+      "ref": {
+        "database": "fixture",
+        "id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c",
+        "kind": "background"
+      },
+      "reference_product": "steel",
+      "relevance": 3.9351396179796168,
+      "unit": "kilogram"
+    }
+  ],
+  "next_cursor": null,
+  "view_url": null
+}

@@ -1,0 +1,78 @@
+{
+  "hint": null,
+  "value": {
+    "by": "process",
+    "credit_loops": [],
+    "database": {
+      "elementary_flows": "fixture-biosphere",
+      "fingerprint": "ab4a4851ae4bc8a41d356d0da3b12a8727e59dcd7f46776f7016caa670b616d9",
+      "name": "fixture",
+      "scheme": "olca",
+      "system_model": "unit process",
+      "version": "1"
+    },
+    "flows": null,
+    "linked_credit_loops": [],
+    "processes": [
+      {
+        "fraction": 0.7696007696007696,
+        "location": "GLO",
+        "name": "electricity production",
+        "rank": 1,
+        "ref": {
+          "database": "fixture",
+          "id": "4a018168-2ca8-56de-a7f7-c7ce8f6a5040_81c36885-6d13-58e3-ba9a-869123a0f84c",
+          "kind": "background"
+        },
+        "reference_product": "electricity",
+        "score": 3.2
+      },
+      {
+        "fraction": 0.20634920634920637,
+        "location": "GLO",
+        "name": "steel production",
+        "rank": 2,
+        "ref": {
+          "database": "fixture",
+          "id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c",
+          "kind": "background"
+        },
+        "reference_product": "steel",
+        "score": 0.8580000000000001
+      },
+      {
+        "fraction": 0.02405002405002405,
+        "location": "GLO",
+        "name": "widget assembly",
+        "rank": 3,
+        "ref": {
+          "code": "widget",
+          "kind": "foreground"
+        },
+        "reference_product": "widget",
+        "score": 0.1
+      }
+    ],
+    "root": null,
+    "total": {
+      "method": {
+        "id": "m_bff077f3bd",
+        "impact_category": "climate change",
+        "impact_method": "gwp",
+        "indicator": "GWP100",
+        "spec": "fixture > gwp > climate change > GWP100",
+        "tuple": [
+          "fixture",
+          "gwp",
+          "climate change > GWP100"
+        ],
+        "unit": "kg CO2-Eq"
+      },
+      "unit": "kg CO2-Eq",
+      "value": 4.158
+    },
+    "treatments_run_backwards": [],
+    "truncated": null
+  },
+  "view_url": null
+}

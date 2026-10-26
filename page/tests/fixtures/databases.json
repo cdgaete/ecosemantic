@@ -1,0 +1,22 @@
+{
+  "hint": null,
+  "value": [
+    {
+      "elementary_flows": "fixture-biosphere",
+      "fingerprint": "ab4a4851ae4bc8a41d356d0da3b12a8727e59dcd7f46776f7016caa670b616d9",
+      "name": "fixture",
+      "scheme": "olca",
+      "system_model": "unit process",
+      "version": "1"
+    },
+    {
+      "elementary_flows": "looped-biosphere",
+      "fingerprint": "b644289d954787666e1dce05f1b2c5a09e66265a1c8d541d7804261aa05ac104",
+      "name": "looped",
+      "scheme": "olca",
+      "system_model": "unit process",
+      "version": "1"
+    }
+  ],
+  "view_url": null
+}

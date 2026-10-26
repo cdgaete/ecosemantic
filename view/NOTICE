@@ -1,0 +1,13 @@
+EcoSemantic
+Required Notice: Copyright 2026 Carlos Gaete-Morales (https://github.com/cdgaete/ecosemantic)
+
+EcoSemantic is licensed under the PolyForm Noncommercial License 1.0.0, in LICENSE
+and at https://polyformproject.org/licenses/noncommercial/1.0.0. Any noncommercial
+purpose is permitted. Commercial use needs a separate licence from Carlos
+Gaete-Morales: cdgaete@gmail.com.
+
+The page that ecosemantic-view carries bundles third-party software under its
+own licences; their notices are in ecosemantic/view/static/THIRD_PARTY_NOTICES.txt
+inside that distribution. Components of the page adapt shadcn/ui, Copyright (c)
+2023 shadcn, under the MIT licence, as page/PROVENANCE.md in the source
+repository records.

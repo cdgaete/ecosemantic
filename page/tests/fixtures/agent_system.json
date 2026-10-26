@@ -1,0 +1,68 @@
+{
+  "hint": null,
+  "open_requests": 0,
+  "value": {
+    "cases": [],
+    "database": {
+      "elementary_flows": "fixture-biosphere",
+      "fingerprint": "ab4a4851ae4bc8a41d356d0da3b12a8727e59dcd7f46776f7016caa670b616d9",
+      "name": "fixture",
+      "scheme": "olca",
+      "system_model": "unit process",
+      "version": "1"
+    },
+    "description": "",
+    "hash": "f91e47f3ae08c28e8c522a058e430636b15174362a6981b055c38026a107c05d",
+    "id": "1e5c1bfa-dfa9-4879-b217-0cafec4d1811",
+    "name": "bottle",
+    "notes": "",
+    "parameters": [],
+    "processes": [
+      {
+        "code": "bottle",
+        "comment": null,
+        "exchanges": [
+          {
+            "amount": 1.0,
+            "comment": null,
+            "formula": null,
+            "id": "ea4cdf80-041f-4f98-8a18-62c26ace2fcb",
+            "input": null,
+            "name": "bottle",
+            "type": "production",
+            "uncertainty": null,
+            "unit": "kilogram"
+          },
+          {
+            "amount": 0.6,
+            "comment": null,
+            "formula": null,
+            "id": "26e7ffd8-30b5-4403-bfdb-52e6b4e67f48",
+            "input": {
+              "database": "fixture",
+              "id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c",
+              "kind": "background"
+            },
+            "name": "steel",
+            "type": "product",
+            "uncertainty": null,
+            "unit": "kilogram"
+          }
+        ],
+        "id": "0feed099-fff4-4e7d-a79b-406e66ddf27d",
+        "location": "GLO",
+        "metadata": {
+          "hierarchy_level": null,
+          "life_cycle_stage": null,
+          "supply_chain_tier": null
+        },
+        "name": "bottle",
+        "reference_product": "bottle",
+        "unit": "kilogram"
+      }
+    ],
+    "reference_process": "bottle",
+    "scenarios": []
+  },
+  "view_url": null
+}

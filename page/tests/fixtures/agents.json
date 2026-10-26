@@ -1,0 +1,13 @@
+{
+  "value": [
+    {
+      "agent": "fixture-agent",
+      "calls": 11,
+      "client": "fixture-agent",
+      "first_call_at": "2026-10-20T06:59:18.027535Z",
+      "last_call_at": "2026-10-20T06:59:18.368717Z",
+      "origin": "agent",
+      "product_system_id": "1e5c1bfa-dfa9-4879-b217-0cafec4d1811"
+    }
+  ]
+}

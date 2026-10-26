@@ -1,0 +1,122 @@
+[tool.uv.workspace]
+members = ["engine", "core", "mcp", "view", "app", "databases"]
+
+[tool.uv.sources]
+ecosemantic = { workspace = true }
+ecosemantic-engine = { workspace = true }
+ecosemantic-core = { workspace = true }
+ecosemantic-mcp = { workspace = true }
+ecosemantic-view = { workspace = true }
+ecosemantic-databases = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "ecosemantic[mkl]",
+    "ecosemantic-databases[ecoinvent]",
+    "pytest>=8",
+    "pytest-asyncio>=1.1",
+    "ruff>=0.16",
+    "ty>=0.0.78",
+    "vulture>=2.14",
+    "coverage>=7.16",
+    "pre-commit>=4.6",
+    "xlsxwriter>=3.2,<4",
+    "opentelemetry-sdk>=1.44,<2",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["page"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "W", "S", "B", "SIM114", "C416", "PIE790", "ANN"]
+ignore = ["ANN401", "UP046", "UP047"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ecosemantic"]
+known-third-party = ["mcp"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S104", "S106", "S310", "S314", "S603", "ANN"]
+"scripts/**" = ["S101", "S603"]
+"core/ecosemantic/backends/native/search.py" = ["S608"]
+"tests/backends/native/test_search_ranking.py" = ["S608"]
+"app/ecosemantic/serve/__init__.py" = ["S104", "S310", "S603", "S606"]
+"app/ecosemantic/telemetry/__init__.py" = ["S310"]
+"app/ecosemantic/runs/supervisor.py" = ["S603"]
+"databases/ecosemantic/databases/bafu/workbook.py" = ["S314"]
+"databases/ecosemantic/databases/ecoinvent/masterdata.py" = ["S314"]
+"databases/ecosemantic/databases/ecoinvent/datasets.py" = ["S314"]
+
+[tool.ty.environment]
+root = ["engine", "core", "mcp", "view", "app", "databases"]
+
+[tool.ty.src]
+include = [
+    "engine/ecosemantic",
+    "core/ecosemantic",
+    "mcp/ecosemantic",
+    "view/ecosemantic",
+    "app/ecosemantic",
+    "databases/ecosemantic",
+]
+
+[[tool.ty.overrides]]
+include = [
+    "core/ecosemantic/package/olca.py",
+    "core/ecosemantic/package/jsonld.py",
+    "core/ecosemantic/package/base_writer.py",
+    "core/ecosemantic/package/wholeness.py",
+    "core/ecosemantic/package/base.py",
+    "core/ecosemantic/package/release.py",
+    "core/ecosemantic/package/background.py",
+]
+
+[tool.ty.overrides.rules]
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+invalid-return-type = "ignore"
+no-matching-overload = "ignore"
+unresolved-attribute = "ignore"
+
+[[tool.ty.overrides]]
+include = ["databases/ecosemantic/databases/ecoinvent/validate.py"]
+
+[tool.ty.overrides.rules]
+call-non-callable = "ignore"
+invalid-argument-type = "ignore"
+no-matching-overload = "ignore"
+not-iterable = "ignore"
+
+[tool.coverage.run]
+branch = true
+source_pkgs = ["ecosemantic"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 95
+exclude_also = ["if TYPE_CHECKING:"]
+
+[tool.vulture]
+min_confidence = 80
+paths = [
+    "engine/ecosemantic",
+    "core/ecosemantic",
+    "mcp/ecosemantic",
+    "view/ecosemantic",
+    "app/ecosemantic",
+    "databases/ecosemantic",
+    "tests",
+    "scripts",
+]
+sort_by_size = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "zolca_live: exports BAFU:2026 and imports it; set ECOSEMANTIC_BAFU_ZOLCA and run with -m zolca_live",
+]
+addopts = "-m 'not zolca_live'"

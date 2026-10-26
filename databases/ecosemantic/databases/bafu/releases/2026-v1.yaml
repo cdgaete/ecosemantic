@@ -1,0 +1,163 @@
+version: 2026-v1
+server: https://nexus.openlca.org
+citation: Life Cycle Inventory database of the Swiss Federal Administration, BAFU:2026
+inventory:
+  pack: c31fbb3c-ff98-4f50-8ceb-737ef690ce90
+  version: 2
+  format: openLCA zolca
+  sha256: e63b7e7ef5cde04bfe1176a783a55b5f72e2b73f42c36632b6150af39d348c4c
+results:
+  pack: 86aa5c2b-3334-4cc2-96f7-aaa6fd2494cb
+  version: 2
+  format: excel
+  sha256: a692f72705baac82fc59e85e00389302446ac2d5e921ab9df86fce7441a49e01
+columns:
+- header: GWP 100 [kg CO2-eq]
+  method: IPCC 2021
+  category: IPCC 2021 GWP 100
+- header: Biotic Resources [UBP]
+  method: Ecological Scarcity 2021
+  category: Biotic Resources
+- header: Carcinogenic substances into air [UBP]
+  method: Ecological Scarcity 2021
+  category: Carcinogenic substances into air
+- header: Energy resources [UBP]
+  method: Ecological Scarcity 2021
+  category: Energy resources
+- header: Global warming [UBP]
+  method: Ecological Scarcity 2021
+  category: Global warming
+- header: Heavy metals into air [UBP]
+  method: Ecological Scarcity 2021
+  category: Heavy metals into air
+- header: Heavy metals into soil [UBP]
+  method: Ecological Scarcity 2021
+  category: Heavy metals into soil
+- header: Heavy metals into water [UBP]
+  method: Ecological Scarcity 2021
+  category: Heavy metals into water
+- header: Land use [UBP]
+  method: Ecological Scarcity 2021
+  category: Land use
+- header: Main air pollutants and PM [UBP]
+  method: Ecological Scarcity 2021
+  category: Main air pollutants and PM
+- header: Mineral resources [UBP]
+  method: Ecological Scarcity 2021
+  category: Mineral resources
+- header: Noise [UBP]
+  method: Ecological Scarcity 2021
+  category: Noise
+- header: Ozone layer depletion [UBP]
+  method: Ecological Scarcity 2021
+  category: Ozone layer depletion
+- header: Pesticides into soil [UBP]
+  method: Ecological Scarcity 2021
+  category: Pesticides into soil
+- header: POP into water [UBP]
+  method: Ecological Scarcity 2021
+  category: POP into water
+- header: Radioactive substances into air [UBP]
+  method: Ecological Scarcity 2021
+  category: Radioactive substances into air
+- header: Radioactive substances into water [UBP]
+  method: Ecological Scarcity 2021
+  category: Radioactive substances into water
+- header: Radioactive waste to deposit [UBP]
+  method: Ecological Scarcity 2021
+  category: Radioactive waste to deposit
+- header: Waste, non radioactive [UBP]
+  method: Ecological Scarcity 2021
+  category: Waste, non radioactive
+- header: Water pollutants [UBP]
+  method: Ecological Scarcity 2021
+  category: Water pollutants
+- header: Water resources, evaporated [UBP]
+  method: Ecological Scarcity 2021
+  category: Water resources, evaporated
+- header: Acidification [mol H+ eq]
+  method: EF 3.1 Method (adapted)
+  category: Acidification
+- header: Climate change [kg CO2 eq]
+  method: EF 3.1 Method (adapted)
+  category: Climate change
+- header: Climate change (biogenic) [kg CO2 eq]
+  method: EF 3.1 Method (adapted)
+  category: Climate change (biogenic)
+- header: Climate change (fossil) [kg CO2 eq]
+  method: EF 3.1 Method (adapted)
+  category: Climate change (fossil)
+- header: Climate change (land use) [kg CO2 eq]
+  method: EF 3.1 Method (adapted)
+  category: Climate change (land use)
+- header: Ecotoxicity freshwater [CTUe]
+  method: EF 3.1 Method (adapted)
+  category: Ecotoxicity freshwater
+- header: Ecotoxicity freshwater (organics) [CTUe]
+  method: EF 3.1 Method (adapted)
+  category: Ecotoxicity freshwater (organics)
+- header: Ecotoxicity freshwater (inorganics) [CTUe]
+  method: EF 3.1 Method (adapted)
+  category: Ecotoxicity freshwater (inorganics)
+- header: Eutrophication freshwater [kg P eq]
+  method: EF 3.1 Method (adapted)
+  category: Eutrophication freshwater
+- header: Eutrophication marine [kg N eq]
+  method: EF 3.1 Method (adapted)
+  category: Eutrophication marine
+- header: Eutrophication terrestrial [mol N eq]
+  method: EF 3.1 Method (adapted)
+  category: Eutrophication terrestrial
+- header: Human toxicity cancer [CTUh]
+  method: EF 3.1 Method (adapted)
+  category: Human toxicity cancer
+- header: Human toxicity cancer (inorganics) [ CTUh ]
+  method: EF 3.1 Method (adapted)
+  category: Human toxicity cancer (inorganics)
+- header: Human toxicity cancer (organics) [CTUh]
+  method: EF 3.1 Method (adapted)
+  category: Human toxicity cancer (organics)
+- header: Human toxicity non-cancer [CTUh]
+  method: EF 3.1 Method (adapted)
+  category: Human toxicity non-cancer
+- header: Human toxicity non-cancer (inorganics) - [CTUh]
+  method: EF 3.1 Method (adapted)
+  category: Human toxicity non-cancer (inorganics)
+- header: Human toxicity non-cancer (organics) [CTUh]
+  method: EF 3.1 Method (adapted)
+  category: Human toxicity non-cancer (organics)
+- header: Ionising radiation (human health) [kBq U235 eq]
+  method: EF 3.1 Method (adapted)
+  category: Ionising radiation (human health)
+- header: Land use [dimensionless (pt)]
+  method: EF 3.1 Method (adapted)
+  category: Land use
+- header: Ozone depletion [kg CFC11 eq]
+  method: EF 3.1 Method (adapted)
+  category: Ozone depletion
+- header: Particulate matter [disease incidence]
+  method: EF 3.1 Method (adapted)
+  category: Particulate matter
+- header: Photochemical ozone formation (human health) [kg NMVOC eq]
+  method: EF 3.1 Method (adapted)
+  category: Photochemical ozone formation (human health)
+- header: Resource use fossils [MJ (net calorific)]
+  method: EF 3.1 Method (adapted)
+  category: Resource use fossils
+- header: Resource use minerals and metals [kg Sb eq]
+  method: EF 3.1 Method (adapted)
+  category: Resource use minerals and metals
+- header: Water use [m3 world eq]
+  method: EF 3.1 Method (adapted)
+  category: Water use
+total:
+  header: Total [UBP]
+  method: Ecological Scarcity 2021
+unlinked: unlinked-2026-v1.csv
+differences: differences-2026-v1.csv
+tolerance: 0.0001
+validated:
+  processes: 11947
+  columns: 46
+  differences: 12402
+  largest_rel_diff_within_tolerance: 8.327755357860483e-05

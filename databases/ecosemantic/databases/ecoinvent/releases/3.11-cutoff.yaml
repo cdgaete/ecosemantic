@@ -1,0 +1,67 @@
+version: '3.11'
+system_model: cutoff
+files:
+  ecospold:
+    path: ecoinvent 3.11_cutoff_ecoSpold02
+    sha256: 9dfaf6c4edd25e38b5eb2600218dbadfa9561adb6e143fe0f2048bbd1af112cf
+  lcia:
+    path: ecoinvent 3.11_LCIA_implementation/LCIA Implementation 3.11.xlsx
+    sha256: 30e256bb6afab42fbd63055ff7acd6be7de6850ec0dee4f62fa8cf60f31125fd
+  matrix:
+    path: universal_matrix_export_3.11_cut-off
+    sha256: f80bd5fce1e7d101e492b6ea9c98eef30791bc793637c62724918c2486d6a177
+  cumulative_lcia:
+    path: ecoinvent 3.11_cutoff_cumulative_lcia_xlsx/Cut-off Cumulative LCIA v3.11.xlsx
+    sha256: 09f8a57b7846022629dbefba4f6585346d767a31ebd72241a5db4e77be4d2132
+  overview:
+    path: Database-Overview-for-ecoinvent-v3.11.xlsx
+    sha256: 34f1176700af78b746ba1f8d44b4b697b4a59f3d7ca3470441e9c8d6e88bdae4
+lcia:
+  factors:
+    sheet: CFs
+    columns:
+    - Method
+    - Category
+    - Indicator
+    - Name
+    - Compartment
+    - Subcompartment
+    - CF
+  units:
+    sheet: Indicators
+    columns:
+    - Method
+    - Category
+    - Indicator
+    - Indicator Unit
+overview:
+  sheet: Cut-Off AO
+  columns:
+  - Activity UUID & Product UUID
+  - ecoQuery URL
+zero_spread: none
+expected_unmatched_factors: 0
+expected_zero_spread: 10
+expected_without_url: 0
+read_as_documentation:
+- isCalculatedAmount
+- mathematicalRelation
+- parameter
+- productionVolumeAmount
+- property
+- specialActivityType 0
+- specialActivityType 1
+- specialActivityType 10
+- specialActivityType 4
+- variableName
+validated:
+  datasets: 25412
+  categories: 592
+  largest_rel_diff:
+    A: 2.2191290934346653e-16
+    B: 2.217954115049848e-16
+    C: 1.725118018847862e-16
+    units: 0.0
+    scores: 3.2173011494787476e-09
+    scores_against_matrix_export: 0.0
+    workbook_disagrees: 0.0

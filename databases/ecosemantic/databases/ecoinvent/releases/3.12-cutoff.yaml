@@ -1,0 +1,71 @@
+version: '3.12'
+system_model: cutoff
+files:
+  ecospold:
+    path: ecoinvent 3.12_cutoff_ecoSpold02
+    sha256: e54be68248fec41c94e278214b32e71f0ad2c8ef85508abea8db014091bc9080
+  lcia:
+    path: ecoinvent 3.12_LCIA_implementation/LCIA Implementation 3.12.xlsx
+    sha256: 6bc4e6475877e8e90d8a6184b681366154cc5f6ec42c7cec54eb871224b33e02
+  matrix:
+    path: universal_matrix_export_3.12_cut-off
+    sha256: 014869086266a99d0236231a272c566de066a1f737c08c8b68154dd70a496a76
+  cumulative_lcia:
+    path: ecoinvent 3.12_cut-off_cumulative_lcia_xlsx/Cut-off Cumulative LCIA v3.12.xlsx
+    sha256: dbb6694f2aafed067bbb70c4f714bd0428f91093fc25525abc161918fa94a8b4
+  overview:
+    path: Database-Overview-for-ecoinvent-v3.12.xlsx
+    sha256: 345fd5f3edc7ddcc5cb0c542cbf722fb1b64fa3901eb231572d40eb546654f91
+lcia:
+  factors:
+    sheet: CFs
+    columns:
+    - Method
+    - Category
+    - Indicator
+    - Name
+    - Compartment
+    - Subcompartment
+    - CF
+  units:
+    sheet: Indicators
+    columns:
+    - Method
+    - Category
+    - Indicator
+    - Indicator Unit
+overview:
+  sheet: Cut-Off AO
+  columns:
+  - Activity UUID & Product UUID
+  - ecoQuery URL
+zero_spread: none
+expected_unmatched_factors: 0
+expected_zero_spread: 14
+expected_without_url: 0
+read_as_documentation:
+- isCalculatedAmount
+- mathematicalRelation
+- parameter
+- productionVolumeAmount
+- property
+- specialActivityType 0
+- specialActivityType 1
+- specialActivityType 10
+- specialActivityType 4
+- variableName
+workbook_disagrees:
+- Ecological Scarcity 2021 no LT > natural resources no LT > biotic resources no LT
+- Ecological Scarcity 2021 > natural resources > biotic resources
+matrix_reference_tolerance: 1.0e-5
+validated:
+  datasets: 26533
+  categories: 592
+  largest_rel_diff:
+    A: 2.2182050665339766e-16
+    B: 2.217954115049848e-16
+    C: 1.725118018847862e-16
+    units: 0.0
+    scores: 1.3519451164970769e-08
+    scores_against_matrix_export: 2.643968974514585e-13
+    workbook_disagrees: 1.9275894171684727

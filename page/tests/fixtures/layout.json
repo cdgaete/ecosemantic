@@ -1,0 +1,115 @@
+{
+  "hint": null,
+  "value": {
+    "bounds": {
+      "height": 210.0,
+      "wasted": 0.0,
+      "width": 800.0
+    },
+    "cards": [
+      {
+        "activity": 0.25,
+        "code": "frame",
+        "depth": 1,
+        "height": 144.0,
+        "held": false,
+        "inputs": [
+          {
+            "exchange_id": "74c2d4b2-2e8b-5b24-addf-4b6c49069c02",
+            "y": 75.0
+          }
+        ],
+        "output": 127.0,
+        "outputs": [
+          "f40b4e96-c10a-563e-a98f-6293424b8c1f"
+        ],
+        "row_height": 22.0,
+        "scaled": {
+          "74c2d4b2-2e8b-5b24-addf-4b6c49069c02": 0.6,
+          "f40b4e96-c10a-563e-a98f-6293424b8c1f": 0.25
+        },
+        "shown_inputs": 1,
+        "width": 300.0,
+        "x": 0.0,
+        "y": 40.0
+      },
+      {
+        "activity": 1.0,
+        "code": "widget",
+        "depth": 0,
+        "height": 210.0,
+        "held": false,
+        "inputs": [
+          {
+            "exchange_id": "25a8146b-9de6-53b4-801a-9f63ca97e151",
+            "y": 75.0
+          },
+          {
+            "exchange_id": "2fddb273-5d7d-5b0a-8669-e2f01d474979",
+            "y": 97.0
+          },
+          {
+            "exchange_id": "73b7d6fd-7d08-53d6-bd18-093e6cd44574",
+            "y": 119.0
+          }
+        ],
+        "output": 171.0,
+        "outputs": [
+          "7d4b50c8-08f6-59d1-a7dc-08f2fa6b4542",
+          "2da1fa1f-fede-561a-84a3-9c57c8aaf9b1"
+        ],
+        "row_height": 22.0,
+        "scaled": {
+          "25a8146b-9de6-53b4-801a-9f63ca97e151": 0.5,
+          "2da1fa1f-fede-561a-84a3-9c57c8aaf9b1": 0.1,
+          "2fddb273-5d7d-5b0a-8669-e2f01d474979": 1.0,
+          "73b7d6fd-7d08-53d6-bd18-093e6cd44574": 0.25,
+          "7d4b50c8-08f6-59d1-a7dc-08f2fa6b4542": 1.0
+        },
+        "shown_inputs": 3,
+        "width": 300.0,
+        "x": 500.0,
+        "y": 7.0
+      }
+    ],
+    "edges": [
+      {
+        "consumer": "widget",
+        "exchange_id": "73b7d6fd-7d08-53d6-bd18-093e6cd44574",
+        "label": {
+          "formula": "\u0192 kg",
+          "height": 16.0,
+          "per_unit": "0.25 kg",
+          "scaled": "0.25 kg",
+          "width": 57.0,
+          "x": 437.0,
+          "y": 108.0
+        },
+        "points": [
+          [
+            300.0,
+            167.0
+          ],
+          [
+            324.0,
+            167.0
+          ],
+          [
+            324.0,
+            126.0
+          ],
+          [
+            500.0,
+            126.0
+          ]
+        ],
+        "provider": "frame"
+      }
+    ],
+    "map": "1 char = 10 px across, 1 line = 11 px down; \u25cf a card's output, \u25b6 an arrow entering an input row, \u253c two arrows crossing, # an arrow over a card\n                                                  \u250c widget \u00b7 1 unit \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n                                                  \u2502                            \u2502\n                                                  \u2502                            \u2502\n\u250c frame \u00b7 0.25 kg \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                    \u2502                            \u2502\n\u2502                            \u2502                    \u2502                            \u2502\n\u2502                            \u2502                    \u2502                            \u2502\n\u2502                            \u2502                    \u2502 steel 0.5 kg               \u2502\n\u2502                            \u2502                    \u2502                            \u2502\n\u2502                            \u2502                    \u2502 electricity 1 kWh          \u2502\n\u2502 steel 0.6 kg               \u2502                    \u2502                            \u2502\n\u2502                            \u2502  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25b6 frame 0.25 kg              \u2502\n\u2502                            \u2502  \u2502                 \u2502                            \u2502\n\u2502                            \u2502  \u2502                 \u2502                            \u2502\n\u2502                            \u2502  \u2502                 \u2502                            \u2502\n\u2502              frame 0.25 kg \u25cf\u2500\u2500\u2518                 \u2502                            \u2502\n\u2502                            \u2502                    \u2502              widget 1 unit \u25cf\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518                    \u2502                            \u2502\n                                                  \u2502Carbon dioxide, fos\u2026 0.1 kg \u2502\n                                                  \u2502                            \u2502\n                                                  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518",
+    "scaling": null,
+    "score": 0,
+    "troubles": []
+  },
+  "view_url": null
+}

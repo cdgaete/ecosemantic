@@ -1,0 +1,21 @@
+{
+  "has_more": false,
+  "hint": null,
+  "items": [
+    {
+      "cas_number": null,
+      "compartment": "air",
+      "flow_type": "emission",
+      "name": "Carbon dioxide, fossil",
+      "ref": {
+        "database": "fixture-biosphere",
+        "id": "7033761e-a295-5042-bedc-164a1623396b",
+        "kind": "elementary_flow"
+      },
+      "sub_compartment": null,
+      "unit": "kilogram"
+    }
+  ],
+  "next_cursor": null,
+  "view_url": null
+}

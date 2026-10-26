@@ -1,0 +1,51 @@
+{
+  "hint": null,
+  "value": [
+    {
+      "credential": null,
+      "held": true,
+      "name": "openlca",
+      "system_models": [
+        "unit process"
+      ],
+      "terms": false,
+      "versions": []
+    },
+    {
+      "credential": null,
+      "held": true,
+      "name": "uslci",
+      "system_models": [],
+      "terms": false,
+      "versions": [
+        "1.2026-09.0"
+      ]
+    },
+    {
+      "credential": "nexus",
+      "held": true,
+      "name": "bafu",
+      "system_models": [],
+      "terms": true,
+      "versions": [
+        "2026-v1"
+      ]
+    },
+    {
+      "credential": "ecoinvent",
+      "held": true,
+      "name": "ecoinvent",
+      "system_models": [
+        "cutoff"
+      ],
+      "terms": false,
+      "versions": [
+        "3.10",
+        "3.10.1",
+        "3.11",
+        "3.12"
+      ]
+    }
+  ],
+  "view_url": null
+}

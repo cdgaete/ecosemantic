@@ -1,0 +1,49 @@
+{
+  "hint": null,
+  "value": [
+    {
+      "actor": {
+        "id": null,
+        "kind": "person",
+        "name": "Carlos"
+      },
+      "at_hash": "5e7cbc6616a342f77bae99b02dae520bc6d6861274530f8845675868ac9e7630",
+      "entity": null,
+      "entity_id": null,
+      "id": "fae7e177-7557-43f8-9f16-0d68e0c2cb89",
+      "kind": "return",
+      "message": "recheck the lorry distance",
+      "open": true,
+      "outcome": null,
+      "seq": 1,
+      "timestamp": "2026-10-20T06:59:17.864613Z"
+    },
+    {
+      "actor": {
+        "id": null,
+        "kind": "person",
+        "name": "Carlos"
+      },
+      "at_hash": "5e7cbc6616a342f77bae99b02dae520bc6d6861274530f8845675868ac9e7630",
+      "entity": "process",
+      "entity_id": "frame",
+      "id": "442a5496-881d-4c2d-a544-c639ed51be29",
+      "kind": "edit",
+      "message": "use recycled steel in the frame",
+      "open": false,
+      "outcome": {
+        "actor": {
+          "id": "mcp",
+          "kind": "agent",
+          "name": null
+        },
+        "message": "the supplier certifies no recycled content",
+        "resolution": "overridden",
+        "timestamp": "2026-10-20T06:59:17.865118Z"
+      },
+      "seq": 2,
+      "timestamp": "2026-10-20T06:59:17.864950Z"
+    }
+  ],
+  "view_url": null
+}

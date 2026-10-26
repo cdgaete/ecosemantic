@@ -1,0 +1,30 @@
+{
+  "hint": null,
+  "value": [
+    {
+      "database": "fixture",
+      "description": "",
+      "hash": "f91e47f3ae08c28e8c522a058e430636b15174362a6981b055c38026a107c05d",
+      "id": "1e5c1bfa-dfa9-4879-b217-0cafec4d1811",
+      "name": "bottle",
+      "view_url": null
+    },
+    {
+      "database": "fixture",
+      "description": "",
+      "hash": "a15e917754d84a373d3576e6cd5da2c1559930e73f87bdaf236049959c1d47a8",
+      "id": "9636d8de-03e7-51d5-9f1a-02ca5de97e82",
+      "name": "unfinished",
+      "view_url": null
+    },
+    {
+      "database": "fixture",
+      "description": "",
+      "hash": "5e7cbc6616a342f77bae99b02dae520bc6d6861274530f8845675868ac9e7630",
+      "id": "bb309f67-e625-53b4-8e7c-3062610d2de0",
+      "name": "widget",
+      "view_url": null
+    }
+  ],
+  "view_url": null
+}

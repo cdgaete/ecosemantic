@@ -1,0 +1,203 @@
+{
+  "hint": null,
+  "open_requests": 1,
+  "value": {
+    "cases": [
+      {
+        "description": "a heavier frame",
+        "name": "heavy",
+        "values": {
+          "frame_mass": 0.5
+        }
+      }
+    ],
+    "database": {
+      "elementary_flows": "fixture-biosphere",
+      "fingerprint": "ab4a4851ae4bc8a41d356d0da3b12a8727e59dcd7f46776f7016caa670b616d9",
+      "name": "fixture",
+      "scheme": "olca",
+      "system_model": "unit process",
+      "version": "1"
+    },
+    "description": "",
+    "hash": "5e7cbc6616a342f77bae99b02dae520bc6d6861274530f8845675868ac9e7630",
+    "id": "bb309f67-e625-53b4-8e7c-3062610d2de0",
+    "name": "widget",
+    "notes": "",
+    "parameters": [
+      {
+        "description": "",
+        "formula": "frame_mass * 2.4",
+        "name": "frame_steel",
+        "unit": "kilogram",
+        "value": null
+      },
+      {
+        "description": "frame per widget",
+        "formula": null,
+        "name": "frame_mass",
+        "unit": "kilogram",
+        "value": 0.25
+      }
+    ],
+    "processes": [
+      {
+        "code": "frame",
+        "comment": null,
+        "exchanges": [
+          {
+            "amount": 1.0,
+            "comment": null,
+            "formula": null,
+            "id": "f40b4e96-c10a-563e-a98f-6293424b8c1f",
+            "input": null,
+            "name": "frame",
+            "type": "production",
+            "uncertainty": null,
+            "unit": "kilogram"
+          },
+          {
+            "amount": 2.4,
+            "comment": null,
+            "formula": null,
+            "id": "74c2d4b2-2e8b-5b24-addf-4b6c49069c02",
+            "input": {
+              "database": "fixture",
+              "id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c",
+              "kind": "background"
+            },
+            "name": "steel",
+            "type": "product",
+            "uncertainty": null,
+            "unit": "kilogram"
+          }
+        ],
+        "id": "8a5ef4f8-5af5-5b5f-b66d-077dfb5839ed",
+        "location": "GLO",
+        "metadata": {
+          "hierarchy_level": null,
+          "life_cycle_stage": null,
+          "supply_chain_tier": null
+        },
+        "name": "frame production",
+        "reference_product": "frame",
+        "unit": "kilogram"
+      },
+      {
+        "code": "widget",
+        "comment": null,
+        "exchanges": [
+          {
+            "amount": 1.0,
+            "comment": null,
+            "formula": null,
+            "id": "7d4b50c8-08f6-59d1-a7dc-08f2fa6b4542",
+            "input": null,
+            "name": "widget",
+            "type": "production",
+            "uncertainty": null,
+            "unit": "unit"
+          },
+          {
+            "amount": 0.5,
+            "comment": null,
+            "formula": null,
+            "id": "25a8146b-9de6-53b4-801a-9f63ca97e151",
+            "input": {
+              "database": "fixture",
+              "id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c",
+              "kind": "background"
+            },
+            "name": "steel",
+            "type": "product",
+            "uncertainty": {
+              "params": {
+                "loc": -0.6931471805599453,
+                "scale": 0.10000000000000007
+              },
+              "type": "lognormal"
+            },
+            "unit": "kilogram"
+          },
+          {
+            "amount": 1.0,
+            "comment": null,
+            "formula": null,
+            "id": "2fddb273-5d7d-5b0a-8669-e2f01d474979",
+            "input": {
+              "database": "fixture",
+              "id": "4a018168-2ca8-56de-a7f7-c7ce8f6a5040_81c36885-6d13-58e3-ba9a-869123a0f84c",
+              "kind": "background"
+            },
+            "name": "electricity",
+            "type": "product",
+            "uncertainty": null,
+            "unit": "kilowatt hour"
+          },
+          {
+            "amount": 0.25,
+            "comment": null,
+            "formula": "frame_mass",
+            "id": "73b7d6fd-7d08-53d6-bd18-093e6cd44574",
+            "input": {
+              "code": "frame",
+              "kind": "foreground"
+            },
+            "name": "frame",
+            "type": "product",
+            "uncertainty": null,
+            "unit": "kilogram"
+          },
+          {
+            "amount": 0.1,
+            "comment": null,
+            "formula": null,
+            "id": "2da1fa1f-fede-561a-84a3-9c57c8aaf9b1",
+            "input": {
+              "database": "fixture-biosphere",
+              "id": "7033761e-a295-5042-bedc-164a1623396b",
+              "kind": "elementary_flow"
+            },
+            "name": "Carbon dioxide, fossil",
+            "type": "elementary",
+            "uncertainty": null,
+            "unit": "kilogram"
+          }
+        ],
+        "id": "e638b817-9f59-54e9-bf01-adc6d9652c2e",
+        "location": "GLO",
+        "metadata": {
+          "hierarchy_level": null,
+          "life_cycle_stage": null,
+          "supply_chain_tier": null
+        },
+        "name": "widget assembly",
+        "reference_product": "widget",
+        "unit": "unit"
+      }
+    ],
+    "reference_process": "widget",
+    "scenarios": [
+      {
+        "base_hash": "df348a73cc91e2dd59e2f94ea985678f617616ab82288489fbcb7e29528e9645",
+        "description": "a lighter frame and half the electricity",
+        "name": "lighter",
+        "overrides": [
+          {
+            "kind": "parameter",
+            "name": "frame_mass",
+            "value": 0.2
+          },
+          {
+            "amount": null,
+            "exchange_id": "2fddb273-5d7d-5b0a-8669-e2f01d474979",
+            "input": null,
+            "kind": "exchange",
+            "multiplier": 0.5
+          }
+        ]
+      }
+    ]
+  },
+  "view_url": null
+}

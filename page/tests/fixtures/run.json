@@ -1,0 +1,126 @@
+{
+  "hint": null,
+  "value": {
+    "at_hash": "5e7cbc6616a342f77bae99b02dae520bc6d6861274530f8845675868ac9e7630",
+    "cancel_requested": false,
+    "config": {
+      "n": 6,
+      "n_max": 200,
+      "n_min": 1,
+      "rel_se_target": 0.05,
+      "scope": "full",
+      "seed": 12345
+    },
+    "demand": [
+      {
+        "amount": 1.0,
+        "ref": {
+          "code": "widget",
+          "kind": "foreground"
+        }
+      }
+    ],
+    "error": null,
+    "finished_at": "2026-10-20T06:59:20.187766Z",
+    "id": "b6d4acc0-3564-4440-a992-8211c2f6b40a",
+    "methods": [
+      {
+        "id": "m_bff077f3bd",
+        "impact_category": "climate change",
+        "impact_method": "gwp",
+        "indicator": "GWP100",
+        "spec": "fixture > gwp > climate change > GWP100",
+        "tuple": [
+          "fixture",
+          "gwp",
+          "climate change > GWP100"
+        ],
+        "unit": "kg CO2-Eq"
+      }
+    ],
+    "open": false,
+    "pid": 1153178,
+    "posted_at": "2026-10-20T06:59:19.811107Z",
+    "product_system_id": "bb309f67-e625-53b4-8e7c-3062610d2de0",
+    "progress": {
+      "iterations": 6,
+      "worst_rel_se": 0.008721077974733555
+    },
+    "result": {
+      "categories": [
+        {
+          "method": {
+            "id": "m_bff077f3bd",
+            "impact_category": "climate change",
+            "impact_method": "gwp",
+            "indicator": "GWP100",
+            "spec": "fixture > gwp > climate change > GWP100",
+            "tuple": [
+              "fixture",
+              "gwp",
+              "climate change > GWP100"
+            ],
+            "unit": "kg CO2-Eq"
+          },
+          "samples": [
+            4.263411556488797,
+            4.21115097995817,
+            4.2622540148053405,
+            4.147248713726357,
+            4.120354646846025,
+            4.1581768275972575
+          ],
+          "summary": {
+            "mean": 4.193766123236991,
+            "median": 4.184663903777714,
+            "median_ci95": [
+              4.120354646846025,
+              4.263411556488797
+            ],
+            "n": 6,
+            "percentiles": [
+              4.123716405206066,
+              4.263266863778365
+            ],
+            "rel_se": 0.008721077974733555
+          }
+        }
+      ],
+      "credit_loops": [],
+      "database": {
+        "elementary_flows": "fixture-biosphere",
+        "fingerprint": "ab4a4851ae4bc8a41d356d0da3b12a8727e59dcd7f46776f7016caa670b616d9",
+        "name": "fixture",
+        "scheme": "olca",
+        "system_model": "unit process",
+        "version": "1"
+      },
+      "dropped_background": [],
+      "dropped_draws": [],
+      "dropped_linked_loops": [],
+      "dropped_loops": [],
+      "gating_method": {
+        "id": "m_bff077f3bd",
+        "impact_category": "climate change",
+        "impact_method": "gwp",
+        "indicator": "GWP100",
+        "spec": "fixture > gwp > climate change > GWP100",
+        "tuple": [
+          "fixture",
+          "gwp",
+          "climate change > GWP100"
+        ],
+        "unit": "kg CO2-Eq"
+      },
+      "linked_credit_loops": [],
+      "n": 6,
+      "normals_at_amount": 2,
+      "scope": "full",
+      "stopped": "fixed"
+    },
+    "started_at": "2026-10-20T06:59:20.172697Z",
+    "status": "done",
+    "treatments_run_backwards": []
+  },
+  "view_url": null
+}

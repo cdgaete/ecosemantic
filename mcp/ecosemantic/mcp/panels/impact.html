@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Impact</title>
+<style>
+  :root { color-scheme: light dark; font: 13px system-ui, sans-serif; }
+  body { margin: 0; padding: 12px; }
+  h1 { font-size: 14px; margin: 0 0 8px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 3px 6px; border-bottom: 1px solid rgba(128,128,128,.3); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .bar { height: 10px; background: #2f7f77; display: inline-block; vertical-align: middle; }
+  .bar.variant { background: #b8860b; }
+  svg { width: 100%; height: 120px; }
+  a { color: inherit; }
+  footer { margin-top: 10px; font-size: 12px; opacity: .8; }
+</style>
+</head>
+<body>
+<h1 id="title">Impact</h1>
+<div id="view"></div>
+<footer id="footer"></footer>
+<script>
+  let nextId = 1;
+  const INIT_ID = nextId++;
+  const send = (message) => window.parent.postMessage(message, "*");
+  send({ jsonrpc: "2.0", id: INIT_ID, method: "ui/initialize", params: { appCapabilities: {} } });
+  window.addEventListener("message", (event) => {
+    const message = event.data;
+    if (!message || message.jsonrpc !== "2.0") return;
+    if (message.id === INIT_ID && message.result) {
+      send({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+      return;
+    }
+    if (message.method === "ui/notifications/tool-result") render(message.params.structuredContent);
+  });
+  const openLink = (url) => send({ jsonrpc: "2.0", id: nextId++, method: "ui/open-link", params: { url } });
+  const fmt = (x) => Number(x).toLocaleString(undefined, { maximumSignificantDigits: 4 });
+  function variants(value) {
+    const rows = value.scores.map((score, i) => {
+      const cells = value.variants.map((v) => `<td class="num">${fmt(v.scores[i].value)} (${v.deltas[i] >= 0 ? "+" : ""}${fmt(v.deltas[i])})</td>`).join("");
+      return `<tr><td>${score.method.spec}</td><td class="num">${fmt(score.value)} ${score.unit}</td>${cells}</tr>`;
+    }).join("");
+    const heads = value.variants.map((v) => `<th class="num">${v.name}</th>`).join("");
+    return `<table><tr><th>Category</th><th class="num">Base</th>${heads}</tr>${rows}</table>`;
+  }
+  function histogram(category) {
+    const samples = category.samples.slice().sort((a, b) => a - b);
+    if (!samples.length) return "";
+    const bins = 20, lo = samples[0], hi = samples[samples.length - 1], width = (hi - lo) || 1;
+    const counts = new Array(bins).fill(0);
+    samples.forEach((s) => { counts[Math.min(bins - 1, Math.floor((s - lo) / width * bins))] += 1; });
+    const top = Math.max(...counts);
+    const rects = counts.map((c, i) => `<rect x="${(i * 100 / bins).toFixed(2)}%" y="${(100 - 100 * c / top).toFixed(2)}%" width="${(100 / bins).toFixed(2)}%" height="${(100 * c / top).toFixed(2)}%" fill="#2f7f77"></rect>`).join("");
+    const s = category.summary;
+    const spread = `2.5th to 97.5th percentile ${fmt(s.percentiles[0])} to ${fmt(s.percentiles[1])}`;
+    const meanInterval = s.mean_ci95[0] == null || s.mean_ci95[1] == null ? "no interval of the mean" : `95% interval of the mean ${fmt(s.mean_ci95[0])} to ${fmt(s.mean_ci95[1])}`;
+    const interval = `${spread}, ${meanInterval}`;
+    return `<p>${category.method.spec}: mean ${fmt(s.mean)}, median ${fmt(s.median)}, ${interval}, n ${s.n}</p><svg viewBox="0 0 100 100" preserveAspectRatio="none">${rects}</svg>`;
+  }
+  function render(content) {
+    const value = content.value;
+    document.getElementById("title").textContent = `Impact of ${value.product_system}`;
+    let html = "";
+    if (value.uncertainty && value.uncertainty.categories.length) html = value.uncertainty.categories.map(histogram).join("");
+    else if (value.variants && value.variants.length) html = variants(value);
+    else html = `<table>${value.scores.map((s) => `<tr><td>${s.method.spec}</td><td class="num">${fmt(s.value)} ${s.unit}</td></tr>`).join("")}</table>`;
+    document.getElementById("view").innerHTML = html;
+    const footer = document.getElementById("footer");
+    footer.innerHTML = content.view_url ? `<a href="#" id="open">Open the product system in the browser</a>` : "";
+    if (content.view_url) document.getElementById("open").onclick = (e) => { e.preventDefault(); openLink(content.view_url); };
+  }
+</script>
+</body>
+</html>

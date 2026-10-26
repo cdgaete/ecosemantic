@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Contribution</title>
+<style>
+  :root { color-scheme: light dark; font: 13px system-ui, sans-serif; }
+  body { margin: 0; padding: 12px; }
+  h1 { font-size: 14px; margin: 0 0 8px; }
+  .row { display: grid; grid-template-columns: minmax(120px, 1fr) 3fr auto; gap: 8px; align-items: center; margin: 3px 0; }
+  .bar { height: 12px; background: #2f7f77; border-radius: 2px; }
+  .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .num { font-variant-numeric: tabular-nums; }
+  ul { list-style: none; padding-left: 14px; margin: 0; }
+  li { margin: 2px 0; }
+  a { color: inherit; }
+  footer { margin-top: 10px; font-size: 12px; opacity: .8; }
+</style>
+</head>
+<body>
+<h1 id="title">Contribution</h1>
+<div id="view"></div>
+<footer id="footer"></footer>
+<script>
+  let nextId = 1;
+  const INIT_ID = nextId++;
+  const send = (message) => window.parent.postMessage(message, "*");
+  send({ jsonrpc: "2.0", id: INIT_ID, method: "ui/initialize", params: { appCapabilities: {} } });
+  window.addEventListener("message", (event) => {
+    const message = event.data;
+    if (!message || message.jsonrpc !== "2.0") return;
+    if (message.id === INIT_ID && message.result) {
+      send({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+      return;
+    }
+    if (message.method === "ui/notifications/tool-result") render(message.params.structuredContent);
+  });
+  const openLink = (url) => send({ jsonrpc: "2.0", id: nextId++, method: "ui/open-link", params: { url } });
+  const fmt = (x) => Number(x).toLocaleString(undefined, { maximumSignificantDigits: 4 });
+  function bars(items, label) {
+    const top = Math.max(...items.map((i) => Math.abs(i.score)), 1e-300);
+    return items.map((item) => `<div class="row"><span class="name" title="${label(item)}">${label(item)}</span>` +
+      `<div class="bar" style="width:${(100 * Math.abs(item.score) / top).toFixed(1)}%"></div>` +
+      `<span class="num">${(100 * item.fraction).toFixed(1)}%</span></div>`).join("");
+  }
+  function tree(node) {
+    const children = node.children && node.children.length ? `<ul>${node.children.map(tree).join("")}</ul>` : "";
+    const name = node.kind === "remainder" ? "remainder" : node.name;
+    return `<li><span class="num">${(100 * node.fraction).toFixed(1)}%</span> ${name}${children}</li>`;
+  }
+  function render(content) {
+    const value = content.value;
+    const total = value.total;
+    document.getElementById("title").textContent = `Contribution by ${value.by}: ${fmt(total.value)} ${total.unit}`;
+    let html = "";
+    if (value.by === "process") html = bars(value.processes, (p) => `${p.name} [${p.location}]`);
+    else if (value.by === "flow") html = bars(value.flows, (f) => `${f.name} (${f.compartment})`);
+    else html = `<ul>${tree(value.root)}</ul>` + (value.truncated ? "<p>Truncated at the configured depth.</p>" : "");
+    document.getElementById("view").innerHTML = html;
+    const footer = document.getElementById("footer");
+    footer.innerHTML = content.view_url ? `<a href="#" id="open">Open the product system in the browser</a>` : "";
+    if (content.view_url) document.getElementById("open").onclick = (e) => { e.preventDefault(); openLink(content.view_url); };
+  }
+</script>
+</body>
+</html>

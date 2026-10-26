@@ -1,0 +1,46 @@
+{
+  "value": {
+    "at_hash": "07a6bf4ddc0b9dd36be657b755ddd13e908b50af2fb6538e4ed633217c07be59",
+    "hash_now": "f91e47f3ae08c28e8c522a058e430636b15174362a6981b055c38026a107c05d",
+    "result": {
+      "hint": null,
+      "value": {
+        "credit_loops": [],
+        "database": {
+          "elementary_flows": "fixture-biosphere",
+          "fingerprint": "ab4a4851ae4bc8a41d356d0da3b12a8727e59dcd7f46776f7016caa670b616d9",
+          "name": "fixture",
+          "scheme": "olca",
+          "system_model": "unit process",
+          "version": "1"
+        },
+        "linked_credit_loops": [],
+        "links_behind": [],
+        "product_system": "bottle",
+        "scores": [
+          {
+            "method": {
+              "id": "m_bff077f3bd",
+              "impact_category": "climate change",
+              "impact_method": "gwp",
+              "indicator": "GWP100",
+              "spec": "fixture > gwp > climate change > GWP100",
+              "tuple": [
+                "fixture",
+                "gwp",
+                "climate change > GWP100"
+              ],
+              "unit": "kg CO2-Eq"
+            },
+            "unit": "kg CO2-Eq",
+            "value": 1.668
+          }
+        ],
+        "treatments_run_backwards": [],
+        "uncertainty": null,
+        "variants": []
+      },
+      "view_url": null
+    }
+  }
+}

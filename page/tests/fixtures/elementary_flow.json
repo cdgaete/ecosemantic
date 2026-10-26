@@ -1,0 +1,19 @@
+{
+  "hint": null,
+  "value": {
+    "cas_number": null,
+    "compartment": "Resource",
+    "flow_type": "natural resource",
+    "name": "Water, river",
+    "ref": {
+      "database": "fixture-biosphere",
+      "id": "c82c62bd-d421-5857-96c7-4612235a4a7b",
+      "kind": "elementary_flow"
+    },
+    "side": "input",
+    "sub_compartment": "in water",
+    "synonyms": [],
+    "unit": "cubic meter"
+  },
+  "view_url": null
+}

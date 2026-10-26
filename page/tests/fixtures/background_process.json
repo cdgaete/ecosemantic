@@ -1,0 +1,80 @@
+{
+  "hint": null,
+  "value": {
+    "classifications": [],
+    "comment": null,
+    "exchanges": [
+      {
+        "amount": 1.0,
+        "cut_off": null,
+        "flow": "steel",
+        "input": {
+          "database": "fixture",
+          "id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c",
+          "kind": "background"
+        },
+        "reference": true,
+        "side": "output",
+        "supplier": null,
+        "type": "product",
+        "unit": "kilogram"
+      },
+      {
+        "amount": 2.0,
+        "cut_off": null,
+        "flow": "electricity",
+        "input": {
+          "database": "fixture",
+          "id": "4a018168-2ca8-56de-a7f7-c7ce8f6a5040_81c36885-6d13-58e3-ba9a-869123a0f84c",
+          "kind": "background"
+        },
+        "reference": false,
+        "side": "input",
+        "supplier": "electricity production",
+        "type": "product",
+        "unit": "kilowatt hour"
+      },
+      {
+        "amount": 0.5,
+        "cut_off": null,
+        "flow": "Carbon dioxide, fossil",
+        "input": {
+          "database": "fixture-biosphere",
+          "id": "7033761e-a295-5042-bedc-164a1623396b",
+          "kind": "elementary_flow"
+        },
+        "reference": false,
+        "side": "output",
+        "supplier": null,
+        "type": "elementary",
+        "unit": "kilogram"
+      },
+      {
+        "amount": 0.01,
+        "cut_off": null,
+        "flow": "Methane, fossil",
+        "input": {
+          "database": "fixture-biosphere",
+          "id": "0c722450-3926-581f-8be4-c0360f458cde",
+          "kind": "elementary_flow"
+        },
+        "reference": false,
+        "side": "output",
+        "supplier": null,
+        "type": "elementary",
+        "unit": "kilogram"
+      }
+    ],
+    "location": "GLO",
+    "name": "steel production",
+    "ref": {
+      "database": "fixture",
+      "id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c",
+      "kind": "background"
+    },
+    "reference_product": "steel",
+    "unit": "kilogram",
+    "url": null
+  },
+  "view_url": null
+}

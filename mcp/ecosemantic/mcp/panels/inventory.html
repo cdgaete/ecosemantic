@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Inventory</title>
+<style>
+  :root { color-scheme: light dark; font: 13px system-ui, sans-serif; }
+  body { margin: 0; padding: 12px; }
+  h1 { font-size: 14px; margin: 0 0 8px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 3px 6px; border-bottom: 1px solid rgba(128,128,128,.3); }
+  th { cursor: pointer; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  a { color: inherit; }
+  footer { margin-top: 10px; font-size: 12px; opacity: .8; }
+</style>
+</head>
+<body>
+<h1 id="title">Inventory</h1>
+<div id="view"></div>
+<footer id="footer"></footer>
+<script>
+  let nextId = 1;
+  const INIT_ID = nextId++;
+  const send = (message) => window.parent.postMessage(message, "*");
+  send({ jsonrpc: "2.0", id: INIT_ID, method: "ui/initialize", params: { appCapabilities: {} } });
+  window.addEventListener("message", (event) => {
+    const message = event.data;
+    if (!message || message.jsonrpc !== "2.0") return;
+    if (message.id === INIT_ID && message.result) {
+      send({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+      return;
+    }
+    if (message.method === "ui/notifications/tool-result") render(message.params.structuredContent);
+  });
+  const openLink = (url) => send({ jsonrpc: "2.0", id: nextId++, method: "ui/open-link", params: { url } });
+  const fmt = (x) => Number(x).toLocaleString(undefined, { maximumSignificantDigits: 4 });
+  let rows = [], sortKey = "name", ascending = true;
+  function table() {
+    const sorted = rows.slice().sort((a, b) => {
+      const x = a[sortKey], y = b[sortKey];
+      const order = typeof x === "number" ? x - y : String(x).localeCompare(String(y));
+      return ascending ? order : -order;
+    });
+    const body = sorted.map((r) => `<tr><td>${r.name}</td><td>${r.compartment}</td><td class="num">${fmt(r.amount)}</td><td>${r.unit}</td><td>${r.source ? r.source.code : ""}</td></tr>`).join("");
+    document.getElementById("view").innerHTML = `<table><tr>` +
+      `<th data-key="name">Flow</th><th data-key="compartment">Compartment</th><th class="num" data-key="amount">Amount</th><th data-key="unit">Unit</th><th>Dominant process</th></tr>${body}</table>`;
+    document.querySelectorAll("th[data-key]").forEach((th) => th.onclick = () => {
+      const key = th.dataset.key;
+      ascending = key === sortKey ? !ascending : true;
+      sortKey = key;
+      table();
+    });
+  }
+  function render(content) {
+    rows = content.items || [];
+    document.getElementById("title").textContent = `Inventory: ${rows.length} rows${content.has_more ? ", more on the next page" : ""}`;
+    table();
+    const footer = document.getElementById("footer");
+    footer.innerHTML = content.view_url ? `<a href="#" id="open">Open the product system in the browser</a>` : "";
+    if (content.view_url) document.getElementById("open").onclick = (e) => { e.preventDefault(); openLink(content.view_url); };
+  }
+</script>
+</body>
+</html>

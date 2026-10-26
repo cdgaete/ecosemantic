@@ -1,0 +1,195 @@
+@import "tailwindcss";
+
+:root,
+[data-theme="ecosemantic"] {
+  --radius: 0.625rem;
+  --background: 15 23 42;
+  --foreground: 248 250 252;
+  --card: 30 41 59;
+  --card-foreground: 248 250 252;
+  --popover: 30 41 59;
+  --popover-foreground: 248 250 252;
+  --primary: 107 203 119;
+  --primary-foreground: 15 23 42;
+  --secondary: 30 41 59;
+  --secondary-foreground: 107 203 119;
+  --accent: 77 150 169;
+  --accent-foreground: 15 23 42;
+  --muted: 30 41 59;
+  --muted-foreground: 148 163 184;
+  --destructive: 255 107 107;
+  --destructive-foreground: 15 23 42;
+  --border: 51 65 85;
+  --input: 51 65 85;
+  --ring: 107 203 119;
+  --highlight: 251 187 29;
+  --warning: 255 140 66;
+  --warning-foreground: 254 215 170;
+  --warning-muted: 67 20 7;
+  --success: 107 203 119;
+  --success-foreground: 187 247 208;
+  --success-muted: 5 46 22;
+  --chrome: 30 41 59;
+  --selected: 31 58 77;
+  --node-border: 107 203 119;
+  --link-stroke: 148 163 184;
+  --xy-edge-stroke: rgb(var(--link-stroke));
+  --role-system: 95 179 196;
+  --role-process: 107 203 119;
+  --role-product: 95 179 196;
+  --role-elementary: 132 189 66;
+  --role-parameter: 251 187 29;
+  --role-result: 255 140 66;
+  --role-simulation: 255 140 66;
+  --role-database: 148 163 184;
+  --role-folder: 148 163 184;
+  --role-log: 148 163 184;
+  --role-request: 148 163 184;
+  --chart-1: 127 1 0;
+  --chart-2: 207 30 42;
+  --chart-3: 252 101 36;
+  --chart-4: 243 218 14;
+  --chart-5: 132 189 66;
+  --chart-6: 62 158 91;
+  --chart-7: 7 99 108;
+  color-scheme: dark;
+}
+
+[data-theme="openlca"] {
+  --radius: 0.125rem;
+  --background: 255 255 255;
+  --foreground: 26 26 26;
+  --card: 255 255 255;
+  --card-foreground: 26 26 26;
+  --popover: 255 255 255;
+  --popover-foreground: 26 26 26;
+  --primary: 128 0 128;
+  --primary-foreground: 255 255 255;
+  --secondary: 247 247 247;
+  --secondary-foreground: 26 26 26;
+  --accent: 25 76 127;
+  --accent-foreground: 255 255 255;
+  --muted: 240 240 240;
+  --muted-foreground: 102 102 102;
+  --destructive: 196 30 58;
+  --destructive-foreground: 255 255 255;
+  --border: 201 201 201;
+  --input: 201 201 201;
+  --ring: 128 0 128;
+  --highlight: 252 186 3;
+  --warning: 163 95 0;
+  --warning-foreground: 110 68 4;
+  --warning-muted: 250 233 205;
+  --success: 47 127 79;
+  --success-foreground: 13 74 40;
+  --success-muted: 222 241 229;
+  --chrome: 240 240 240;
+  --selected: 217 233 251;
+  --node-border: 128 0 128;
+  --link-stroke: 0 0 0;
+  --xy-edge-stroke: rgb(var(--link-stroke));
+  --role-system: 25 76 127;
+  --role-process: 128 0 128;
+  --role-product: 25 76 127;
+  --role-elementary: 0 111 54;
+  --role-parameter: 163 95 0;
+  --role-result: 237 162 17;
+  --role-simulation: 237 162 17;
+  --role-database: 102 102 102;
+  --role-folder: 102 102 102;
+  --role-log: 102 102 102;
+  --role-request: 102 102 102;
+  --chart-1: 229 48 57;
+  --chart-2: 41 111 196;
+  --chart-3: 255 201 35;
+  --chart-4: 82 168 77;
+  --chart-5: 132 76 173;
+  --chart-6: 127 183 229;
+  --chart-7: 255 137 0;
+  color-scheme: light;
+}
+
+@theme {
+  --color-background: rgb(var(--background));
+  --color-foreground: rgb(var(--foreground));
+  --color-card: rgb(var(--card));
+  --color-card-foreground: rgb(var(--card-foreground));
+  --color-popover: rgb(var(--popover));
+  --color-popover-foreground: rgb(var(--popover-foreground));
+  --color-primary: rgb(var(--primary));
+  --color-primary-foreground: rgb(var(--primary-foreground));
+  --color-secondary: rgb(var(--secondary));
+  --color-secondary-foreground: rgb(var(--secondary-foreground));
+  --color-muted: rgb(var(--muted));
+  --color-muted-foreground: rgb(var(--muted-foreground));
+  --color-accent: rgb(var(--accent));
+  --color-accent-foreground: rgb(var(--accent-foreground));
+  --color-destructive: rgb(var(--destructive));
+  --color-destructive-foreground: rgb(var(--destructive-foreground));
+  --color-border: rgb(var(--border));
+  --color-input: rgb(var(--input));
+  --color-ring: rgb(var(--ring));
+  --color-highlight: rgb(var(--highlight));
+  --color-warning: rgb(var(--warning));
+  --color-warning-foreground: rgb(var(--warning-foreground));
+  --color-warning-muted: rgb(var(--warning-muted));
+  --color-success: rgb(var(--success));
+  --color-success-foreground: rgb(var(--success-foreground));
+  --color-success-muted: rgb(var(--success-muted));
+  --color-chrome: rgb(var(--chrome));
+  --color-selected: rgb(var(--selected));
+  --color-node-border: rgb(var(--node-border));
+  --color-link-stroke: rgb(var(--link-stroke));
+  --color-role-system: rgb(var(--role-system));
+  --color-role-process: rgb(var(--role-process));
+  --color-role-product: rgb(var(--role-product));
+  --color-role-elementary: rgb(var(--role-elementary));
+  --color-role-parameter: rgb(var(--role-parameter));
+  --color-role-result: rgb(var(--role-result));
+  --color-role-simulation: rgb(var(--role-simulation));
+  --color-role-database: rgb(var(--role-database));
+  --color-role-folder: rgb(var(--role-folder));
+  --color-role-log: rgb(var(--role-log));
+  --color-role-request: rgb(var(--role-request));
+  --color-chart-1: rgb(var(--chart-1));
+  --color-chart-2: rgb(var(--chart-2));
+  --color-chart-3: rgb(var(--chart-3));
+  --color-chart-4: rgb(var(--chart-4));
+  --color-chart-5: rgb(var(--chart-5));
+  --color-chart-6: rgb(var(--chart-6));
+  --color-chart-7: rgb(var(--chart-7));
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+}
+
+:root {
+  --focus-border: rgb(var(--primary));
+  --separator-border: rgb(var(--border));
+}
+
+@layer base {
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground text-[13px] leading-snug antialiased; }
+}
+
+@keyframes flash {
+  from { background-color: rgb(var(--highlight)); }
+  to { background-color: transparent; }
+}
+.flash { animation: flash 1.5s ease-out 1; }
+@media (prefers-reduced-motion: reduce) { .flash { animation: none; } }
+
+@keyframes arrive {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.react-flow__node { transition: transform 250ms ease; animation: arrive 250ms ease-out 1; }
+@media (prefers-reduced-motion: reduce) { .react-flow__node { transition: none; animation: none; } }
+
+.react-flow__edge-flow .react-flow__edge-path { stroke-width: 1.5px; }
+.react-flow__edge.hot .react-flow__edge-path { stroke: rgb(var(--highlight)); stroke-width: 3px; }
+
+@source inline("text-role-{system,process,product,elementary,parameter,result,database,folder,log,request}");

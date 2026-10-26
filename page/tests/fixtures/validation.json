@@ -1,0 +1,84 @@
+{
+  "hint": null,
+  "value": {
+    "cases": [
+      {
+        "detail": null,
+        "id": "database_build",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "links_current",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "links_resolve",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "loops_deliver",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "no_dangling_references",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "no_islands",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "production_amount_nonzero",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "reference_process_set",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "same_database",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "scenarios_current",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "target_has_exchanges",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "target_has_production",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "target_has_technosphere_input",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "treatments_take_waste",
+        "passed": true
+      }
+    ],
+    "errors": [],
+    "is_valid": true,
+    "roots": [
+      "widget"
+    ],
+    "target": "widget"
+  },
+  "view_url": null
+}

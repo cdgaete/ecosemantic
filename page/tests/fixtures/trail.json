@@ -1,0 +1,97 @@
+{
+  "value": [
+    {
+      "agent": "fixture-agent",
+      "arguments": {
+        "database": "fixture",
+        "query": "steel"
+      },
+      "at_hash": null,
+      "client": "fixture-agent",
+      "duration_ms": 5,
+      "effect": "read",
+      "entry_seq": null,
+      "error": null,
+      "id": "a5c691f8-92bb-4301-aaae-f5b1e4bd67ec",
+      "origin": "agent",
+      "outcome": "ok",
+      "product_system_id": null,
+      "started_at": "2026-10-20T06:59:18.195108Z",
+      "summary": {
+        "count": 1,
+        "items": [
+          {
+            "database": "fixture",
+            "detail": "GLO",
+            "kind": "background",
+            "label": "steel production",
+            "ref": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c"
+          }
+        ],
+        "more": false,
+        "scores": []
+      },
+      "tool": "search_processes"
+    },
+    {
+      "agent": "fixture-agent",
+      "arguments": {
+        "database": "fixture",
+        "process_id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c"
+      },
+      "at_hash": null,
+      "client": "fixture-agent",
+      "duration_ms": 1,
+      "effect": "read",
+      "entry_seq": null,
+      "error": null,
+      "id": "4a9b259b-ab10-4540-8dfc-64f67d686eeb",
+      "origin": "agent",
+      "outcome": "ok",
+      "product_system_id": null,
+      "started_at": "2026-10-20T06:59:18.206923Z",
+      "summary": {
+        "count": 1,
+        "items": [
+          {
+            "database": "fixture",
+            "detail": "GLO",
+            "kind": "background",
+            "label": "steel production",
+            "ref": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c"
+          }
+        ],
+        "more": false,
+        "scores": []
+      },
+      "tool": "get_background_process"
+    },
+    {
+      "agent": "fixture-agent",
+      "arguments": {
+        "amount": 0.5,
+        "code": "bottle",
+        "input": {
+          "database": "fixture",
+          "id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c",
+          "kind": "background"
+        },
+        "product_system_id": "1e5c1bfa-dfa9-4879-b217-0cafec4d1811",
+        "type": "product"
+      },
+      "at_hash": "07a6bf4ddc0b9dd36be657b755ddd13e908b50af2fb6538e4ed633217c07be59",
+      "client": "fixture-agent",
+      "duration_ms": 25,
+      "effect": "write",
+      "entry_seq": 4,
+      "error": null,
+      "id": "5ed65ead-ee23-45f8-8b65-95e6549a9fbb",
+      "origin": "agent",
+      "outcome": "ok",
+      "product_system_id": "1e5c1bfa-dfa9-4879-b217-0cafec4d1811",
+      "started_at": "2026-10-20T06:59:18.220096Z",
+      "summary": null,
+      "tool": "create_exchange"
+    }
+  ]
+}

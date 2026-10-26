@@ -1,0 +1,41 @@
+{
+  "hint": null,
+  "value": [
+    {
+      "cancel_requested": false,
+      "draft": {
+        "accept_terms": false,
+        "actor": {
+          "id": null,
+          "kind": "person",
+          "name": "Carlos"
+        },
+        "drop_unlinked": false,
+        "name": null,
+        "package": null,
+        "replace": false,
+        "source": "bafu",
+        "system_model": null,
+        "version": "2026-v1"
+      },
+      "error": null,
+      "finished_at": "2026-10-22T07:42:49.323977Z",
+      "id": "382afee9-6d81-4648-b95d-70c434dfd8df",
+      "open": false,
+      "pid": null,
+      "posted_at": "2026-10-22T07:42:49.323782Z",
+      "progress": {
+        "count": null,
+        "step": "fetching the terms"
+      },
+      "started_at": null,
+      "status": "terms",
+      "summary": null,
+      "terms": {
+        "citation": "BAFU 2026-v1, openLCA Nexus",
+        "licence": "/tmp/tmpmywrrzj1/data/installs/bafu-terms.txt"
+      }
+    }
+  ],
+  "view_url": null
+}

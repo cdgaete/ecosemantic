@@ -1,0 +1,35 @@
+{
+  "value": [
+    {
+      "agent": "fixture-agent",
+      "arguments": {
+        "method_id": "m_bff077f3bd",
+        "product_system_id": "1e5c1bfa-dfa9-4879-b217-0cafec4d1811"
+      },
+      "at_hash": "07a6bf4ddc0b9dd36be657b755ddd13e908b50af2fb6538e4ed633217c07be59",
+      "client": "fixture-agent",
+      "duration_ms": 9,
+      "effect": "compute",
+      "entry_seq": null,
+      "error": null,
+      "id": "86f58264-9cd5-49b8-9b91-43c54b531824",
+      "origin": "agent",
+      "outcome": "ok",
+      "product_system_id": "1e5c1bfa-dfa9-4879-b217-0cafec4d1811",
+      "started_at": "2026-10-20T06:59:18.274775Z",
+      "summary": {
+        "count": null,
+        "items": [],
+        "more": false,
+        "scores": [
+          {
+            "method": "fixture > gwp > climate change > GWP100",
+            "unit": "kg CO2-Eq",
+            "value": 1.3900000000000001
+          }
+        ]
+      },
+      "tool": "calculate_impact"
+    }
+  ]
+}

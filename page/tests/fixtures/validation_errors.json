@@ -1,0 +1,67 @@
+{
+  "hint": null,
+  "value": {
+    "cases": [
+      {
+        "detail": null,
+        "id": "database_build",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "links_current",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "links_resolve",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "loops_deliver",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "no_dangling_references",
+        "passed": true
+      },
+      {
+        "detail": "unfinished names no reference process",
+        "id": "reference_process_set",
+        "passed": false
+      },
+      {
+        "detail": null,
+        "id": "same_database",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "scenarios_current",
+        "passed": true
+      },
+      {
+        "detail": null,
+        "id": "treatments_take_waste",
+        "passed": true
+      }
+    ],
+    "errors": [
+      {
+        "case": "reference_process_set",
+        "code": "reference_process_missing",
+        "message": "unfinished names no reference process",
+        "process_codes": [],
+        "suggestion": "set reference_process to 'stub'"
+      }
+    ],
+    "is_valid": false,
+    "roots": [
+      "stub"
+    ],
+    "target": null
+  },
+  "view_url": null
+}

@@ -1,0 +1,29 @@
+{
+  "hint": null,
+  "value": [
+    {
+      "actor": {
+        "id": "mcp",
+        "kind": "agent",
+        "name": null
+      },
+      "base_hash": null,
+      "changes": [
+        {
+          "after": null,
+          "before": null,
+          "entity": "product_system",
+          "field": null,
+          "id": "bb309f67-e625-53b4-8e7c-3062610d2de0",
+          "op": "add"
+        }
+      ],
+      "message": "created",
+      "result_hash": "5e7cbc6616a342f77bae99b02dae520bc6d6861274530f8845675868ac9e7630",
+      "seq": 1,
+      "source": "mcp",
+      "timestamp": "2026-10-20T06:59:17.845711Z"
+    }
+  ],
+  "view_url": null
+}

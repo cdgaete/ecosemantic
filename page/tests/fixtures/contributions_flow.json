@@ -1,0 +1,68 @@
+{
+  "hint": null,
+  "value": {
+    "by": "flow",
+    "credit_loops": [],
+    "database": {
+      "elementary_flows": "fixture-biosphere",
+      "fingerprint": "ab4a4851ae4bc8a41d356d0da3b12a8727e59dcd7f46776f7016caa670b616d9",
+      "name": "fixture",
+      "scheme": "olca",
+      "system_model": "unit process",
+      "version": "1"
+    },
+    "flows": [
+      {
+        "amount": 3.85,
+        "compartment": "air",
+        "flow": {
+          "database": "fixture-biosphere",
+          "id": "7033761e-a295-5042-bedc-164a1623396b",
+          "kind": "elementary_flow"
+        },
+        "fraction": 0.9259259259259258,
+        "name": "Carbon dioxide, fossil",
+        "rank": 1,
+        "score": 3.85,
+        "unit": "kilogram"
+      },
+      {
+        "amount": 0.011000000000000001,
+        "compartment": "air",
+        "flow": {
+          "database": "fixture-biosphere",
+          "id": "0c722450-3926-581f-8be4-c0360f458cde",
+          "kind": "elementary_flow"
+        },
+        "fraction": 0.07407407407407408,
+        "name": "Methane, fossil",
+        "rank": 2,
+        "score": 0.30800000000000005,
+        "unit": "kilogram"
+      }
+    ],
+    "linked_credit_loops": [],
+    "processes": null,
+    "root": null,
+    "total": {
+      "method": {
+        "id": "m_bff077f3bd",
+        "impact_category": "climate change",
+        "impact_method": "gwp",
+        "indicator": "GWP100",
+        "spec": "fixture > gwp > climate change > GWP100",
+        "tuple": [
+          "fixture",
+          "gwp",
+          "climate change > GWP100"
+        ],
+        "unit": "kg CO2-Eq"
+      },
+      "unit": "kg CO2-Eq",
+      "value": 4.158
+    },
+    "treatments_run_backwards": [],
+    "truncated": null
+  },
+  "view_url": null
+}

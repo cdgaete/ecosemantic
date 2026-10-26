@@ -1,0 +1,61 @@
+{
+  "value": [
+    {
+      "agent": "fixture-agent",
+      "arguments": {
+        "database": "fixture",
+        "query": "electricity"
+      },
+      "at_hash": null,
+      "client": "fixture-agent",
+      "duration_ms": 4,
+      "effect": "read",
+      "entry_seq": null,
+      "error": null,
+      "id": "cdd27705-8618-4cac-bc44-dfc75f24600e",
+      "origin": "agent",
+      "outcome": "ok",
+      "product_system_id": null,
+      "started_at": "2026-10-20T06:59:18.363065Z",
+      "summary": {
+        "count": 1,
+        "items": [
+          {
+            "database": "fixture",
+            "detail": "GLO",
+            "kind": "background",
+            "label": "electricity production",
+            "ref": "4a018168-2ca8-56de-a7f7-c7ce8f6a5040_81c36885-6d13-58e3-ba9a-869123a0f84c"
+          }
+        ],
+        "more": false,
+        "scores": []
+      },
+      "tool": "search_processes"
+    },
+    {
+      "agent": "fixture-agent",
+      "arguments": {
+        "database": "fixture",
+        "process_id": "missing"
+      },
+      "at_hash": null,
+      "client": "fixture-agent",
+      "duration_ms": 4,
+      "effect": "read",
+      "entry_seq": null,
+      "error": {
+        "details": {},
+        "error": "not_found",
+        "message": "no process 'missing' in 'fixture'"
+      },
+      "id": "7b31090c-ae88-42b4-ab0d-9da1e87707ab",
+      "origin": "agent",
+      "outcome": "error",
+      "product_system_id": null,
+      "started_at": "2026-10-20T06:59:18.368717Z",
+      "summary": null,
+      "tool": "get_background_process"
+    }
+  ]
+}

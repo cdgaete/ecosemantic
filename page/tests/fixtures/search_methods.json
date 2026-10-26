@@ -1,0 +1,21 @@
+{
+  "has_more": false,
+  "hint": null,
+  "items": [
+    {
+      "id": "m_bff077f3bd",
+      "impact_category": "climate change",
+      "impact_method": "gwp",
+      "indicator": "GWP100",
+      "spec": "fixture > gwp > climate change > GWP100",
+      "tuple": [
+        "fixture",
+        "gwp",
+        "climate change > GWP100"
+      ],
+      "unit": "kg CO2-Eq"
+    }
+  ],
+  "next_cursor": null,
+  "view_url": null
+}

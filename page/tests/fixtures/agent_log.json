@@ -1,0 +1,179 @@
+{
+  "hint": null,
+  "value": [
+    {
+      "actor": {
+        "id": "fixture-agent",
+        "kind": "agent",
+        "name": "fixture-agent"
+      },
+      "base_hash": null,
+      "changes": [
+        {
+          "after": null,
+          "before": null,
+          "entity": "product_system",
+          "field": null,
+          "id": "1e5c1bfa-dfa9-4879-b217-0cafec4d1811",
+          "op": "add"
+        }
+      ],
+      "message": "created product system bottle",
+      "result_hash": "960f72b29944171f9bedaaac85bf8c3bf0fb8d17c3e3f5722181136ce66486ae",
+      "seq": 1,
+      "source": "mcp",
+      "timestamp": "2026-10-20T06:59:18.028379Z"
+    },
+    {
+      "actor": {
+        "id": "fixture-agent",
+        "kind": "agent",
+        "name": "fixture-agent"
+      },
+      "base_hash": "960f72b29944171f9bedaaac85bf8c3bf0fb8d17c3e3f5722181136ce66486ae",
+      "changes": [
+        {
+          "after": {
+            "code": "bottle",
+            "comment": null,
+            "exchanges": [
+              {
+                "amount": 1.0,
+                "comment": null,
+                "formula": null,
+                "id": "ea4cdf80-041f-4f98-8a18-62c26ace2fcb",
+                "input": null,
+                "name": "bottle",
+                "type": "production",
+                "uncertainty": null,
+                "unit": "kilogram"
+              }
+            ],
+            "id": "0feed099-fff4-4e7d-a79b-406e66ddf27d",
+            "location": "GLO",
+            "metadata": {
+              "hierarchy_level": null,
+              "life_cycle_stage": null,
+              "supply_chain_tier": null
+            },
+            "name": "bottle",
+            "reference_product": "bottle",
+            "unit": "kilogram"
+          },
+          "before": null,
+          "entity": "process",
+          "field": null,
+          "id": "0feed099-fff4-4e7d-a79b-406e66ddf27d",
+          "op": "add"
+        },
+        {
+          "after": {
+            "amount": 1.0,
+            "comment": null,
+            "formula": null,
+            "id": "ea4cdf80-041f-4f98-8a18-62c26ace2fcb",
+            "input": null,
+            "name": "bottle",
+            "type": "production",
+            "uncertainty": null,
+            "unit": "kilogram"
+          },
+          "before": null,
+          "entity": "exchange",
+          "field": null,
+          "id": "ea4cdf80-041f-4f98-8a18-62c26ace2fcb",
+          "op": "add"
+        }
+      ],
+      "message": "created process bottle",
+      "result_hash": "9b0f8273834d3fe00f1648ec217280e09d81ff3dc7b56d0d5a67da22b4bc97d5",
+      "seq": 2,
+      "source": "mcp",
+      "timestamp": "2026-10-20T06:59:18.131966Z"
+    },
+    {
+      "actor": {
+        "id": "fixture-agent",
+        "kind": "agent",
+        "name": "fixture-agent"
+      },
+      "base_hash": "9b0f8273834d3fe00f1648ec217280e09d81ff3dc7b56d0d5a67da22b4bc97d5",
+      "changes": [
+        {
+          "after": "bottle",
+          "before": null,
+          "entity": "product_system",
+          "field": "reference_process",
+          "id": "1e5c1bfa-dfa9-4879-b217-0cafec4d1811",
+          "op": "update"
+        }
+      ],
+      "message": "updated product system bottle",
+      "result_hash": "69d0140a2d04a9b2996fb0440c1e22454674d34c01cb83f5ec4b9a9fa9307d49",
+      "seq": 3,
+      "source": "mcp",
+      "timestamp": "2026-10-20T06:59:18.171612Z"
+    },
+    {
+      "actor": {
+        "id": "fixture-agent",
+        "kind": "agent",
+        "name": "fixture-agent"
+      },
+      "base_hash": "69d0140a2d04a9b2996fb0440c1e22454674d34c01cb83f5ec4b9a9fa9307d49",
+      "changes": [
+        {
+          "after": {
+            "amount": 0.5,
+            "comment": null,
+            "formula": null,
+            "id": "26e7ffd8-30b5-4403-bfdb-52e6b4e67f48",
+            "input": {
+              "database": "fixture",
+              "id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c",
+              "kind": "background"
+            },
+            "name": "steel",
+            "type": "product",
+            "uncertainty": null,
+            "unit": "kilogram"
+          },
+          "before": null,
+          "entity": "exchange",
+          "field": null,
+          "id": "26e7ffd8-30b5-4403-bfdb-52e6b4e67f48",
+          "op": "add"
+        }
+      ],
+      "message": "created exchange steel on bottle",
+      "result_hash": "07a6bf4ddc0b9dd36be657b755ddd13e908b50af2fb6538e4ed633217c07be59",
+      "seq": 4,
+      "source": "mcp",
+      "timestamp": "2026-10-20T06:59:18.225414Z"
+    },
+    {
+      "actor": {
+        "id": "fixture-agent",
+        "kind": "agent",
+        "name": "fixture-agent"
+      },
+      "base_hash": "07a6bf4ddc0b9dd36be657b755ddd13e908b50af2fb6538e4ed633217c07be59",
+      "changes": [
+        {
+          "after": 0.6,
+          "before": 0.5,
+          "entity": "exchange",
+          "field": "amount",
+          "id": "26e7ffd8-30b5-4403-bfdb-52e6b4e67f48",
+          "op": "update"
+        }
+      ],
+      "message": "updated exchange steel (bottle) 26e7ffd8-30b5-4403-bfdb-52e6b4e67f48",
+      "result_hash": "f91e47f3ae08c28e8c522a058e430636b15174362a6981b055c38026a107c05d",
+      "seq": 5,
+      "source": "mcp",
+      "timestamp": "2026-10-20T06:59:18.332918Z"
+    }
+  ],
+  "view_url": null
+}

@@ -1,0 +1,24 @@
+version: 1.2026-09.0
+server: https://www.lcacommons.gov/lca-collaboration
+inventory:
+  repository: National_Renewable_Energy_Laboratory/USLCI_Database_Public
+  commit: fddfc1a7a6c93e1a71f457446df7813245c828e6
+  sha256: d1b354d11b757efecd8f456077744e83b9c74b4df0d99e18256bdd0335ac5009
+  release: null
+methods:
+- repository: Federal_LCA_Commons/IPCC_GWP
+  commit: f0f90ef2f056be6e1686df0858a57b66ecfa2a62
+  sha256: 951aaf4bf318a34d54e1b3bf553eac7242f46ca14e96d0ef16b821a4c571b785
+  release: 1.2026-09.2
+bridged:
+- repository: Federal_LCA_Commons/US_electricity_baseline
+  commit: ac82eb31179a3a59196b8b30bd06e39e593b0261
+  sha256: ad72866d7eb7b007238b5ad0db69731f3f8af8fa4dc101f69408dbf74486fbe8
+  release: 1.2026-06.1
+unlinked: unlinked-1.2026-09.0.csv
+left_out: left-out-1.2026-09.0.csv
+tolerance: 1.0e-08
+validated:
+  datasets: 2548
+  categories: 10
+  largest_rel_diff_to_independent: 7.294959377939447e-10
