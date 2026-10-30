@@ -35,4 +35,4 @@
 
 The page the server opens draws the model, shows its log and results, and takes your requests, which the agent answers. The agent gives you the page's address (`view_link`).
 
-Product systems and installed databases live in two directories under your EcoSemantic folder: `%LOCALAPPDATA%\ecosemantic` on Windows, `~/Library/Application Support/ecosemantic` on macOS, `$XDG_DATA_HOME/ecosemantic` (`~/.local/share/ecosemantic`) on Linux, each holding `data` and `systems`. `--data-dir` and `--systems-dir` name others.
+Product systems and installed databases live in two directories under your EcoSemantic folder: `%LOCALAPPDATA%\ecosemantic` on Windows, `~/Library/Application Support/ecosemantic` on macOS, `$XDG_DATA_HOME/ecosemantic` (`~/.local/share/ecosemantic`) on Linux, each holding `data` and `systems`. `--data-dir` and `--systems-dir` name others. The files a database installs from are downloaded into `downloads` in the data directory, unless `LCA_DATA_INTERFACE_CACHE` names another folder.

@@ -13,7 +13,7 @@ from pathlib import Path
 from ecosemantic.cli.clients import CLIENTS, SERVER, held, placed
 from ecosemantic.errors import EcoSemanticError, Invalid, Unavailable
 from ecosemantic.local import default_directories
-from ecosemantic.serve import bind, settings_from
+from ecosemantic.settings import bind, settings_from
 from ecosemantic.telemetry import status
 
 

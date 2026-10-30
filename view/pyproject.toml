@@ -1,6 +1,6 @@
 [project]
 name = "ecosemantic-view"
-version = "0.1.8"
+version = "0.1.9"
 description = "The API of the EcoSemantic page, and the built page."
 requires-python = ">=3.12"
 license = "PolyForm-Noncommercial-1.0.0"
@@ -20,9 +20,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "ecosemantic-engine==0.1.8",
-    "ecosemantic-core==0.1.8",
-    "ecosemantic-mcp==0.1.8",
+    "ecosemantic-engine==0.1.9",
+    "ecosemantic-core==0.1.9",
+    "ecosemantic-mcp==0.1.9",
     "fastmcp>=4,<5",
     "fastmcp-slim>=4,<5",
     "mcp>=2.2.0,<3",

@@ -756,7 +756,7 @@ wheels = [
 
 [[package]]
 name = "ecosemantic"
-version = "0.1.8"
+version = "0.1.9"
 source = { editable = "app" }
 dependencies = [
     { name = "ecosemantic-core" },
@@ -771,6 +771,7 @@ dependencies = [
     { name = "opentelemetry-sdk" },
     { name = "pydantic" },
     { name = "starlette" },
+    { name = "truststore" },
     { name = "uvicorn" },
 ]
 
@@ -794,13 +795,14 @@ requires-dist = [
     { name = "opentelemetry-sdk", specifier = ">=1.44,<2" },
     { name = "pydantic", specifier = ">=2.7,<3" },
     { name = "starlette", specifier = ">=1.6.0,<2" },
+    { name = "truststore", specifier = ">=0.10,<1" },
     { name = "uvicorn", specifier = ">=0.52.4,<1" },
 ]
 provides-extras = ["mkl"]
 
 [[package]]
 name = "ecosemantic-core"
-version = "0.1.8"
+version = "0.1.9"
 source = { editable = "core" }
 dependencies = [
     { name = "asteval" },
@@ -831,7 +833,7 @@ requires-dist = [
 
 [[package]]
 name = "ecosemantic-databases"
-version = "0.1.8"
+version = "0.1.9"
 source = { editable = "databases" }
 dependencies = [
     { name = "ecosemantic-core" },
@@ -855,7 +857,7 @@ requires-dist = [
     { name = "ecoinvent-interface", marker = "extra == 'ecoinvent'", specifier = "==3.1" },
     { name = "ecosemantic-core", editable = "core" },
     { name = "ecosemantic-engine", editable = "engine" },
-    { name = "lca-data-interface", specifier = "~=0.1" },
+    { name = "lca-data-interface", specifier = ">=0.1.2,<0.2" },
     { name = "numpy", specifier = ">=2.5" },
     { name = "olca-schema", specifier = "==2.4.0" },
     { name = "pydantic", specifier = ">=2.7,<3" },
@@ -867,7 +869,7 @@ provides-extras = ["ecoinvent"]
 
 [[package]]
 name = "ecosemantic-engine"
-version = "0.1.8"
+version = "0.1.9"
 source = { editable = "engine" }
 dependencies = [
     { name = "nimblend" },
@@ -893,7 +895,7 @@ provides-extras = ["mkl"]
 
 [[package]]
 name = "ecosemantic-mcp"
-version = "0.1.8"
+version = "0.1.9"
 source = { editable = "mcp" }
 dependencies = [
     { name = "ecosemantic-core" },
@@ -918,7 +920,7 @@ requires-dist = [
 
 [[package]]
 name = "ecosemantic-view"
-version = "0.1.8"
+version = "0.1.9"
 source = { editable = "view" }
 dependencies = [
     { name = "ecosemantic-core" },
@@ -1323,15 +1325,15 @@ wheels = [
 
 [[package]]
 name = "lca-data-interface"
-version = "0.1.1"
+version = "0.1.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "platformdirs" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c3/d3/3d5a147d8fded54c6c57d68267d7e721211724ecd5266a8eee63a596d995/lca_data_interface-0.1.1.tar.gz", hash = "sha256:2baa9d2913770c205aeee630443f00cca8c27a4fe6ec85538ff043c7ce2937f3", size = 53259, upload-time = "2026-10-24T04:54:47.269Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ed/53/8a043b7f347993711cb4febbf35dbaf3c8a32c447fa38b9c942252f7028c/lca_data_interface-0.1.2.tar.gz", hash = "sha256:3c546cccd756933497c75b557ed3a18d49227e65809e6a363921b2e6ab7aae8f", size = 54511, upload-time = "2026-10-29T20:25:59.659Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/13/64/a3b3e86f572d8aaad52e9ae51c4c587485f7bda7f0973e9c85100df82929/lca_data_interface-0.1.1-py3-none-any.whl", hash = "sha256:ea6d91cc6aa1feffd20c8c4d1a122b95c4de0593327ea25896266db35c549c88", size = 17023, upload-time = "2026-10-24T04:54:46.008Z" },
+    { url = "https://files.pythonhosted.org/packages/83/48/85d608024f4677a63865dfa98a4095ab680aafb3cdc7c6d431eda664680b/lca_data_interface-0.1.2-py3-none-any.whl", hash = "sha256:765d113746864c15a05f7713f42e42f4977ded0e890d4f450197a873d18434e2", size = 17735, upload-time = "2026-10-29T20:25:58.095Z" },
 ]
 
 [[package]]

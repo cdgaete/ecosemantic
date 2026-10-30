@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import signal
+import ssl
 import sys
 import tempfile
 import urllib.request
@@ -20,6 +21,7 @@ from pathlib import Path
 from types import FrameType
 from typing import Literal, TextIO
 
+import truststore
 from opentelemetry.exporter.otlp.proto.common.metrics_encoder import encode_metrics
 from opentelemetry.sdk.metrics import AlwaysOffExemplarFilter, Counter, MeterProvider
 from opentelemetry.sdk.metrics.export import (
@@ -33,8 +35,7 @@ from opentelemetry.sdk.metrics.export import (
 from opentelemetry.sdk.resources import Resource
 
 from ecosemantic.errors import Invalid, Unavailable
-from ecosemantic.mcp.counting import METER
-from ecosemantic.serve import Transport
+from ecosemantic.settings import Transport
 
 SWITCH = "ECOSEMANTIC_TELEMETRY"
 DO_NOT_TRACK = "DO_NOT_TRACK"
@@ -179,14 +180,16 @@ def status(environ: Mapping[str, str], data_dir: Path) -> dict[str, object]:
 
 
 class Exporter(MetricExporter):
-    """Posts OTLP protobuf to one endpoint with the content type and nothing taken from the
-    environment; a post that fails drops the batch."""
+    """Posts OTLP protobuf to one endpoint, checking the collector's certificate with the
+    operating system's verifier and taking nothing from the environment; a post that fails is
+    logged at INFO and drops the batch."""
 
     def __init__(self, endpoint: str) -> None:
         super().__init__(preferred_temporality={Counter: AggregationTemporality.DELTA})
         if not endpoint.startswith(("http://", "https://")):
             raise Invalid(f"{ENDPOINT_VARIABLE} {endpoint!r} is not an http or https address")
         self.endpoint = endpoint
+        self.context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 
     def export(
         self, metrics_data: MetricsData, timeout_millis: float = TIMEOUT_MILLIS, **kwargs: object
@@ -199,10 +202,10 @@ class Exporter(MetricExporter):
         )
         seconds = min(timeout_millis, TIMEOUT_MILLIS) / 1000
         try:
-            with urllib.request.urlopen(request, timeout=seconds):
+            with urllib.request.urlopen(request, timeout=seconds, context=self.context):
                 return MetricExportResult.SUCCESS
         except (OSError, http.client.HTTPException) as error:
-            LOG.warning("telemetry not sent to %s: %s", self.endpoint, error)
+            LOG.info("telemetry not sent to %s: %s", self.endpoint, error)
             return MetricExportResult.FAILURE
 
     def force_flush(self, timeout_millis: float = TIMEOUT_MILLIS) -> bool:
@@ -230,6 +233,8 @@ def begin(
 ) -> MeterProvider | None:
     """Starts counting when telemetry is on: tells the person once, keeps the identifier and
     counts this start. Nothing is sent until the reader exports."""
+    from ecosemantic.mcp.counting import METER
+
     decided, held = _decided(environ, data_dir)
     if not decided.on:
         return None

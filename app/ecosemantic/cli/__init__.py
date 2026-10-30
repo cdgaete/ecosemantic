@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
-import fastmcp
+from opentelemetry.metrics import MeterProvider
 from pydantic import JsonValue
 
 from ecosemantic.backends.filesystem.storage import FilesystemStorage
@@ -55,10 +55,7 @@ from ecosemantic.errors import (
 )
 from ecosemantic.installs.sources import install_source
 from ecosemantic.local import build_context, default_directories, defaulted
-from ecosemantic.mcp.calculation import impact_of, methods_for
 from ecosemantic.mcp.context import ServerContext
-from ecosemantic.mcp.envelopes import as_uuid
-from ecosemantic.mcp.tables import result_key
 from ecosemantic.mcp.treatments import treatments_in
 from ecosemantic.model.entities import Actor
 from ecosemantic.package.background import Import, read_background
@@ -83,7 +80,7 @@ from ecosemantic.ports.types import (
     System,
     source_credential,
 )
-from ecosemantic.serve import TRANSPORTS, run, settings_from
+from ecosemantic.settings import TRANSPORTS, ViewSettings, settings_from
 from ecosemantic.tables.reader import assemble
 from ecosemantic.tables.results import (
     write_contribution,
@@ -227,6 +224,9 @@ def _defaulted(args: argparse.Namespace) -> None:
 
 async def _compute(args: argparse.Namespace, progress: Reporter) -> dict[str, object]:
     """Score a folder's document against the named method and write one run folder."""
+    from ecosemantic.mcp.calculation import impact_of, methods_for
+    from ecosemantic.mcp.tables import result_key
+
     if not args.folder.is_dir():
         raise Invalid(f"{str(args.folder)!r} is not a directory")
     system = assemble(args.folder)
@@ -305,8 +305,23 @@ def _setup(args: argparse.Namespace, progress: Reporter) -> dict[str, JsonValue]
 def serve_offline() -> None:
     """Keep the stdio server's own network use to EcoSemantic's counts, when telemetry is on: no
     update check against PyPI and no FastMCP tracing."""
+    import fastmcp
+
     fastmcp.settings.check_for_updates = "off"
     fastmcp.settings.telemetry_mode = "off"
+
+
+async def run(
+    context: ServerContext,
+    settings: ViewSettings,
+    systems_dir: Path,
+    meter_provider: MeterProvider | None = None,
+) -> None:
+    """Serve under these settings, loading the process that serves here so no other command
+    loads the server or the page."""
+    from ecosemantic.serve import run as serving
+
+    await serving(context, settings, systems_dir, meter_provider=meter_provider)
 
 
 def _context(args: argparse.Namespace) -> ServerContext:
@@ -319,6 +334,8 @@ def _context(args: argparse.Namespace) -> ServerContext:
 
 
 def _export(context: ServerContext, product_system_id: str, target: Path) -> None:
+    from ecosemantic.mcp.envelopes import as_uuid
+
     system = asyncio.run(context.storage.get_product_system(as_uuid(product_system_id)))
     linked = asyncio.run(pinned_documents(system, context.storage.get_version))
     at = stated_at(system, asyncio.run(context.storage.log(system.id)))

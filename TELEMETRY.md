@@ -21,7 +21,7 @@ Every report also carries these resource attributes.
 | `os.type` | `sys.platform` (`linux`, `darwin`, `win32`) |
 | `ecosemantic.transport` | `stdio` or `http` |
 
-No host name, process or user is added. Each report also carries the time it covers, the start and end of the interval it counts; the collector replaces both with the time it received the report. The sender sets no header of its own beyond the content type, takes no header, endpoint, certificate or timeout from `OTEL_*` environment variables, and sends the standard headers of Python's `urllib`, including `User-Agent: Python-urllib/3.x`. It goes through a proxy when the environment names one. Exemplars, which would carry a trace or span identifier, are off whatever the `OTEL_*` variables say. `OTEL_SDK_DISABLED=true` stops the SDK, so nothing is counted, while `ecosemantic telemetry` still reports the choice.
+No host name, process or user is added. Each report also carries the time it covers, the start and end of the interval it counts; the collector replaces both with the time it received the report. The sender sets no header of its own beyond the content type, takes no header, endpoint, certificate or timeout from `OTEL_*` environment variables, and sends the standard headers of Python's `urllib`, including `User-Agent: Python-urllib/3.x`. It goes through a proxy when the environment names one, and the collector's certificate is checked by the operating system's certificate verifier. Exemplars, which would carry a trace or span identifier, are off whatever the `OTEL_*` variables say. `OTEL_SDK_DISABLED=true` stops the SDK, so nothing is counted, while `ecosemantic telemetry` still reports the choice.
 
 ## What each count means
 

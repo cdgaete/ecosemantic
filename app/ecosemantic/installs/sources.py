@@ -4,7 +4,10 @@ the process that carries an install the page or the chat posted."""
 from __future__ import annotations
 
 import dataclasses
+import os
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
@@ -36,6 +39,24 @@ from ecosemantic.ports.types import (
     source_credential,
 )
 
+DOWNLOADS = "downloads"
+DOWNLOAD_CACHE = "LCA_DATA_INTERFACE_CACHE"
+
+
+@contextmanager
+def downloads_in(data_dir: Path) -> Iterator[None]:
+    """Point lca-data-interface's download cache at the data directory's `downloads` folder while
+    an install runs, so a release's files land where the person keeps their databases, under a
+    root they chose; a cache the person names with the variable is kept."""
+    if DOWNLOAD_CACHE in os.environ:
+        yield
+        return
+    os.environ[DOWNLOAD_CACHE] = str(data_dir / DOWNLOADS)
+    try:
+        yield
+    finally:
+        del os.environ[DOWNLOAD_CACHE]
+
 
 def install_source(
     data_dir: Path,
@@ -50,13 +71,14 @@ def install_source(
     kind = source_credential(draft.source)
     if kind is not None and account is None:
         raise Unavailable(f"{draft.source} needs an account", hint=missing(kind))
-    if draft.source == "openlca":
-        return _openlca(data_dir, draft, report)
-    if draft.source == "uslci":
-        return _uslci(data_dir, draft, report)
-    if draft.source == "ecoinvent":
-        return _ecoinvent(data_dir, draft, cast(Account, account), report)
-    return _bafu(data_dir, draft, cast(Account, account), report)
+    with downloads_in(data_dir):
+        if draft.source == "openlca":
+            return _openlca(data_dir, draft, report)
+        if draft.source == "uslci":
+            return _uslci(data_dir, draft, report)
+        if draft.source == "ecoinvent":
+            return _ecoinvent(data_dir, draft, cast(Account, account), report)
+        return _bafu(data_dir, draft, cast(Account, account), report)
 
 
 def _installed_summary(

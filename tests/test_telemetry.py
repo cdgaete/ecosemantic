@@ -3,21 +3,34 @@ from __future__ import annotations
 import http.server
 import io
 import json
+import logging
 import os
 import signal
 import socket
+import ssl
 import subprocess
 import sys
 import threading
 import time
+import urllib.request
 import uuid
+from datetime import UTC, datetime, timedelta
 from importlib.metadata import version
 from pathlib import Path
 
 import pytest
+import truststore
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import NameOID
 from opentelemetry.proto.collector.metrics.v1.metrics_service_pb2 import ExportMetricsServiceRequest
 from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import AggregationTemporality, InMemoryMetricReader
+from opentelemetry.sdk.metrics.export import (
+    AggregationTemporality,
+    InMemoryMetricReader,
+    MetricExportResult,
+)
 
 from ecosemantic import telemetry
 from ecosemantic.errors import Invalid, Unavailable
@@ -245,6 +258,44 @@ def stop(server) -> None:
     server.server_close()
 
 
+def self_signed(directory: Path) -> tuple[Path, Path]:
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "127.0.0.1")])
+    now = datetime.now(UTC)
+    certificate = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(minutes=5))
+        .not_valid_after(now + timedelta(days=1))
+        .sign(key, hashes.SHA256())
+    )
+    certificate_path = directory / "collector.pem"
+    key_path = directory / "collector.key"
+    certificate_path.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+    key_path.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    return certificate_path, key_path
+
+
+def serve_tls(certificate: Path, key: Path):
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Collector)
+    server.bodies = []
+    server.answer = 200
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(certificate, key)
+    server.socket = context.wrap_socket(server.socket, server_side=True)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
 def test_shutdown_sends_delta_counts_to_the_endpoint(tmp_path):
     server = serve(200)
     port = server.server_address[1]
@@ -260,6 +311,42 @@ def test_shutdown_sends_delta_counts_to_the_endpoint(tmp_path):
     metric = request.resource_metrics[0].scope_metrics[0].metrics[0]
     assert metric.name == telemetry.STARTS
     assert metric.sum.aggregation_temporality == AggregationTemporality.DELTA
+
+
+def test_the_exporter_verifies_with_the_operating_system_s_trust_store(tmp_path, monkeypatch):
+    reader = InMemoryMetricReader()
+    begin({}, tmp_path, "stdio", io.StringIO(), reader)
+    data = reader.get_metrics_data()
+    assert data is not None
+    contexts = []
+
+    def held(request: urllib.request.Request, **kwargs: object) -> object:
+        contexts.append(kwargs["context"])
+        raise OSError("held")
+
+    monkeypatch.setattr(urllib.request, "urlopen", held)
+    exporter = telemetry.Exporter("https://collector.invalid/v1/metrics")
+    results = [exporter.export(data) for _ in range(2)]
+    assert results == [MetricExportResult.FAILURE, MetricExportResult.FAILURE]
+    assert len(contexts) == 2
+    assert all(isinstance(context, truststore.SSLContext) for context in contexts)
+    assert contexts[0] is contexts[1]
+
+
+def test_a_refused_certificate_is_an_info_line(tmp_path, caplog):
+    certificate, key = self_signed(tmp_path)
+    server = serve_tls(certificate, key)
+    endpoint = f"https://127.0.0.1:{server.server_address[1]}/v1/metrics"
+    caplog.set_level(logging.INFO, logger=telemetry.LOG.name)
+    try:
+        end(begin({telemetry.ENDPOINT_VARIABLE: endpoint}, tmp_path, "stdio", io.StringIO()))
+    finally:
+        stop(server)
+    assert server.bodies == []
+    recorded = [entry for entry in caplog.records if entry.name == telemetry.LOG.name]
+    assert [entry.levelno for entry in recorded] == [logging.INFO]
+    assert recorded[0].getMessage().startswith(f"telemetry not sent to {endpoint}: ")
+    assert [entry for entry in caplog.records if entry.levelno >= logging.WARNING] == []
 
 
 @pytest.fixture

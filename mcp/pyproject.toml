@@ -1,6 +1,6 @@
 [project]
 name = "ecosemantic-mcp"
-version = "0.1.8"
+version = "0.1.9"
 description = "The EcoSemantic MCP tools and the server that registers them."
 requires-python = ">=3.12"
 license = "PolyForm-Noncommercial-1.0.0"
@@ -20,8 +20,8 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "ecosemantic-engine==0.1.8",
-    "ecosemantic-core==0.1.8",
+    "ecosemantic-engine==0.1.9",
+    "ecosemantic-core==0.1.9",
     "fastmcp>=4,<5",
     "fastmcp-slim>=4,<5",
     "mcp>=2.2.0,<3",

@@ -2,6 +2,13 @@
 
 Each release names what it adds, changes and removes, newest first.
 
+## 0.1.9
+
+- An install downloads a release's files into `downloads` in the data directory, unless `LCA_DATA_INTERFACE_CACHE` names another folder, so they land under the root the person chose.
+- lca-data-interface 0.1.2 is required, whose cache paths fit Windows.
+- Commands other than `serve` start without loading the server.
+- The telemetry collector's certificate is checked by the operating system's certificate verifier, and a send that fails is an INFO line, never a warning.
+
 ## 0.1.8
 
 - A product system another server process is writing for the first time is announced to the page when its package is whole, never as deleted.

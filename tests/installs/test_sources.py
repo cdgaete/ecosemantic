@@ -164,3 +164,41 @@ def test_ecoinvent_installs_the_release_a_profile_pins_with_the_account_s_client
     }
     assert isinstance(summary, dict) and summary["database"] == NAME
     assert (served_build(Path(str(summary["directory"]))) / "catalog.duckdb").is_file()
+
+
+def test_an_install_downloads_into_the_data_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+
+    import lca_data_interface
+
+    monkeypatch.delenv("LCA_DATA_INTERFACE_CACHE", raising=False)
+    seen: list[Path] = []
+
+    def record(data_dir: Path, draft: InstallDraft, report: object) -> dict[str, object]:
+        seen.append(lca_data_interface.cache_dir())
+        return {}
+
+    monkeypatch.setattr(sources, "_uslci", record)
+    install_source(tmp_path, InstallDraft(source="uslci", actor=AGENT), None, _quiet)
+    assert seen == [tmp_path / "downloads"]
+    assert "LCA_DATA_INTERFACE_CACHE" not in os.environ
+
+
+def test_an_install_keeps_a_download_cache_the_person_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import lca_data_interface
+
+    named = tmp_path / "elsewhere"
+    monkeypatch.setenv("LCA_DATA_INTERFACE_CACHE", str(named))
+    seen: list[Path] = []
+
+    def record(data_dir: Path, draft: InstallDraft, report: object) -> dict[str, object]:
+        seen.append(lca_data_interface.cache_dir())
+        return {}
+
+    monkeypatch.setattr(sources, "_uslci", record)
+    install_source(tmp_path, InstallDraft(source="uslci", actor=AGENT), None, _quiet)
+    assert seen == [named]
