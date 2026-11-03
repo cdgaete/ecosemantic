@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import time
 from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -16,7 +15,9 @@ from python_calamine import CalamineWorkbook
 from scipy.sparse import csr_matrix, diags, lil_matrix
 
 from ecosemantic.databases.ecoinvent.masterdata import unit_name
+from ecosemantic.databases.ecoinvent.profile import database_name
 from ecosemantic.databases.ecoinvent.release import Release
+from ecosemantic.databases.stopwatch import Stopwatch
 from ecosemantic.engine.background import Background
 from ecosemantic.engine.calculation import Calculation
 from ecosemantic.engine.solver import Solver
@@ -683,18 +684,11 @@ def validate(
     reference_tolerance = _reference_tolerance(
         workbook_disagrees, matrix_reference_tolerance, tolerance
     )
-    name = f"ecoinvent-{release.version}-{release.system_model}"
-    seconds: dict[str, float] = {}
-    started = time.perf_counter()
-
-    def lap(step: str) -> None:
-        nonlocal started
-        now = time.perf_counter()
-        seconds[step] = now - started
-        started = now
+    name = database_name(release.version, release.system_model)
+    stopwatch = Stopwatch()
 
     imported = read_background(bundle, name, foreground=frozenset())
-    lap("read")
+    stopwatch.lap("read")
     database = Database(
         name=name,
         elementary_flows=imported.biosphere,
@@ -703,30 +697,30 @@ def validate(
         system_model=release.system_model,
     )
     background = compile_background(imported, database)
-    lap("compile")
+    stopwatch.lap("compile")
     background.save(compiled)
-    lap("save")
+    stopwatch.lap("save")
     loaded = Background.load(compiled)
-    lap("load")
+    stopwatch.lap("load")
     calculation = Calculation(loaded)
-    lap("factorise")
+    stopwatch.lap("factorise")
     installed = _installed(imported, loaded, calculation)
     calculation.intensities(list(installed.method_of.values()))
-    lap("intensities")
+    stopwatch.lap("intensities")
     export = _read_export(release)
     disagreeing = {
         label: (scores, reference_tolerance)
         for label, scores in _matrix_export_scores(export, workbook_disagrees).items()
     }
-    lap("read_export")
+    stopwatch.lap("read_export")
     report = _Report(tolerance)
     _Comparison(name, installed, export, report, disagreeing).run()
-    lap("compare")
+    stopwatch.lap("compare")
     return Validation(
         counts=report.counts,
         largest_rel_diff=report.largest,
         mismatches=report.mismatches,
         unreferenced=report.unreferenced,
-        seconds=seconds,
+        seconds=stopwatch.seconds,
         saved_bytes=sum(path.stat().st_size for path in compiled.iterdir()),
     )

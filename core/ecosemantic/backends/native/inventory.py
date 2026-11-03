@@ -40,7 +40,7 @@ class NativeInventory:
         return self.store.registered(self.store.technosphere_of(name)).database
 
     async def get_process(self, ref: BackgroundRef, exchanges: bool = False) -> BackgroundProcess:
-        elementary_flows = self.store.registered(ref.database).database.elementary_flows
+        elementary_flows = self.store.elementary_flows_of(ref.database)
 
         def read() -> BackgroundProcess:
             catalog = self.store.catalog(ref.database)

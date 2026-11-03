@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import dataclasses
 import tempfile
-import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +12,7 @@ from typing import TypeVar
 
 import numpy as np
 
+from ecosemantic.databases.stopwatch import Stopwatch
 from ecosemantic.engine.background import Background
 from ecosemantic.engine.calculation import Calculation
 from ecosemantic.errors import Invalid
@@ -21,6 +21,7 @@ from ecosemantic.model.entities import Method
 from ecosemantic.model.refs import Database
 from ecosemantic.package.background import Import
 from ecosemantic.package.compile import compile_background
+from ecosemantic.ports.types import UNIT_PROCESS
 
 NEGLIGIBLE = 1e-12
 K = TypeVar("K")
@@ -41,34 +42,27 @@ def score_every_dataset(imported: Import, *, name: str, compiled: Path | None = 
     """Compile a bundle's import under the database `name`, save it, load it, and score one unit of
     every dataset's product under every category; the background is written under a temporary
     directory when `compiled` names none."""
-    seconds: dict[str, float] = {}
-    started = time.perf_counter()
-
-    def lap(step: str) -> None:
-        nonlocal started
-        now = time.perf_counter()
-        seconds[step] = now - started
-        started = now
+    stopwatch = Stopwatch()
 
     database = Database(
         name=name,
         elementary_flows=imported.biosphere,
         scheme="olca",
         version=name,
-        system_model="unit process",
+        system_model=UNIT_PROCESS,
     )
     background = compile_background(dataclasses.replace(imported, unlinked=[]), database)
-    lap("compile")
+    stopwatch.lap("compile")
     destination = (
         compiled
         if compiled is not None
         else Path(tempfile.mkdtemp(prefix="ecosemantic-scores-")) / "background"
     )
     background.save(destination)
-    lap("save")
+    stopwatch.lap("save")
     loaded = Background.load(destination)
     calculation = Calculation(loaded)
-    lap("load")
+    stopwatch.lap("load")
     methods = [Method.of(method.key, method.unit) for method in imported.methods]
     codes = [code for _, code in imported.datasets]
     table = np.asarray(calculation.intensities(methods).values()).reshape(len(methods), -1)
@@ -83,9 +77,9 @@ def score_every_dataset(imported: Import, *, name: str, compiled: Path | None = 
         for at, method in enumerate(methods)
         for code in codes
     }
-    lap("scores")
+    stopwatch.lap("scores")
     declared = {code: str(dataset["unit"]) for (_, code), dataset in imported.datasets.items()}
-    return Scores(values=values, declared=declared, seconds=seconds)
+    return Scores(values=values, declared=declared, seconds=stopwatch.seconds)
 
 
 def relative_differences(

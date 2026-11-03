@@ -70,6 +70,11 @@ class Profile(BaseModel):
     validated: Validated | None = None
 
 
+def database_name(version: str, system_model: str) -> str:
+    """The name an ecoinvent release installs under, for one of its system models."""
+    return f"ecoinvent-{version}-{system_model}"
+
+
 def cache_dir() -> Path:
     """The directory ecoinvent_interface caches a release's files in."""
     return CachedStorage(Settings().output_path).dir

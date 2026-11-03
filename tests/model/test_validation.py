@@ -14,6 +14,7 @@ from ecosemantic.model.validation import (
     Pin,
     anchors,
     credit_loops,
+    linked_reference,
     reference_of,
     roots,
     undelivered,
@@ -118,6 +119,19 @@ def test_reference_of_names_the_reference_process_or_refuses(
         match="has no reference process; set one with update_product_system or name a demand",
     ):
         reference_of(unset, "demand")
+
+
+def test_a_link_to_a_system_with_no_reference_process_names_both_and_the_remedy(
+    product_system: ProductSystem,
+) -> None:
+    flour = product_system.model_copy(update={"name": "Flour"})
+    assert linked_reference(flour, "Bread") == flour.process("tshirt")
+    unset = flour.model_copy(update={"reference_process": None})
+    with pytest.raises(Invalid) as raised:
+        linked_reference(unset, "Bread")
+    assert str(raised.value) == (
+        "Bread links Flour, which has no reference process; set one with update_product_system"
+    )
 
 
 def test_a_process_that_consumes_its_own_product_is_still_the_root(

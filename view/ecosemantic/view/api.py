@@ -19,7 +19,7 @@ from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.envelopes import Answer, Listing, as_uuid, envelope_of
 from ecosemantic.mcp.recording import STARTED, VIEW
 from ecosemantic.model.validation import anchors
-from ecosemantic.ports.types import Layout, LogEntry, RequestDraft
+from ecosemantic.ports.types import LogEntry, RequestDraft
 from ecosemantic.view.handling import (
     ToolRefused,
     answering,
@@ -260,15 +260,16 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             server, "arrange_graph", {"product_system_id": request.path_params["id"], **body}
         )
 
-    @answering
     async def release(request: Request) -> Response:
-        system_id = as_uuid(request.path_params["id"])
-        await context.storage.put_layout(system_id, Layout())
-        args = arguments(request.query_params)
         return await call_tool(
             server,
-            "graph_layout",
-            {"product_system_id": str(system_id), "variant": args.get("variant")},
+            "arrange_graph",
+            {
+                "product_system_id": request.path_params["id"],
+                "placements": [],
+                "release_all": True,
+                "variant": arguments(request.query_params).get("variant"),
+            },
         )
 
     base = "/api/product-systems/{id}"

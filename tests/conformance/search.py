@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import pytest
+
+from ecosemantic.errors import Invalid
 from tests.fixture_data import CODES, FIXTURE_DB, FLOW_IDS
 
 
@@ -43,3 +46,17 @@ class SearchConformance:
         assert {m.id for m in first.items} | {m.id for m in rest.items} == {
             m.id for m in (await search.methods(FIXTURE_DB, "fixture", limit=5)).items
         }
+
+    @pytest.mark.parametrize("query", ["", '""', "*"])
+    async def test_a_query_with_no_term_is_invalid(self, search, query: str) -> None:
+        for call in (search.processes, search.elementary_flows, search.methods):
+            with pytest.raises(Invalid, match="a search needs at least one term"):
+                await call(FIXTURE_DB, query)
+
+    async def test_a_prefix_term_matches_a_longer_word(self, search) -> None:
+        hits = await search.processes(FIXTURE_DB, "ste*")
+        assert CODES["steel"] in {h.ref.id for h in hits.items}
+
+    async def test_a_quoted_term_matches_as_its_words(self, search) -> None:
+        hits = await search.processes(FIXTURE_DB, '"steel production"')
+        assert CODES["steel"] in {h.ref.id for h in hits.items}

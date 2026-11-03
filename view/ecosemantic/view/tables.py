@@ -13,15 +13,13 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, Response
 from starlette.routing import Route
 
-from ecosemantic.compute.results import ContributionResult, ImpactResult
+from ecosemantic.compute.results import ContributionResult, ImpactResult, InventoryResult
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.envelopes import as_uuid
-from ecosemantic.mcp.tables import apply_tables, result_key
+from ecosemantic.mcp.tables import apply_tables, result_key, write_tables
 from ecosemantic.model.entities import DemandItem
-from ecosemantic.model.refs import Database
 from ecosemantic.package.package import zip_package
-from ecosemantic.ports.types import InventoryRow, LinkedLoop, Page
-from ecosemantic.tables.folder import write_folder
+from ecosemantic.ports.types import InventoryRow, Page
 from ecosemantic.tables.results import (
     ResultKey,
     write_contribution,
@@ -36,8 +34,6 @@ Render = Callable[[Path, ResultKey, Payload, datetime], Path]
 _DEMAND = TypeAdapter(list[DemandItem])
 _NAMES = TypeAdapter(list[str])
 _NAME = TypeAdapter(str | None)
-_LOOPS = TypeAdapter(list[list[str]])
-_LINKED_LOOPS = TypeAdapter(list[LinkedLoop])
 
 
 def _zipped(folder: Path, work: Path, filename: str) -> FileResponse:
@@ -55,15 +51,11 @@ def _contribution(work: Path, key: ResultKey, payload: Payload, at: datetime) ->
 
 
 def _inventory(work: Path, key: ResultKey, payload: Payload, at: datetime) -> Path:
-    rows = Page[InventoryRow].model_validate(payload)
     return write_inventory(
         work,
         key,
-        Database.model_validate(payload["database"]),
-        rows,
-        _LOOPS.validate_python(payload["credit_loops"]),
-        _LINKED_LOOPS.validate_python(payload["linked_credit_loops"]),
-        _NAMES.validate_python(payload["treatments_run_backwards"]),
+        InventoryResult.model_validate(payload),
+        Page[InventoryRow].model_validate(payload),
         at,
     )
 
@@ -73,9 +65,8 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
 
     @answering
     async def tables_zip(request: Request) -> Response:
-        stored = await context.storage.get_product_system(as_uuid(request.path_params["id"]))
         with working("ecosemantic-tables-", keep=True) as work:
-            folder = await asyncio.to_thread(write_folder, work, stored)
+            folder, _ = await write_tables(context, as_uuid(request.path_params["id"]), work)
             return _zipped(folder, work, f"{folder.name}.zip")
 
     @answering

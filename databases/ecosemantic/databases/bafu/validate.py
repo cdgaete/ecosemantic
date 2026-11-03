@@ -4,7 +4,6 @@ workbook's terms, and hold the differences it knows to a list."""
 from __future__ import annotations
 
 import math
-import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +31,7 @@ from ecosemantic.databases.scores import (
     relative_differences,
     score_every_dataset,
 )
+from ecosemantic.databases.stopwatch import Stopwatch
 from ecosemantic.errors import Invalid
 from ecosemantic.package.background import Dataset, Import, Key, read_background
 
@@ -258,32 +258,25 @@ def validate(
     categories. A pair beyond the profile's tolerance is a difference; when a differences list is
     named, a difference the list lacks and a pair the list holds within the tolerance are
     mismatches, and with no list the differences are answered and not compared."""
-    seconds: dict[str, float] = {}
-    started = time.perf_counter()
-
-    def lap(step: str) -> None:
-        nonlocal started
-        now = time.perf_counter()
-        seconds[step] = now - started
-        started = now
+    stopwatch = Stopwatch()
 
     imported = read_background(bundle, bundle.stem, foreground=frozenset())
-    lap("read")
+    stopwatch.lap("read")
     processes = process_ids(imported)
     mismatches = unnamed(imported) + unlinked_mismatches(
         distinct_unlinked(imported, flow_categories(imported)), unlinked, processes
     )
-    lap("checks")
+    stopwatch.lap("checks")
     workbook = read_workbook(results)
     rows = matched(workbook, _labels(imported))
-    lap("workbook")
+    stopwatch.lap("workbook")
     scores = score_every_dataset(imported, name=bundle.stem, compiled=compiled)
-    seconds |= scores.seconds
+    stopwatch.seconds |= scores.seconds
     core, other = _compared(imported, profile, workbook, rows, scores)
     beyond, largest, by_column = _differences(core, other, profile.tolerance)
     if differences is not None:
         mismatches += _listed(beyond, core, other, differences)
-    lap("compare")
+    stopwatch.lap("compare")
     return Validation(
         processes=len(rows),
         columns=len(profile.columns),
@@ -292,7 +285,7 @@ def validate(
         ),
         largest_rel_diff_within_tolerance=largest,
         mismatches=tuple(mismatches),
-        seconds=seconds,
+        seconds=stopwatch.seconds,
         by_column=by_column,
     )
 

@@ -11,7 +11,7 @@ from pathlib import Path
 from filelock import FileLock
 from pydantic import ValidationError
 
-from ecosemantic.errors import NotFound, Unavailable
+from ecosemantic.errors import NotFound, Unavailable, field_error
 from ecosemantic.ports.types import (
     AgentSummary,
     Call,
@@ -93,11 +93,8 @@ def _parsed(file: Path) -> list[Call]:
         try:
             calls.append(Call.model_validate_json(line))
         except ValidationError as error:
-            first = error.errors(include_url=False)[0]
-            field = ".".join(str(part) for part in first["loc"])
             raise Unavailable(
-                f"{file.name} line {number} cannot be read by this version: "
-                f"{field}: {first['msg']}",
+                f"{file.name} line {number} cannot be read by this version: {field_error(error)}",
                 hint=f"remove {file} to read the activity again",
             ) from error
     return calls

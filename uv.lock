@@ -26,6 +26,7 @@ members = [
 [manifest.dependency-groups]
 dev = [
     { name = "coverage", specifier = ">=7.16" },
+    { name = "cryptography", specifier = ">=44,<51" },
     { name = "ecosemantic", extras = ["mkl"], editable = "app" },
     { name = "ecosemantic-databases", extras = ["ecoinvent"], editable = "databases" },
     { name = "opentelemetry-sdk", specifier = ">=1.44,<2" },
@@ -756,7 +757,7 @@ wheels = [
 
 [[package]]
 name = "ecosemantic"
-version = "0.1.9"
+version = "0.1.11"
 source = { editable = "app" }
 dependencies = [
     { name = "ecosemantic-core" },
@@ -802,7 +803,7 @@ provides-extras = ["mkl"]
 
 [[package]]
 name = "ecosemantic-core"
-version = "0.1.9"
+version = "0.1.11"
 source = { editable = "core" }
 dependencies = [
     { name = "asteval" },
@@ -833,7 +834,7 @@ requires-dist = [
 
 [[package]]
 name = "ecosemantic-databases"
-version = "0.1.9"
+version = "0.1.11"
 source = { editable = "databases" }
 dependencies = [
     { name = "ecosemantic-core" },
@@ -869,7 +870,7 @@ provides-extras = ["ecoinvent"]
 
 [[package]]
 name = "ecosemantic-engine"
-version = "0.1.9"
+version = "0.1.11"
 source = { editable = "engine" }
 dependencies = [
     { name = "nimblend" },
@@ -895,7 +896,7 @@ provides-extras = ["mkl"]
 
 [[package]]
 name = "ecosemantic-mcp"
-version = "0.1.9"
+version = "0.1.11"
 source = { editable = "mcp" }
 dependencies = [
     { name = "ecosemantic-core" },
@@ -920,7 +921,7 @@ requires-dist = [
 
 [[package]]
 name = "ecosemantic-view"
-version = "0.1.9"
+version = "0.1.11"
 source = { editable = "view" }
 dependencies = [
     { name = "ecosemantic-core" },

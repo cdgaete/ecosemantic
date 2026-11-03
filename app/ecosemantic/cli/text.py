@@ -28,7 +28,7 @@ def _row(label: str, value: object) -> str:
 
 def setup_text(summary: Mapping[str, object]) -> str:
     """What one install wrote — the database, its processes, datasets, flows and methods, the
-    inputs it dropped and the directory holding it — and the step that comes next."""
+    inputs it cut off and the directory holding it — and the step that comes next."""
     database = summary["database"]
     return "\n".join(
         [
@@ -37,7 +37,7 @@ def setup_text(summary: Mapping[str, object]) -> str:
             _row("datasets", summary["datasets"]),
             _row("flows", summary["flows"]),
             _row("methods", summary["methods"]),
-            _row("dropped", summary["dropped"]),
+            _row("cut off", len(cast(list[object], summary["cut_off"]))),
             _row("directory", summary["directory"]),
             f"Ask your chatbot for a model on {database}.",
         ]

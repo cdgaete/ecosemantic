@@ -8,11 +8,11 @@ from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 
-from ecosemantic.errors import Conflict, Invalid, NotFound
+from ecosemantic.errors import Conflict, Invalid
 from ecosemantic.model.canonical import content_hash
 from ecosemantic.model.entities import Actor, ProductSystem
 from ecosemantic.package.jsonld import BASE_TAG, Stated, read_jsonld, stated_base, write_jsonld
-from ecosemantic.package.log import next_entry, read_log, write_log
+from ecosemantic.package.log import next_entry, read_log, refuse_base, write_log
 from ecosemantic.package.sidecar import (
     SIDECAR_DIR,
     ActivityRecord,
@@ -23,6 +23,7 @@ from ecosemantic.package.sidecar import (
     write_sidecar,
 )
 from ecosemantic.ports.resolver import Resolver
+from ecosemantic.ports.storage import no_version
 from ecosemantic.ports.types import LogEntry, Source
 
 VERSIONS_DIR = "versions"
@@ -39,11 +40,11 @@ def _snapshot(root: Path, product_system: ProductSystem) -> None:
     )
 
 
-def read_version(root: Path, version_hash: str) -> ProductSystem:
+def read_version(root: Path, product_system_id: uuid.UUID, version_hash: str) -> ProductSystem:
     """The product system state a content hash names, as the package snapshotted it."""
     path = _versions(root) / f"{version_hash}.json"
     if not path.is_file():
-        raise NotFound(f"no version {version_hash} in {root}")
+        raise no_version(product_system_id, version_hash)
     return ProductSystem.model_validate_json(path.read_text(encoding="utf-8"))
 
 
@@ -58,19 +59,10 @@ def read_package(root: Path) -> tuple[ProductSystem, list[LogEntry]]:
 def _base(root: Path, product_system: ProductSystem) -> tuple[ProductSystem | None, list[LogEntry]]:
     """The state a write may build on; Conflict unless the write's claim matches the package."""
     if not (root / SIDECAR_DIR).is_dir():
-        if product_system.hash is not None:
-            raise Conflict(f"no package at {root}, yet the write claims base {product_system.hash}")
+        refuse_base(None, product_system)
         return None, []
     before, log = read_package(root)
-    if product_system.hash is None:
-        raise Conflict(
-            f"product system {product_system.id} is stored already, at {before.hash}; a write "
-            "that names no base adds a new system only"
-        )
-    if product_system.hash != before.hash:
-        raise Conflict(
-            f"package {root} is at {before.hash}, the write is based on {product_system.hash}"
-        )
+    refuse_base(before, product_system)
     return before, log
 
 

@@ -6,7 +6,7 @@ import uuid
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, Field, JsonValue
+from pydantic import BaseModel, Field, JsonValue, ValidationError
 
 if TYPE_CHECKING:
     from ecosemantic.model.entities import Method
@@ -22,6 +22,17 @@ class NotFound(EcoSemanticError):
 
 class Invalid(EcoSemanticError):
     """The input is well-formed but wrong for the operation."""
+
+
+def error_line(location: tuple[int | str, ...], message: str) -> str:
+    """One validation error as `field: message`, the field its location joined by dots."""
+    return f"{'.'.join(str(part) for part in location)}: {message}"
+
+
+def field_error(error: ValidationError) -> str:
+    """The first error of a validation as its `error_line`."""
+    first = error.errors(include_url=False)[0]
+    return error_line(first["loc"], first["msg"])
 
 
 class Refusal(BaseModel):

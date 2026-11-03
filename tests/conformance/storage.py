@@ -11,7 +11,9 @@ import pytest
 
 from ecosemantic.errors import Conflict, Invalid, NotFound
 from ecosemantic.model.entities import Actor, ProductSystem
+from ecosemantic.model.refs import ForegroundRef, SystemRef
 from ecosemantic.package.log import verify_chain
+from ecosemantic.ports.storage import no_product_system, no_version
 from ecosemantic.ports.types import Layout, Outcome, RequestDraft, Spot
 
 AGENT = Actor(kind="agent", id="claude")
@@ -33,10 +35,80 @@ class StorageConformance:
 
     async def test_stale_write_conflicts(self, storage, product_system: ProductSystem) -> None:
         await storage.put_product_system(product_system, AGENT, "created")
-        stale = product_system.model_copy(deep=True)
+        stored = await storage.get_product_system(product_system.id)
+        stale = product_system.model_copy(deep=True, update={"hash": "0" * 64})
         stale.parameters[1].value = 0.12
-        with pytest.raises(Conflict):
+        with pytest.raises(Conflict) as raised:
             await storage.put_product_system(stale, AGENT, "stale")
+        assert str(raised.value) == (
+            f"product system {product_system.id} is at {stored.hash}, "
+            f"the write is based on {stale.hash}"
+        )
+
+    async def test_a_write_that_claims_a_base_for_a_new_system_names_it(
+        self, storage, product_system: ProductSystem
+    ) -> None:
+        product_system.hash = "0" * 64
+        with pytest.raises(Conflict) as raised:
+            await storage.put_product_system(product_system, AGENT, "created")
+        assert str(raised.value) == (
+            f"no product system {product_system.id} is stored, "
+            f"yet the write claims base {product_system.hash}"
+        )
+
+    async def test_a_write_with_no_base_over_a_stored_system_names_the_stored_base(
+        self, storage, product_system: ProductSystem
+    ) -> None:
+        entry = await storage.put_product_system(product_system, AGENT, "created")
+        again = product_system.model_copy(deep=True, update={"hash": None})
+        with pytest.raises(Conflict) as raised:
+            await storage.put_product_system(again, AGENT, "again")
+        assert str(raised.value) == (
+            f"product system {product_system.id} is stored already, at {entry.result_hash}; "
+            "a write that names no base adds a new system only"
+        )
+
+    async def test_an_unknown_product_system_is_not_found_by_its_id(self, storage) -> None:
+        unknown = uuid.uuid4()
+        with pytest.raises(NotFound) as raised:
+            await storage.get_product_system(unknown)
+        assert str(raised.value) == str(no_product_system(unknown))
+
+    async def test_an_unknown_version_is_not_found_by_its_hash(
+        self, storage, product_system: ProductSystem
+    ) -> None:
+        await storage.put_product_system(product_system, AGENT, "created")
+        with pytest.raises(NotFound) as raised:
+            await storage.get_version(product_system.id, "f" * 64)
+        assert str(raised.value) == str(no_version(product_system.id, "f" * 64))
+
+    async def test_a_write_linking_a_system_the_store_does_not_hold_names_the_system(
+        self, storage, product_system: ProductSystem
+    ) -> None:
+        unknown = uuid.uuid4()
+        exchange = next(
+            e
+            for p in product_system.processes
+            for e in p.exchanges
+            if isinstance(e.input, ForegroundRef)
+        )
+        exchange.input = SystemRef(product_system_id=unknown, at_hash="e" * 64)
+        with pytest.raises(NotFound) as raised:
+            await storage.put_product_system(product_system, AGENT, "linking")
+        assert str(raised.value) == str(no_product_system(unknown))
+
+    async def test_a_write_linking_a_stored_system_at_a_hash_it_lacks_names_the_version(
+        self, storage, product_system: ProductSystem
+    ) -> None:
+        await storage.put_product_system(product_system, AGENT, "created")
+        linking = product_system.model_copy(deep=True, update={"id": uuid.uuid4(), "hash": None})
+        exchange = next(
+            e for p in linking.processes for e in p.exchanges if isinstance(e.input, ForegroundRef)
+        )
+        exchange.input = SystemRef(product_system_id=product_system.id, at_hash="e" * 64)
+        with pytest.raises(NotFound) as raised:
+            await storage.put_product_system(linking, AGENT, "linking")
+        assert str(raised.value) == str(no_version(product_system.id, "e" * 64))
 
     async def test_current_write_appends_and_keeps_versions(
         self, storage, product_system: ProductSystem

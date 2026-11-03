@@ -34,9 +34,9 @@ def test_write_then_read(
     assert back.hash == entry.result_hash
     assert content_hash(back) == entry.result_hash
     assert log == [entry]
-    assert read_version(tmp_path, entry.result_hash).hash == entry.result_hash
+    assert read_version(tmp_path, product_system.id, entry.result_hash).hash == entry.result_hash
     with pytest.raises(NotFound):
-        read_version(tmp_path, "0" * 64)
+        read_version(tmp_path, product_system.id, "0" * 64)
 
 
 def test_second_write_needs_the_current_hash(
@@ -54,7 +54,7 @@ def test_second_write_needs_the_current_hash(
     assert [c.field for c in second.changes] == ["value"]
     _, log = read_package(tmp_path)
     assert [e.seq for e in log] == [1, 2]
-    assert read_version(tmp_path, first.result_hash).parameters[1].value == 0.1
+    assert read_version(tmp_path, product_system.id, first.result_hash).parameters[1].value == 0.1
 
 
 def test_a_write_the_package_refuses_leaves_the_stored_state_whole(

@@ -11,8 +11,9 @@ from pathlib import Path
 
 from filelock import AsyncFileLock
 
-from ecosemantic.backends.filesystem.records import RecordFolder, newest_first
+from ecosemantic.backends.filesystem.records import RecordFolder
 from ecosemantic.backends.filesystem.run_folder import RECORD_FILE, RUNS_DIR
+from ecosemantic.ports import posted
 from ecosemantic.ports.types import Run, RunDraft, RunPatch, StoreChange, refuse_open
 
 
@@ -47,7 +48,7 @@ class FilesystemRuns:
         return await asyncio.to_thread(self.read_record, run_id)
 
     async def list_runs(self, product_system_id: uuid.UUID | None = None) -> list[Run]:
-        runs = newest_first(await asyncio.to_thread(self.records.all))
+        runs = posted.newest_first(await asyncio.to_thread(self.records.all))
         if product_system_id is None:
             return runs
         return [run for run in runs if run.product_system_id == product_system_id]

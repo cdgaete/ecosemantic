@@ -34,6 +34,7 @@ from ecosemantic.model.refs import (
     olca_product_flow_id,
     slug,
 )
+from ecosemantic.model.validation import linked_reference
 from ecosemantic.package.olca import from_olca_uncertainty, to_olca_uncertainty
 from ecosemantic.package.sidecar import (
     ExchangeIdentity,
@@ -249,9 +250,7 @@ class _Writer:
                 f"{owner} links product system {ref.product_system_id} at {ref.at_hash}, "
                 "which the write was not given"
             )
-        if linked.reference_process is None:
-            raise Invalid(f"{owner} links {linked.name}, which has no reference process")
-        target = linked.process(linked.reference_process)
+        target = linked_reference(linked, owner)
         return (
             self._flow(target, linked.name),
             _ref(o.RefType.ProductSystem, str(linked.id), linked.name),

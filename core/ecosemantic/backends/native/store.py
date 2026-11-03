@@ -324,11 +324,21 @@ class NativeStore:
         self._read()
         held = self._entries.get(name)
         if held is None:
-            owner = self._owner(name)
-            if owner is not None:
-                raise NotFound(f"{name!r} holds the elementary flows of {owner!r}; name {owner!r}")
-            raise NotFound(f"no database {name!r} under {self.directory}")
+            raise self._missing(name)
         return held
+
+    def _missing(self, name: str) -> NotFound:
+        owner = self._owner(name)
+        if owner is not None:
+            return NotFound(f"{name!r} holds the elementary flows of {owner!r}; name {owner!r}")
+        return NotFound(
+            f"no database {name!r} under {self.directory}; this store serves "
+            f"{sorted(self._entries)}"
+        )
+
+    def elementary_flows_of(self, name: str) -> str:
+        """The elementary flows database a served database names."""
+        return self.registered(name).database.elementary_flows
 
     def technosphere_of(self, name: str) -> str:
         """The served database a name addresses: itself, or the owner of the flows it names."""
@@ -342,7 +352,7 @@ class NativeStore:
             return name
         owner = self._owner(name)
         if owner is None:
-            raise NotFound(f"no database {name!r}; this store serves {sorted(self._entries)}")
+            raise self._missing(name)
         return owner
 
     def owner_of_elementary_flows(self, name: str) -> str:
@@ -386,7 +396,7 @@ class NativeStore:
             return
         self._read()
         if name not in self._entries:
-            raise NotFound(f"no database {name!r} under {self.directory}")
+            raise self._missing(name)
 
     def catalog(self, name: str) -> duckdb.DuckDBPyConnection:
         """The database's catalog, opened read-only on first use; call on the worker thread."""

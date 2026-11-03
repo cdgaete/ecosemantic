@@ -7,10 +7,12 @@ import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
 
-from ecosemantic.errors import Conflict, NotFound, NotSupported
+from ecosemantic.compute.links import pinned, pins
+from ecosemantic.errors import NotSupported
 from ecosemantic.model.entities import Actor, ProductSystem
-from ecosemantic.package.log import next_entry
+from ecosemantic.package.log import next_entry, refuse_base
 from ecosemantic.package.requests import next_request, resolve
+from ecosemantic.ports.storage import no_product_system, no_version
 from ecosemantic.ports.types import (
     Layout,
     LogEntry,
@@ -55,7 +57,7 @@ class MemoryStorage:
 
     def _held(self, product_system_id: uuid.UUID) -> ProductSystem:
         if product_system_id not in self._current:
-            raise NotFound(f"no product_system {product_system_id} in memory")
+            raise no_product_system(product_system_id)
         return self._current[product_system_id]
 
     async def list_product_systems(self) -> list[ProductSystemSummary]:
@@ -68,19 +70,19 @@ class MemoryStorage:
         return self._held(product_system_id).model_copy(deep=True)
 
     async def get_version(self, product_system_id: uuid.UUID, content_hash: str) -> ProductSystem:
-        versions = self._versions.get(product_system_id, {})
+        self._held(product_system_id)
+        versions = self._versions[product_system_id]
         if content_hash not in versions:
-            raise NotFound(f"no version {content_hash} of {product_system_id}")
+            raise no_version(product_system_id, content_hash)
         return versions[content_hash].model_copy(deep=True)
 
     async def put_product_system(
         self, product_system: ProductSystem, actor: Actor, message: str, source: Source = "mcp"
     ) -> LogEntry:
+        for ref in pins(product_system):
+            await self.get_version(ref.product_system_id, pinned(ref))
         before = self._current.get(product_system.id)
-        if (before is None and product_system.hash is not None) or (
-            before is not None and product_system.hash != before.hash
-        ):
-            raise Conflict(f"the write of {product_system.id} is based on {product_system.hash}")
+        refuse_base(before, product_system)
         log = self._logs.get(product_system.id, [])
         entry = next_entry(log, actor, source, before, product_system, message)
         stored = product_system.model_copy(deep=True, update={"hash": entry.result_hash})

@@ -37,6 +37,26 @@ def resolve_provider(default_provider: str | None, candidates: list[str]) -> tup
     return None, "no process produces it"
 
 
+def makes(e: o.Exchange, kind: o.FlowType | None) -> bool:
+    """Whether the exchange is a product output."""
+    return kind == o.FlowType.PRODUCT_FLOW and not e.is_input
+
+
+def treats(e: o.Exchange, kind: o.FlowType | None) -> bool:
+    """Whether the exchange is a waste input that is its process's quantitative reference."""
+    return kind == o.FlowType.WASTE_FLOW and bool(e.is_input) and bool(e.is_quantitative_reference)
+
+
+def takes_provider(e: o.Exchange, kind: o.FlowType | None) -> bool:
+    """Whether the exchange is a product input or a waste output that is not the reference, so
+    another process provides it."""
+    if e.is_quantitative_reference:
+        return False
+    if kind == o.FlowType.PRODUCT_FLOW:
+        return bool(e.is_input)
+    return kind == o.FlowType.WASTE_FLOW and not e.is_input
+
+
 def providers(
     processes: Iterable[o.Process], flow_types: Mapping[str, o.FlowType]
 ) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
@@ -48,19 +68,26 @@ def providers(
             if e.flow is None or e.flow.id not in flow_types:
                 continue
             kind = flow_types[e.flow.id]
-            if kind == o.FlowType.PRODUCT_FLOW and not e.is_input:
+            if makes(e, kind):
                 producers.setdefault(e.flow.id, []).append(process.id)
-            if kind == o.FlowType.WASTE_FLOW and e.is_input and e.is_quantitative_reference:
+            if treats(e, kind):
                 treaters.setdefault(e.flow.id, []).append(process.id)
     return producers, treaters
 
 
-def _takes_provider(e: o.Exchange, kind: o.FlowType | None) -> bool:
-    if e.is_quantitative_reference:
-        return False
-    if kind == o.FlowType.PRODUCT_FLOW:
-        return bool(e.is_input)
-    return kind == o.FlowType.WASTE_FLOW and not e.is_input
+def provider_of(
+    e: o.Exchange,
+    kind: o.FlowType | None,
+    producers: Mapping[str, list[str]],
+    treaters: Mapping[str, list[str]],
+) -> tuple[str | None, str]:
+    """The provider of an exchange that takes one, and the reason when none provides it: the
+    treaters of a waste or the producers of a product are the candidates."""
+    if e.flow is None:
+        raise Invalid("an exchange that takes a provider names no flow")
+    candidates = (treaters if kind == o.FlowType.WASTE_FLOW else producers).get(e.flow.id, [])
+    named = e.default_provider.id if e.default_provider is not None else None
+    return resolve_provider(named, candidates)
 
 
 def _resolved(
@@ -97,11 +124,8 @@ def _lack(
     unit = e.unit.name if e.unit is not None else None
     if unit not in groups[group]:
         return f"unit {unit} in its flow's unit group"
-    if providers and _takes_provider(e, flow.flow_type):
-        waste = flow.flow_type == o.FlowType.WASTE_FLOW
-        candidates = (treaters if waste else producers).get(flow.id, [])
-        named = e.default_provider.id if e.default_provider is not None else None
-        provider, reason = resolve_provider(named, candidates)
+    if providers and takes_provider(e, flow.flow_type):
+        provider, reason = provider_of(e, flow.flow_type, producers, treaters)
         if provider is None:
             return f"a provider: {reason}"
     return None

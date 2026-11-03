@@ -10,7 +10,7 @@ from fastmcp.exceptions import ToolError
 
 from ecosemantic.compute.parameters import materialize
 from ecosemantic.mcp import calculation
-from ecosemantic.mcp.calculation import impact_of
+from ecosemantic.mcp.calculation import MAX_ITERATIONS, ImpactMonteCarlo, impact_of
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.server import build_server
 from ecosemantic.model.canonical import base_pin
@@ -26,7 +26,7 @@ from ecosemantic.model.entities import (
     method_id,
 )
 from ecosemantic.model.refs import BackgroundRef, ForegroundRef
-from ecosemantic.ports.types import System
+from ecosemantic.ports.types import MAX_DRAWS, MonteCarloConfig, System
 from tests.fixture_data import CODES, FIXTURE_DB, FIXTURE_FINGERPRINT, GWP
 
 GWP_ID = method_id(" > ".join(GWP))
@@ -625,3 +625,18 @@ async def test_a_system_on_another_build_is_refused_with_its_remedy(
         "install the build the system names, or run rebase_database to move it onto the "
         "installed build"
     )
+
+
+def test_the_call_takes_the_run_defaults_and_caps_them_at_its_own_ceiling():
+    for name in ("n_min", "n_max", "n"):
+        run = MonteCarloConfig.model_fields[name]
+        call = ImpactMonteCarlo.model_fields[name]
+        assert call.default == run.default
+        assert call.description == run.description
+        assert {type(m).__name__: m.le for m in run.metadata if hasattr(m, "le")} == {
+            "Le": MAX_DRAWS
+        }
+        assert {type(m).__name__: m.le for m in call.metadata if hasattr(m, "le")} == {
+            "Le": MAX_ITERATIONS
+        }
+    assert MAX_ITERATIONS < MAX_DRAWS

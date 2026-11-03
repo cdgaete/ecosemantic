@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import get_args
 
 import pytest
 from pydantic import ValidationError
@@ -28,6 +29,7 @@ from ecosemantic.ports.types import (
     InstallDraft,
     InstallPatch,
     InstallProgress,
+    InstallStatus,
     InstallTerms,
     InventoryRow,
     LogEntry,
@@ -35,12 +37,15 @@ from ecosemantic.ports.types import (
     Page,
     Run,
     RunPatch,
+    RunStatus,
     SourceName,
     System,
     TreeNode,
     flow_side,
     fraction_of,
+    is_open,
     offset_cursor,
+    patched,
     source_credential,
 )
 
@@ -360,3 +365,21 @@ def test_an_install_carries_its_progress_and_the_terms_it_stopped_at() -> None:
     assert InstallProgress(step="compile").count is None
     terms = InstallTerms(licence="licence.txt", citation="cite the release")
     assert InstallPatch(terms=terms).applied_to(made).terms == terms
+
+
+def test_a_run_and_an_install_are_open_exactly_while_queued_or_running() -> None:
+    assert {s for s in get_args(RunStatus) if is_open(s)} == {"queued", "running"}
+    assert {s for s in get_args(InstallStatus) if is_open(s)} == {"queued", "running"}
+
+
+def test_a_patch_replaces_only_the_fields_it_names_a_none_included() -> None:
+    run = Run(
+        id=uuid.uuid4(),
+        product_system_id=uuid.uuid4(),
+        at_hash="0" * 64,
+        config=MonteCarloConfig(),
+        posted_at=datetime.now(UTC),
+        pid=7,
+    )
+    out = patched(run, RunPatch(status="running", pid=None))
+    assert out.status == "running" and out.pid is None and out.config == run.config

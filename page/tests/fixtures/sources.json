@@ -15,7 +15,9 @@
       "credential": null,
       "held": true,
       "name": "uslci",
-      "system_models": [],
+      "system_models": [
+        "unit process"
+      ],
       "terms": false,
       "versions": [
         "1.2026-09.0"
@@ -25,7 +27,9 @@
       "credential": "nexus",
       "held": true,
       "name": "bafu",
-      "system_models": [],
+      "system_models": [
+        "unit process"
+      ],
       "terms": true,
       "versions": [
         "2026-v1"

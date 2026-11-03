@@ -62,14 +62,23 @@ def result_key(
     )
 
 
+async def write_tables(
+    context: ServerContext, product_system_id: uuid.UUID, root: Path
+) -> tuple[Path, ProductSystem]:
+    """Write a stored product system as a table folder under the root; the folder and the system
+    as read."""
+    stored = await context.storage.get_product_system(product_system_id)
+    folder = await asyncio.to_thread(write_folder, root, stored)
+    return folder, stored
+
+
 async def export_tables(
     context: ServerContext, product_system_id: str, path: str
 ) -> Answer[WrittenPath]:
-    stored = await context.storage.get_product_system(as_uuid(product_system_id))
     root = Path(path)
     if not root.is_dir():
         raise Invalid(f"{path!r} is not a directory")
-    folder = await asyncio.to_thread(write_folder, root, stored)
+    folder, stored = await write_tables(context, as_uuid(product_system_id), root)
     return Answer[WrittenPath](value=WrittenPath(path=str(folder), hash=content_hash(stored)))
 
 

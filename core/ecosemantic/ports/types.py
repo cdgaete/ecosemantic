@@ -6,7 +6,7 @@ import re
 import uuid
 from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime
-from typing import Generic, Literal, Protocol, TypeVar, get_args
+from typing import Generic, Literal, Protocol, TypeVar, assert_never, get_args
 
 from pydantic import (
     BaseModel,
@@ -48,9 +48,11 @@ TreeKind = Literal["process", "elementary_flow", "remainder"]
 Side = Literal["input", "output"]
 Decomposition = Literal["process", "path", "flow"]
 RunStatus = Literal["queued", "running", "done", "failed", "cancelled"]
+OpenStatus = Literal["queued", "running"]
 STALE_SECONDS = 60.0
 BEAT_SECONDS = STALE_SECONDS / 4
 
+UNIT_PROCESS = "unit process"
 SourceName = Literal["openlca", "uslci", "bafu", "ecoinvent"]
 CredentialKind = Literal["ecoinvent", "nexus"]
 InstallStatus = Literal["queued", "running", "terms", "done", "failed", "cancelled"]
@@ -358,6 +360,23 @@ class InventoryRow(BaseModel):
         return flow_side(self.flow_type, self.sub_compartment)
 
 
+N_MIN = 30
+N_MAX = 200
+MAX_DRAWS = 1000
+N_MIN_HELP = (
+    "The fewest draws an adaptive run takes. It bounds the run with `n_max` and "
+    "applies only when `n` is unset."
+)
+N_MAX_HELP = (
+    "The most draws an adaptive run takes, between `n_min` and `n_max`. It applies "
+    "only when `n` is unset."
+)
+N_HELP = (
+    "The count a run takes, fixed. Unset leaves the run adaptive: it stops between "
+    "`n_min` and `n_max` once `rel_se_target` is met."
+)
+
+
 class MonteCarloConfig(BaseModel):
     """What a Monte Carlo samples. `full` samples every exchange that carries a distribution, the
     product system's own and the background database's; `biosphere_only` samples only elementary
@@ -369,36 +388,12 @@ class MonteCarloConfig(BaseModel):
     `n_max` once the relative standard error of every category's median is under
     `rel_se_target`, which takes six samples at least."""
 
-    n_min: int = Field(
-        default=30,
-        ge=1,
-        le=1000,
-        description=(
-            "The fewest draws an adaptive run takes. It bounds the run with `n_max` and "
-            "applies only when `n` is unset."
-        ),
-    )
-    n_max: int = Field(
-        default=200,
-        ge=1,
-        le=1000,
-        description=(
-            "The most draws an adaptive run takes, between `n_min` and `n_max`. It applies "
-            "only when `n` is unset."
-        ),
-    )
+    n_min: int = Field(default=N_MIN, ge=1, le=MAX_DRAWS, description=N_MIN_HELP)
+    n_max: int = Field(default=N_MAX, ge=1, le=MAX_DRAWS, description=N_MAX_HELP)
     rel_se_target: float = Field(default=0.05, gt=0.0, le=1.0)
     seed: int = 12345
     scope: Scope = "full"
-    n: int | None = Field(
-        default=None,
-        ge=1,
-        le=1000,
-        description=(
-            "The count a run takes, fixed. Unset leaves the run adaptive: it stops between "
-            "`n_min` and `n_max` once `rel_se_target` is met."
-        ),
-    )
+    n: int | None = Field(default=None, ge=1, le=MAX_DRAWS, description=N_HELP)
 
     @model_validator(mode="after")
     def _ordered(self) -> MonteCarloConfig:
@@ -514,13 +509,25 @@ class Run(BaseModel):
     @property
     def open(self) -> bool:
         """True while the run may still change: nothing else is waiting on it."""
-        return self.status in ("queued", "running")
+        return is_open(self.status)
 
     def cancellation(self) -> RunPatch:
         """The patch that asks this run to stop; Conflict once it has finished."""
         if not self.open:
             raise Conflict(f"run {self.id} cannot be cancelled after it has finished")
         return RunPatch(cancel_requested=True)
+
+
+def is_open(status: RunStatus | InstallStatus) -> bool:
+    """True while a run or an install may still change: queued or running."""
+    return status in get_args(OpenStatus)
+
+
+def patched[T: BaseModel](record: T, patch: BaseModel) -> T:
+    """The record with the fields the patch names replaced, a field named as none included,
+    and every other field as it was."""
+    named = {name: getattr(patch, name) for name in patch.model_fields_set}
+    return record.model_copy(update=named)
 
 
 def refuse_open(runs: Sequence[Run]) -> None:
@@ -546,8 +553,7 @@ class RunPatch(BaseModel):
     def applied_to(self, run: Run) -> Run:
         """The run with the fields this patch names replaced, a field named as none included,
         and every other field as it was."""
-        named = {name: getattr(self, name) for name in self.model_fields_set}
-        return run.model_copy(update=named)
+        return patched(run, self)
 
 
 class Account(BaseModel):
@@ -618,6 +624,11 @@ class InstallDraft(BaseModel):
                 )
         if self.source == "ecoinvent" and not (self.version and self.system_model):
             raise ValueError("an ecoinvent draft needs a version and a system model")
+        if self.drop_unlinked and self.source != "openlca":
+            raise ValueError(
+                f"drop_unlinked applies to an openlca install; a {self.source} install cuts off "
+                "the inputs its release lists as provided by no dataset"
+            )
         return self
 
 
@@ -643,7 +654,7 @@ class Install(BaseModel):
     @property
     def open(self) -> bool:
         """True while the install may still change: queued or running."""
-        return self.status in ("queued", "running")
+        return is_open(self.status)
 
     def cancellation(self) -> InstallPatch:
         """The patch that asks this install to stop; Conflict once it is not open."""
@@ -668,17 +679,20 @@ class InstallPatch(BaseModel):
     def applied_to(self, install: Install) -> Install:
         """The install with the fields this patch names replaced, a field named as none
         included, and every other field as it was."""
-        named = {name: getattr(self, name) for name in self.model_fields_set}
-        return install.model_copy(update=named)
+        return patched(install, self)
 
 
 def source_credential(source: SourceName) -> CredentialKind | None:
     """The credential a source's install needs, none when it needs none."""
-    if source == "ecoinvent":
-        return "ecoinvent"
-    if source == "bafu":
-        return "nexus"
-    return None
+    match source:
+        case "ecoinvent":
+            return "ecoinvent"
+        case "bafu":
+            return "nexus"
+        case "openlca" | "uslci":
+            return None
+        case _:
+            assert_never(source)
 
 
 class Spot(BaseModel):

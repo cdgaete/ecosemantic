@@ -13,7 +13,7 @@ from olca_schema.zipio import ZipReader
 from ecosemantic.errors import Invalid, NotSupported
 from ecosemantic.model import units
 from ecosemantic.package.olca import from_olca_uncertainty
-from ecosemantic.package.wholeness import providers, resolve_provider
+from ecosemantic.package.wholeness import makes, provider_of, providers, treats
 from ecosemantic.ports.types import FlowType
 
 Key = tuple[str, str]
@@ -121,7 +121,7 @@ def _distribution(process: o.Process, e: o.Exchange, flow: _Flow, factor: float)
 def exchange_refusal(e: o.Exchange, flow: o.Flow) -> str | None:
     """Why the importer cannot hold this exchange, or None. A waste flow taken in by a process
     that does not treat it as its own reference is not one the core can link to a treater."""
-    if flow.flow_type == o.FlowType.WASTE_FLOW and e.is_input and not e.is_quantitative_reference:
+    if flow.flow_type == o.FlowType.WASTE_FLOW and e.is_input and not treats(e, flow.flow_type):
         return "a waste input that is not its process's reference"
     return None
 
@@ -193,11 +193,7 @@ class _Reader:
                 if e.flow is None or e.flow.id not in self.flows or e.unit is None:
                     continue
                 kind = self.flows[e.flow.id].entity.flow_type
-                made = kind == o.FlowType.PRODUCT_FLOW and not e.is_input
-                treated = (
-                    kind == o.FlowType.WASTE_FLOW and e.is_input and e.is_quantitative_reference
-                )
-                if made or treated:
+                if makes(e, kind) or treats(e, kind):
                     declared.setdefault(e.flow.id, set()).add(e.unit.name or "")
         for flow_id, symbols in declared.items():
             flow = self.flows[flow_id]
@@ -237,10 +233,8 @@ class _Reader:
     ) -> str | None:
         """The provider of an input, and the record of the dataset's exchange when none provides
         it."""
-        waste = flow.entity.flow_type == o.FlowType.WASTE_FLOW
-        candidates = (self.treaters if waste else self.producers).get(flow.entity.id, [])
+        provider, reason = provider_of(e, flow.entity.flow_type, self.producers, self.treaters)
         named = e.default_provider.id if e.default_provider is not None else None
-        provider, reason = resolve_provider(named, candidates)
         if provider is None:
             self.unlinked.append(
                 Unlinked(
@@ -314,18 +308,8 @@ class _Reader:
         """One dataset per product of the process, or one for the waste it treats."""
         exchanges = process.exchanges or []
         flows = {e.internal_id: self.flows[_ref_id(e.flow, process.name or "")] for e in exchanges}
-        products = [
-            e
-            for e in exchanges
-            if not e.is_input and flows[e.internal_id].entity.flow_type == o.FlowType.PRODUCT_FLOW
-        ]
-        treated = [
-            e
-            for e in exchanges
-            if e.is_input
-            and e.is_quantitative_reference
-            and flows[e.internal_id].entity.flow_type == o.FlowType.WASTE_FLOW
-        ]
+        products = [e for e in exchanges if makes(e, flows[e.internal_id].entity.flow_type)]
+        treated = [e for e in exchanges if treats(e, flows[e.internal_id].entity.flow_type)]
         if not products and not treated:
             raise Invalid(f"{process.name!r} produces nothing and treats nothing")
         out: dict[Key, Dataset] = {}

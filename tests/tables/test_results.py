@@ -7,7 +7,12 @@ from pathlib import Path
 
 import yaml
 
-from ecosemantic.compute.results import ContributionResult, ImpactResult, VariantScores
+from ecosemantic.compute.results import (
+    ContributionResult,
+    ImpactResult,
+    InventoryResult,
+    VariantScores,
+)
 from ecosemantic.model.entities import Method, method_id
 from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef
 from ecosemantic.ports.types import (
@@ -254,10 +259,25 @@ def test_each_run_schema_names_the_loops_holding_a_credit(tmp_path: Path) -> Non
     schema = yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))
     assert schema["credit_loops"] == loop and schema["linked_credit_loops"] == dumped
     rows = Page[InventoryRow](items=[], has_more=False)
-    folder = write_inventory(tmp_path / "i", key(), FIXTURE_DATABASE, rows, loop, linked, [], AT)
+    result = InventoryResult(
+        database=FIXTURE_DATABASE,
+        credit_loops=loop,
+        floor=0.0,
+        dropped=0,
+        linked_credit_loops=linked,
+    )
+    folder = write_inventory(tmp_path / "i", key(), result, rows, AT)
     schema = yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))
     assert schema["credit_loops"] == loop and schema["linked_credit_loops"] == dumped
     assert schema["database"] == FIXTURE_DATABASE.model_dump(mode="json")
+
+
+def test_an_inventory_run_records_the_floor_and_the_rows_it_dropped(tmp_path: Path) -> None:
+    result = InventoryResult(database=FIXTURE_DATABASE, credit_loops=[], floor=1e-9, dropped=3)
+    rows = Page[InventoryRow](items=[], has_more=False)
+    folder = write_inventory(tmp_path, key(), result, rows, AT)
+    schema = yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))
+    assert schema["floor"] == 1e-9 and schema["dropped"] == 3
 
 
 def test_each_run_schema_names_the_exchanges_running_a_treatment_backwards(
@@ -298,7 +318,14 @@ def test_each_run_schema_names_the_exchanges_running_a_treatment_backwards(
         == named
     )
     rows = Page[InventoryRow](items=[], has_more=False)
-    folder = write_inventory(tmp_path / "i", key(), FIXTURE_DATABASE, rows, [], [], named, AT)
+    result = InventoryResult(
+        database=FIXTURE_DATABASE,
+        credit_loops=[],
+        floor=0.0,
+        dropped=0,
+        treatments_run_backwards=named,
+    )
+    folder = write_inventory(tmp_path / "i", key(), result, rows, AT)
     assert (
         yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))[
             "treatments_run_backwards"

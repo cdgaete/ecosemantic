@@ -8,6 +8,7 @@ from ecosemantic.errors import NotFound
 from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef
 from ecosemantic.package.resolver import InventoryResolver
 from ecosemantic.ports.resolver import FlowInfo, Resolver
+from tests.conformance.resolver import ResolverConformance
 from tests.conftest import CO2, COTTON
 from tests.dict_resolver import DictResolver
 from tests.fixture_data import CODES, FIXTURE_BIO, FIXTURE_DB, FLOW_IDS
@@ -91,3 +92,27 @@ def test_flow_info_carries_its_side() -> None:
         flow_type="inventory indicator",
     )
     assert info.side == "input" and info.model_dump()["side"] == "input"
+
+
+class TestDictResolver(ResolverConformance):
+    @pytest.fixture
+    def known_background(self) -> BackgroundRef:
+        return COTTON
+
+    @pytest.fixture
+    def known_flow(self) -> ElementaryFlowRef:
+        return CO2
+
+
+class TestInventoryResolver(ResolverConformance):
+    @pytest.fixture
+    def resolver(self, inventory_resolver: InventoryResolver) -> InventoryResolver:
+        return inventory_resolver
+
+    @pytest.fixture
+    def known_background(self) -> BackgroundRef:
+        return BackgroundRef(database=FIXTURE_DB, id=CODES["steel"])
+
+    @pytest.fixture
+    def known_flow(self) -> ElementaryFlowRef:
+        return ElementaryFlowRef(database=FIXTURE_BIO, id=FLOW_IDS["co2"])

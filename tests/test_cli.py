@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 import io
 import json
 import os
@@ -22,6 +23,8 @@ from ecosemantic.databases.bafu import profile as bafu_profile
 from ecosemantic.databases.bafu import setup as bafu_setup
 from ecosemantic.databases.uslci import profile as uslci_profile
 from ecosemantic.databases.uslci import setup as uslci_setup
+from ecosemantic.mcp.calculation import calculate_inventory, contribution_analysis
+from ecosemantic.mcp.context import ServerContext
 from ecosemantic.model.canonical import content_hash
 from ecosemantic.model.entities import (
     Case,
@@ -34,6 +37,7 @@ from ecosemantic.model.refs import BackgroundRef
 from ecosemantic.package.log import read_log
 from ecosemantic.package.manifest import read_manifest
 from ecosemantic.tables.folder import write_folder
+from tests.conftest import frame_system, widget_linking
 from tests.database_fixture import BASE, backgrounds, casing_system, flows
 from tests.databases.bafu.test_download import CITATION as BAFU_CITATION
 from tests.databases.bafu.test_download import INVENTORY_UUID as BAFU_INVENTORY_UUID
@@ -128,6 +132,29 @@ def test_export_of_an_unknown_id_returns_one(
     assert code == 1 and "not_found" in capsys.readouterr().err
 
 
+def test_export_into_a_directory_that_does_not_exist_is_refused_by_name(
+    fixture_system_stored: ProductSystem,
+    bundle_dir: Path,
+    systems_dir: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    code = main(
+        [
+            "export",
+            "--data-dir",
+            str(bundle_dir),
+            "--systems-dir",
+            str(systems_dir),
+            "--id",
+            str(fixture_system_stored.id),
+            "--to",
+            str(tmp_path / "missing" / "out.zip"),
+        ]
+    )
+    assert code == 1 and "does not exist" in capsys.readouterr().err
+
+
 def _setup(
     args: list[str], capsys: pytest.CaptureFixture[str], as_json: bool = True
 ) -> tuple[int, str, str]:
@@ -163,7 +190,7 @@ def test_setup_openlca_refuses_drops_conflicts_and_replaces(
     code, out, err = _setup([*base, "--drop-unlinked"], capsys)
     summary = json.loads(out)
     assert code == 0 and summary["datasets"] == 6 and summary["methods"] == 2
-    assert summary["dropped"] == 1 and summary["unlinked"][0]["flow"] == "imported part"
+    assert [row["flow"] for row in summary["cut_off"]] == ["imported part"]
     assert (served_build(Path(summary["directory"])) / "catalog.duckdb").is_file()
 
     code, out, err = _setup([*base, "--drop-unlinked"], capsys)
@@ -335,8 +362,7 @@ def test_setup_summaries_share_their_keys(
         "datasets",
         "flows",
         "methods",
-        "unlinked",
-        "dropped",
+        "cut_off",
         "directory",
         "set_apart",
     )
@@ -356,8 +382,8 @@ def test_setup_uslci_installs_the_newest_profile_and_prints_one_document(
     assert summary["datasets"] == USLCI_EXPECTED["bundle"]["datasets"]
     assert summary["methods"] == USLCI_EXPECTED["categories"]
     assert summary["processes"] == USLCI_EXPECTED["processes"]
-    assert summary["dropped"] == len(USLCI_EXPECTED["unlinked"]) == len(summary["unlinked"])
-    assert sorted(row["flow_name"] for row in summary["unlinked"]) == [
+    assert len(summary["cut_off"]) == len(USLCI_EXPECTED["unlinked"])
+    assert sorted(row["flow_name"] for row in summary["cut_off"]) == [
         "electricity",
         "electricity",
         "imported part",
@@ -447,7 +473,7 @@ def test_setup_bafu_installs_and_names_what_it_does_not_apply(
     assert code == 0, err
     assert summary["database"] == f"bafu-{BAFU_VERSION}"
     assert summary["processes"] == 2
-    assert summary["unlinked"] == [] and summary["dropped"] == 0
+    assert summary["cut_off"] == []
     assert summary["licence"] == str(tmp_path / "downloads" / f"{BAFU_INVENTORY_UUID}-licence.txt")
     assert summary["citation"] == BAFU_CITATION
     assert summary["not_applied"] == {
@@ -796,6 +822,63 @@ def test_compute_writes_the_other_two_tables_when_asked(
     assert any((Path(p) / "inventory.csv").is_file() for p in answered["written"])
 
 
+def test_compute_writes_the_contributions_and_the_inventory_the_tools_answer(
+    fixture_system_stored: ProductSystem,
+    context: ServerContext,
+    bundle_dir: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    folder = write_folder(tmp_path, fixture_system_stored)
+    argv = [
+        "compute",
+        "--data-dir",
+        str(bundle_dir),
+        "--folder",
+        str(folder),
+        "--method",
+        GWP_ID,
+        "--json",
+        "--contributions",
+        "--inventory",
+    ]
+    assert main(argv) == 0
+    written = [Path(p) for p in json.loads(capsys.readouterr().out)["written"]]
+    system_id = str(fixture_system_stored.id)
+    contributed = asyncio.run(contribution_analysis(context, system_id, method_id=GWP_ID))
+    listed = asyncio.run(calculate_inventory(context, system_id))
+    contributions = next(r for r in written if (r / "contributions.csv").is_file())
+    inventory = next(r for r in written if (r / "inventory.csv").is_file())
+    with (contributions / "contributions.csv").open(encoding="utf-8", newline="") as handle:
+        scores = [float(row["score"]) for row in csv.DictReader(handle)]
+    assert contributed.value.processes is not None
+    assert scores == pytest.approx([p.score for p in contributed.value.processes], rel=1e-12)
+    schema = yaml.safe_load((inventory / "schema.yaml").read_text(encoding="utf-8"))
+    assert schema["floor"] == listed.floor
+    assert schema["dropped"] == listed.dropped
+
+
+def test_compute_refuses_a_folder_whose_system_links_another(
+    bundle_dir: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    folder = write_folder(tmp_path, widget_linking(frame_system()))
+    argv = [
+        "compute",
+        "--data-dir",
+        str(bundle_dir),
+        "--folder",
+        str(folder),
+        "--method",
+        GWP_ID,
+        "--contributions",
+        "--inventory",
+    ]
+    assert main(argv) == 1
+    assert "which the calculation was not given" in capsys.readouterr().err
+
+
 def test_compute_names_a_positive_input_to_a_treatment_in_every_table_it_writes(
     fixture_system_stored: ProductSystem,
     bundle_dir: Path,
@@ -808,6 +891,7 @@ def test_compute_names_a_positive_input_to_a_treatment_in_every_table_it_writes(
         return frozenset({BackgroundRef(database=FIXTURE_DB, id=CODES["steel"])})
 
     monkeypatch.setattr("ecosemantic.cli.treatments_in", steel_treats)
+    monkeypatch.setattr("ecosemantic.mcp.treatments.treatments_in", steel_treats)
     folder = write_folder(tmp_path, fixture_system_stored)
     argv = [
         "compute",

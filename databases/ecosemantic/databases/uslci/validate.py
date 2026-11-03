@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import csv
 import math
-import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +28,7 @@ from ecosemantic.databases.scores import (
     relative_differences,
     score_every_dataset,
 )
+from ecosemantic.databases.stopwatch import Stopwatch
 from ecosemantic.databases.uslci import profile as releases
 from ecosemantic.databases.uslci.profile import Profile, Validated, recorded
 from ecosemantic.model import units
@@ -223,17 +223,10 @@ def validate(
     naming the dataset, the category and both scores. With no lists and no tolerance, as a profile
     ships before its first recorded run, the lists are not compared and the tolerance refuses
     nothing; what the run found is returned either way."""
-    seconds: dict[str, float] = {}
-    started = time.perf_counter()
-
-    def lap(step: str) -> None:
-        nonlocal started
-        now = time.perf_counter()
-        seconds[step] = now - started
-        started = now
+    stopwatch = Stopwatch()
 
     imported = read_background(bundle, bundle.stem, foreground=frozenset())
-    lap("read")
+    stopwatch.lap("read")
     processes = process_ids(imported)
     rows = distinct_unlinked(imported, _categories(bundle))
     built = read_left_out(built_left_out)
@@ -243,15 +236,15 @@ def validate(
         else _compared(processes, rows, built, unlinked, left_out)
     )
     mismatches = unnamed(imported) + list(compared)
-    lap("checks")
+    stopwatch.lap("checks")
     scores = score_every_dataset(imported, name=bundle.stem, compiled=compiled)
-    seconds |= scores.seconds
+    stopwatch.seconds |= scores.seconds
     scored = _independent(independent)
     converted, units_differ = _converted(scores.values, scored, scores.declared)
     largest, compared = _differences(
         converted, {key: score for key, (score, _unit) in scored.items()}, tolerance
     )
-    lap("compare")
+    stopwatch.lap("compare")
     return Validation(
         datasets=len(imported.datasets),
         categories=len(imported.methods),
@@ -259,7 +252,7 @@ def validate(
         mismatches=tuple(mismatches + units_differ + compared),
         unlinked=rows,
         left_out=built,
-        seconds=seconds,
+        seconds=stopwatch.seconds,
     )
 
 

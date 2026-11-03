@@ -12,10 +12,10 @@ from typing import Literal, cast
 
 import duckdb
 
-from ecosemantic.backends.native.terms import tokens
 from ecosemantic.errors import NotSupported
 from ecosemantic.model.entities import ExchangeType, Method
 from ecosemantic.package.background import Dataset, Import, Unlinked
+from ecosemantic.ports.terms import tokens
 from ecosemantic.ports.types import FLOW_TYPES, Side
 
 Kind = Literal["process", "flow", "method"]

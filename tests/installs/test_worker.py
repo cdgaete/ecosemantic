@@ -74,7 +74,7 @@ async def test_an_install_carried_to_done_writes_its_summary_and_beats(tmp_path:
     assert (install_dir(data, posted.id) / HEARTBEAT_FILE).is_file()
 
 
-async def test_a_finished_install_counts_its_unlinked_inputs_and_keeps_their_rows_beside_the_record(
+async def test_a_finished_install_counts_its_cut_off_inputs_and_keeps_their_rows_beside_the_record(
     tmp_path: Path,
 ) -> None:
     data = tmp_path / "data"
@@ -86,15 +86,15 @@ async def test_a_finished_install_counts_its_unlinked_inputs_and_keeps_their_row
 
     record = installs.read_record(posted.id)
     assert record.summary is not None
-    assert record.summary["unlinked"] == 1
-    path = install_dir(data, posted.id) / "unlinked.json"
-    assert record.summary["unlinked_file"] == str(path)
+    assert record.summary["cut_off"] == 1
+    path = install_dir(data, posted.id) / "cut_off.json"
+    assert record.summary["cut_off_file"] == str(path)
     rows = json.loads(path.read_text(encoding="utf-8"))
     assert isinstance(rows, list) and len(rows) == 1
     assert rows[0]["process"] == "widget production"
 
 
-async def test_an_install_with_no_unlinked_inputs_counts_none_and_keeps_an_empty_file(
+async def test_an_install_that_cuts_off_nothing_counts_none_and_keeps_an_empty_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     data = tmp_path / "data"
@@ -103,7 +103,7 @@ async def test_an_install_with_no_unlinked_inputs_counts_none_and_keeps_an_empty
     posted = await installs.post_install(_openlca(build_package(tmp_path / "fixture.zip")))
 
     def install_source(*_args: object, **_kwargs: object) -> dict[str, JsonValue]:
-        return {"database": NAME, "unlinked": []}
+        return {"database": NAME, "cut_off": []}
 
     monkeypatch.setattr(worker, "install_source", install_source)
 
@@ -111,9 +111,9 @@ async def test_an_install_with_no_unlinked_inputs_counts_none_and_keeps_an_empty
 
     record = installs.read_record(posted.id)
     assert record.status == "done" and record.summary is not None
-    assert record.summary["unlinked"] == 0
-    path = install_dir(data, posted.id) / "unlinked.json"
-    assert record.summary["unlinked_file"] == str(path)
+    assert record.summary["cut_off"] == 0
+    path = install_dir(data, posted.id) / "cut_off.json"
+    assert record.summary["cut_off_file"] == str(path)
     assert json.loads(path.read_text(encoding="utf-8")) == []
 
 

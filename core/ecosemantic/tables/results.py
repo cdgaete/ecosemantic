@@ -9,10 +9,10 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field
 
-from ecosemantic.compute.results import ContributionResult, ImpactResult
+from ecosemantic.compute.results import ContributionResult, ImpactResult, InventoryResult
 from ecosemantic.model.entities import DemandItem
-from ecosemantic.model.refs import Database, slug
-from ecosemantic.ports.types import InventoryRow, LinkedLoop, MonteCarloResult, Page, TreeNode
+from ecosemantic.model.refs import slug
+from ecosemantic.ports.types import InventoryRow, MonteCarloResult, Page, TreeNode
 from ecosemantic.tables.folder import FORMAT, SCHEMA_FILE, number, write_csv
 
 RESULTS_DIR = "results"
@@ -273,28 +273,30 @@ def write_contribution(
 def write_inventory(
     root: Path,
     key: ResultKey,
-    database: Database,
+    result: InventoryResult,
     page: Page[InventoryRow],
-    credit_loops: list[list[str]],
-    linked_credit_loops: list[LinkedLoop],
-    treatments_run_backwards: list[str],
     at: datetime,
 ) -> Path:
     """The inventory page the request asked for; its cursor is in the schema, so nothing is lost,
-    beside the loops holding a credit, in the system and inside the systems it links, and the
-    exchanges running a treatment backwards."""
+    beside the loops holding a credit, in the system and inside the systems it links, the
+    exchanges running a treatment backwards, and the floor with the count of amounts it set
+    aside."""
     folder = _open(
         root,
         key,
         at,
         "inventory",
         {
-            "database": database.model_dump(mode="json"),
+            "database": result.database.model_dump(mode="json"),
             "has_more": page.has_more,
             "next_cursor": page.next_cursor,
-            "credit_loops": credit_loops,
-            "linked_credit_loops": [loop.model_dump(mode="json") for loop in linked_credit_loops],
-            "treatments_run_backwards": treatments_run_backwards,
+            "floor": result.floor,
+            "dropped": result.dropped,
+            "credit_loops": result.credit_loops,
+            "linked_credit_loops": [
+                loop.model_dump(mode="json") for loop in result.linked_credit_loops
+            ],
+            "treatments_run_backwards": result.treatments_run_backwards,
         },
     )
     write_csv(

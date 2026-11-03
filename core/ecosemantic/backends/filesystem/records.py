@@ -6,44 +6,20 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterable
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Protocol, cast
+from typing import cast
 
 from filelock import AsyncFileLock, FileLock
 from pydantic import BaseModel, ValidationError
 
 from ecosemantic.backends.filesystem.watching import touched
 from ecosemantic.backends.retry import read_bytes, replace
-from ecosemantic.errors import NotFound, Unavailable
+from ecosemantic.errors import NotFound, Unavailable, field_error
+from ecosemantic.ports import posted
 
 SLOT_FILE = "slot.lock"
 POST_LOCK = "post.lock"
-
-
-class Posted(Protocol):
-    """What a record carries for a listing: its id, and the time it was posted."""
-
-    id: uuid.UUID
-    posted_at: datetime
-
-
-def newest_first[T: Posted](records: Iterable[T]) -> list[T]:
-    """Records newest first, the id breaking a tie between two posted at once."""
-    return sorted(records, key=lambda record: (record.posted_at, str(record.id)), reverse=True)
-
-
-def now() -> datetime:
-    """The current instant in UTC, the clock a record's posted time is measured from."""
-    return datetime.now(UTC)
-
-
-def next_posted_at(now: datetime, newest: datetime | None) -> datetime:
-    """A new record's posted time, newest-first independent of the clock's resolution: the
-    clock, or one microsecond past the store's newest when the clock would tie two."""
-    if newest is None:
-        return now
-    return max(now, newest + timedelta(microseconds=1))
 
 
 class RecordFolder[T: BaseModel]:
@@ -103,14 +79,14 @@ class RecordFolder[T: BaseModel]:
         stored so two posters cannot mint the same instant."""
         with self.post_lock():
             record = construct(self._next_posted_at())
-            return self.write(cast(Posted, record).id, record)
+            return self.write(cast(posted.Posted, record).id, record)
 
     def _next_posted_at(self) -> datetime:
         """The posted time of the next record of this kind: the clock, advanced past the newest."""
         newest = max(
-            (record.posted_at for record in cast(Iterable[Posted], self.all())), default=None
+            (record.posted_at for record in cast(Iterable[posted.Posted], self.all())), default=None
         )
-        return next_posted_at(now(), newest)
+        return posted.next_posted_at(posted.now(), newest)
 
     def all(self) -> list[T]:
         """Every record of this kind."""
@@ -174,10 +150,8 @@ class RecordFolder[T: BaseModel]:
         try:
             return self.model.model_validate_json(read_bytes(record))
         except ValidationError as error:
-            first = error.errors(include_url=False)[0]
-            field = ".".join(str(part) for part in first["loc"])
+            reason = field_error(error)
             raise Unavailable(
-                f"{self.noun} {record.parent.name} cannot be read by this version: "
-                f"{field}: {first['msg']}",
+                f"{self.noun} {record.parent.name} cannot be read by this version: {reason}",
                 hint=f"remove {record.parent} to list and start {self.noun}s again",
             ) from error

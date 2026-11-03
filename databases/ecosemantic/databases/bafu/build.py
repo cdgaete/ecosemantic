@@ -6,6 +6,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from ecosemantic.databases.bafu.profile import database_name
 from ecosemantic.databases.zolca.export.write import NotCarried, export
 from ecosemantic.errors import Conflict
 from ecosemantic.package.background import read_background
@@ -26,14 +27,14 @@ def build(zolca: Path, *, version: str, out_dir: Path) -> Built:
     package is exported to a staging file beside the destination and moved into place only once the
     core reads it, so a bundle the core refuses leaves nothing under the final name; a destination
     that exists is `Conflict`."""
-    destination = out_dir / f"bafu-{version}.zip"
+    destination = out_dir / f"{database_name(version)}.zip"
     staging = out_dir / f".bafu-{version}.staging.zip"
     if destination.exists():
         raise Conflict(f"{destination.name} exists; name another destination")
     out_dir.mkdir(parents=True, exist_ok=True)
     written = export(zolca, staging)
     try:
-        read_background(written.bundle, f"bafu-{version}", foreground=frozenset())
+        read_background(written.bundle, database_name(version), foreground=frozenset())
         os.replace(staging, destination)
     finally:
         staging.unlink(missing_ok=True)

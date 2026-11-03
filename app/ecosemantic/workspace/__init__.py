@@ -28,8 +28,8 @@ from ecosemantic.mcp.calculation import (
 )
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.discovery import (
-    Kind,
     Term,
+    VocabularyKind,
     get_background_process,
     get_elementary_flow,
     list_databases,
@@ -371,7 +371,7 @@ class Database:
         """The `get_elementary_flow` tool."""
         return self.workspace.call(get_elementary_flow, database=self.name, flow_id=flow_id)
 
-    def list_vocabulary(self, kind: Kind) -> Answer[list[Term]]:
+    def list_vocabulary(self, kind: VocabularyKind) -> Answer[list[Term]]:
         """The `list_vocabulary` tool."""
         return self.workspace.call(list_vocabulary, database=self.name, kind=kind)
 
@@ -443,6 +443,7 @@ class ProductSystem:
         self,
         placements: list[CardSpot],
         release: list[str] | None = None,
+        release_all: bool = False,
         variant: str | None = None,
     ) -> Answer[Arrangement]:
         """The `arrange_graph` tool."""
@@ -451,6 +452,7 @@ class ProductSystem:
             product_system_id=str(self.id),
             placements=placements,
             release=release,
+            release_all=release_all,
             variant=variant,
         )
 

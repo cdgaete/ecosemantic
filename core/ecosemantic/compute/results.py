@@ -71,6 +71,20 @@ class ImpactResult(BaseModel):
         return Summary(scores=[score.summary_score() for score in self.scores])
 
 
+class InventoryResult(BaseModel):
+    """What an inventory carries beside its rows: the database build `database` names, the
+    processes of each loop holding a credit, whose delivery no check decides, each exchange
+    sending a positive amount to a treatment, which runs it backwards, and the amounts set aside
+    as float64 residue: those at or below `floor`, which `dropped` counts."""
+
+    database: Database
+    credit_loops: list[list[str]]
+    floor: float
+    dropped: int
+    linked_credit_loops: list[LinkedLoop] = Field(default_factory=list)
+    treatments_run_backwards: list[str] = Field(default_factory=list)
+
+
 class ContributionResult(BaseModel):
     """One decomposition of a total over the database build `database` names: flat over
     emitters, nested over paths, or flat over flows, with the processes of each loop holding a

@@ -30,6 +30,7 @@ METADATA_KEYS = ("life_cycle_stage", "hierarchy_level", "supply_chain_tier")
 ExchangeType = Literal["production", "product", "elementary"]
 UncertaintyType = Literal["lognormal", "normal", "uniform", "triangular"]
 Scope = Literal["full", "biosphere_only"]
+ActorKind = Literal["agent", "person", "service"]
 DISTRIBUTION_IDS: dict[UncertaintyType, int] = {
     "lognormal": 2,
     "normal": 3,
@@ -350,7 +351,7 @@ class Actor(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    kind: Literal["agent", "person", "service"]
+    kind: ActorKind
     id: str | None = None
     name: str | None = None
 

@@ -12,7 +12,7 @@ from pydantic import JsonValue, ValidationError
 from ecosemantic.compute.links import pins
 from ecosemantic.compute.overrides import apply_scenario
 from ecosemantic.compute.parameters import materialize
-from ecosemantic.errors import Conflict, Invalid
+from ecosemantic.errors import Conflict, Invalid, error_line
 from ecosemantic.model.canonical import base_pin
 from ecosemantic.model.entities import (
     Case,
@@ -34,6 +34,7 @@ from ecosemantic.model.refs import (
     ForegroundRef,
     SystemRef,
 )
+from ecosemantic.model.validation import linked_reference
 
 ProcessClearable = Literal["comment"]
 ExchangeClearable = Literal["formula", "comment", "uncertainty"]
@@ -41,8 +42,7 @@ ExchangeClearable = Literal["formula", "comment", "uncertainty"]
 
 def invalid(error: ValidationError) -> Invalid:
     """The model's validation failure as the typed error a tool renders."""
-    detail = "; ".join(f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in error.errors())
-    return Invalid(detail)
+    return Invalid("; ".join(error_line(e["loc"], e["msg"]) for e in error.errors()))
 
 
 def new_product_system(
@@ -280,13 +280,9 @@ def _link(
         raise Invalid("a link needs the linked system as it stood at the pin")
     if linked.database.name != system.database.name:
         raise Invalid(f"{linked.name} is on {linked.database.name!r}, not {system.database.name!r}")
-    if linked.reference_process is None:
-        raise Invalid(
-            f"{linked.name} has no reference process to link; set one with update_product_system"
-        )
+    target = linked_reference(linked, system.name)
     if ref.case is not None:
         linked.case(ref.case)
-    target = linked.process(linked.reference_process)
     return (
         same_unit(unit, target.unit, linked.name),
         name if name is not None else target.reference_product,

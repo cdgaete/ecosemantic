@@ -10,7 +10,8 @@ from pathlib import Path
 
 from filelock import AsyncFileLock
 
-from ecosemantic.backends.filesystem.records import RecordFolder, newest_first
+from ecosemantic.backends.filesystem.records import RecordFolder
+from ecosemantic.ports import posted
 from ecosemantic.ports.types import Install, InstallDraft, InstallPatch
 
 INSTALLS_DIR = "installs"
@@ -59,7 +60,7 @@ class FilesystemInstalls:
         return await asyncio.to_thread(self.read_record, install_id)
 
     async def list_installs(self) -> list[Install]:
-        return newest_first(await asyncio.to_thread(self.records.all))
+        return posted.newest_first(await asyncio.to_thread(self.records.all))
 
     async def cancel_install(self, install_id: uuid.UUID) -> Install:
         def ask() -> Install:

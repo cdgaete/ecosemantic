@@ -8,7 +8,7 @@ from pathlib import Path
 
 from ecosemantic.databases.ecoinvent.build import build
 from ecosemantic.databases.ecoinvent.download import ReleaseClient, download
-from ecosemantic.databases.ecoinvent.profile import Profile
+from ecosemantic.databases.ecoinvent.profile import Profile, database_name
 from ecosemantic.databases.ecoinvent.release import SystemModel
 from ecosemantic.databases.ecoinvent.validate import TOLERANCE, Validation, validate
 from ecosemantic.errors import Invalid
@@ -80,6 +80,6 @@ def prepare(
     if validation.mismatches:
         raise Invalid(_difference(validation))
     report(InstallProgress(step="reading"))
-    name = f"ecoinvent-{version}-{system_model}"
+    name = database_name(version, system_model)
     imported = read_background(built.bundle, name, foreground=frozenset())
     return Prepared(bundle=built.bundle, imported=imported, name=name, validation=validation)

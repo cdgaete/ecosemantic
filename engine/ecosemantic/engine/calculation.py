@@ -16,7 +16,7 @@ from ecosemantic.engine.foreground import Foreground
 from ecosemantic.engine.loops import Loops, loops_of
 from ecosemantic.engine.paths import PathTree, Walked, walk
 from ecosemantic.engine.solver import Solver, SolverName
-from ecosemantic.errors import Invalid, NotFound
+from ecosemantic.errors import Invalid
 from ecosemantic.model.entities import DemandItem, Method, ProductSystem
 from ecosemantic.model.refs import ForegroundRef
 
@@ -141,13 +141,7 @@ class Calculation:
                 continue
             if item.ref.database != background.database.name:
                 raise Invalid(f"the demand names database {item.ref.database!r}")
-            at = background.position("activity", item.ref.id)
-            if at is None:
-                raise NotFound(
-                    f"the demand names background dataset {item.ref.id!r}, "
-                    f"which {background.database.name!r} does not hold"
-                )
-            d_bg[at] += item.amount
+            d_bg[background.dataset_at(item.ref.id, "the demand")] += item.amount
         return d_fg, d_bg
 
     def _process_coord(self, foreground: Foreground | None) -> nb.StoredCoord:

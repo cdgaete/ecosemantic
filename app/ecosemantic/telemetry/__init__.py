@@ -21,7 +21,6 @@ from pathlib import Path
 from types import FrameType
 from typing import Literal, TextIO
 
-import truststore
 from opentelemetry.exporter.otlp.proto.common.metrics_encoder import encode_metrics
 from opentelemetry.sdk.metrics import AlwaysOffExemplarFilter, Counter, MeterProvider
 from opentelemetry.sdk.metrics.export import (
@@ -180,11 +179,13 @@ def status(environ: Mapping[str, str], data_dir: Path) -> dict[str, object]:
 
 
 class Exporter(MetricExporter):
-    """Posts OTLP protobuf to one endpoint, checking the collector's certificate with the
-    operating system's verifier and taking nothing from the environment; a post that fails is
-    logged at INFO and drops the batch."""
+    """Posts OTLP protobuf to one endpoint, verifying the collector's certificate with the
+    operating system's store and going through the proxy a variable names. A post that fails is
+    logged at INFO under `opentelemetry`, which a server sets to WARNING, so nothing is written."""
 
     def __init__(self, endpoint: str) -> None:
+        import truststore
+
         super().__init__(preferred_temporality={Counter: AggregationTemporality.DELTA})
         if not endpoint.startswith(("http://", "https://")):
             raise Invalid(f"{ENDPOINT_VARIABLE} {endpoint!r} is not an http or https address")

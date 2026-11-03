@@ -31,6 +31,7 @@ from ecosemantic.mcp.effects import READ
 from ecosemantic.mcp.envelopes import Answer, ArgumentRefusal, boundary
 from ecosemantic.mcp.recording import Recorder
 from ecosemantic.ports.graph import GraphQueryPort
+from ecosemantic.ports.types import MAX_DRAWS
 
 INSTRUCTIONS = (
     "Life cycle assessment over background databases installed on this machine from database "
@@ -63,8 +64,9 @@ INSTRUCTIONS = (
     "a formula. validate_product_system until it reports valid.\n"
     "\n"
     "Calculate. calculate_impact takes a method_id from search_methods or an impact_method "
-    "family from list_vocabulary, and runs at most 200 draws in the call; "
-    "start_monte_carlo runs up to 1000 outside it. A product system's hash is the content "
+    "family from list_vocabulary, and runs at most "
+    f"{calculation.MAX_ITERATIONS} draws in the call; "
+    f"start_monte_carlo runs up to {MAX_DRAWS} outside it. A product system's hash is the content "
     "hash, over its processes, exchanges, parameters, cases, reference process and database "
     "build; its name, description, scenarios and layout are in no hash, so two empty systems "
     "of different names share one. create_scenario pins a what-if to the base hash, the same "

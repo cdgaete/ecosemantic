@@ -13,6 +13,7 @@ from typing import cast
 import olca_schema as o
 
 from ecosemantic.databases.lists import LeftOut, LeftOutRow, write_left_out
+from ecosemantic.databases.uslci.profile import database_name
 from ecosemantic.errors import Conflict, Invalid, NotSupported
 from ecosemantic.model import units
 from ecosemantic.package.background import exchange_refusal, read_background
@@ -417,7 +418,7 @@ def build(
     unlinked inputs. A record two method packages both hold is the one of the package later in the
     sequence, the profile's newest last; a record the release and a bridged repository both hold is
     the release's."""
-    destination = out_dir / f"uslci-{version}.zip"
+    destination = out_dir / f"{database_name(version)}.zip"
     if destination.exists():
         raise Conflict(f"{destination.name} exists; name another destination")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -534,7 +535,7 @@ def build(
             for name, content in written.items():
                 archive.writestr(name, content)
         require_whole(staged, providers=False)
-        read_background(staged, f"uslci-{version}", foreground=frozenset())
+        read_background(staged, database_name(version), foreground=frozenset())
         os.replace(staged, destination)
     finally:
         staged.unlink(missing_ok=True)

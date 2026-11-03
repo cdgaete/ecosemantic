@@ -31,12 +31,14 @@ from ecosemantic.ports.types import (
     StoreChange,
 )
 
+EventKind = Literal["entry", "request", "resolution", "deleted", "layout", "run", "install", "call"]
+
 
 class Event(BaseModel):
     """One thing that happened: to a product system, an install, or a tool call that names
     neither."""
 
-    kind: Literal["entry", "request", "resolution", "deleted", "layout", "run", "install", "call"]
+    kind: EventKind
     product_system_id: uuid.UUID | None = None
     entry: LogEntry | None = None
     request: Request | None = None

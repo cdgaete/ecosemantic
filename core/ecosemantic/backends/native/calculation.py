@@ -213,7 +213,7 @@ class NativeCalculation:
             ranked = sorted(np.flatnonzero(scores), key=lambda row: -abs(scores[row]))[:top_n]
             labels = calculation.background.coords["flow"].labels
             flows = self._flows(system.database, (str(labels[row]) for row in ranked))
-            elementary_flows = self.store.registered(system.database).database.elementary_flows
+            elementary_flows = self.store.elementary_flows_of(system.database)
             items = []
             for rank, row in enumerate(ranked, start=1):
                 flow = flows[str(labels[row])]
@@ -259,7 +259,7 @@ class NativeCalculation:
             flows = self._flows(
                 system.database, (n.label for n in nodes if n.kind == "flow" and n.label)
             )
-            elementary_flows = self.store.registered(system.database).database.elementary_flows
+            elementary_flows = self.store.elementary_flows_of(system.database)
 
             def described(node: PathNode) -> tuple[TreeKind, TreeRef | None, str, str | None]:
                 if node.kind == "remainder" or node.label is None:
@@ -309,7 +309,7 @@ class NativeCalculation:
                 if foreground is not None
                 else {}
             )
-            elementary_flows = self.store.registered(system.database).database.elementary_flows
+            elementary_flows = self.store.elementary_flows_of(system.database)
             rows = []
             for row in nonzero:
                 label = str(labels[row])

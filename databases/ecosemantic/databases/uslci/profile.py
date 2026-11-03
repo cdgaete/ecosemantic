@@ -58,6 +58,16 @@ def versions() -> tuple[str, ...]:
     return profiles.versions(RELEASES)
 
 
+def chosen(version: str | None) -> str:
+    """The release an install takes: the one it names, or the newest a profile pins."""
+    return version or versions()[0]
+
+
+def database_name(version: str) -> str:
+    """The name a USLCI release installs under."""
+    return f"uslci-{version}"
+
+
 def recorded(name: str) -> Path | None:
     """The list file a profile names, or nothing when the release has not recorded it yet."""
     return profiles.recorded(RELEASES, name)

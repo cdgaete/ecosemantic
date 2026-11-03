@@ -23,7 +23,7 @@ from ecosemantic.model.refs import (
     LinkedProcessRef,
     SystemRef,
 )
-from ecosemantic.model.validation import Loop, loops, undelivered
+from ecosemantic.model.validation import Loop, linked_reference, loops, undelivered
 
 Block = Literal["own", "uses", "direct"]
 
@@ -179,9 +179,8 @@ class Foreground:
                 f"{owner} links {other.name} at {ref.at_hash}; "
                 f"the calculation was given {other.hash}"
             )
-        if other.reference_process is None:
-            raise Invalid(f"{owner} links {other.name}, which has no reference process")
-        return self.index_of[(other.id, other.reference_process)]
+        reference = linked_reference(other, owner)
+        return self.index_of[(other.id, reference.code)]
 
     def _build(self, linked: Mapping[uuid.UUID, ProductSystem]) -> None:
         background = self.background
@@ -236,22 +235,11 @@ class Foreground:
         if isinstance(ref, BackgroundRef):
             if ref.database != background.database.name:
                 raise Invalid(f"{code} references database {ref.database!r}")
-            at = background.position("activity", ref.id)
-            if at is None:
-                raise NotFound(
-                    f"{code} names background dataset {ref.id!r}, "
-                    f"which {ref.database!r} does not hold"
-                )
-            return "uses", at
+            return "uses", background.dataset_at(ref.id, code)
         if isinstance(ref, ElementaryFlowRef):
             if ref.database != background.database.elementary_flows:
                 raise Invalid(f"{code} references elementary flows {ref.database!r}")
-            at = background.position("flow", ref.id)
-            if at is None:
-                raise NotFound(
-                    f"{code} names elementary flow {ref.id!r}, which {ref.database!r} does not hold"
-                )
-            return "direct", at
+            return "direct", background.flow_at(ref.id, code)
         raise Invalid(f"{code} has an exchange with no input")
 
     def label(self, j: int) -> str:

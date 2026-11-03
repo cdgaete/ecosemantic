@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from ecosemantic.errors import NotFound
 from ecosemantic.model.entities import Actor, ProductSystem
 from ecosemantic.ports.types import (
     Layout,
@@ -19,6 +20,16 @@ from ecosemantic.ports.types import (
     Source,
     StoreChange,
 )
+
+
+def no_product_system(product_system_id: uuid.UUID) -> NotFound:
+    """The miss every store raises for a product system it does not hold."""
+    return NotFound(f"no product system {product_system_id}")
+
+
+def no_version(product_system_id: uuid.UUID, content_hash: str) -> NotFound:
+    """The miss every store raises for a version it does not hold."""
+    return NotFound(f"no version {content_hash} of product system {product_system_id}")
 
 
 @runtime_checkable

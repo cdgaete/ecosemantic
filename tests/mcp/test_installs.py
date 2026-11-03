@@ -142,6 +142,39 @@ async def test_a_second_install_while_one_is_open_is_a_conflict_naming_it(held: 
     assert len(launcher.started) == 1
 
 
+async def test_a_served_database_is_refused_before_anything_starts_unless_replaced(
+    held: Held,
+) -> None:
+    over, installs, launcher = held
+    served = (await over.inventory.list_databases())[0].name
+    launcher.names["ecoinvent"] = served
+    draft = {"source": "ecoinvent", "version": "3.11", "system_model": "cutoff"}
+    async with Client(build_server(over)) as client:
+        with pytest.raises(ToolError) as caught:
+            await client.call_tool("install_database", draft)
+        refused = json.loads(str(caught.value))
+        assert await installs.list_installs() == [] and launcher.started == []
+        replaced = value(await client.call_tool("install_database", {**draft, "replace": True}))
+    assert refused["error"] == "conflict"
+    assert refused["message"] == (
+        f"database {served!r} is installed; pass replace to install it again"
+    )
+    assert replaced["draft"]["replace"] is True and len(launcher.started) == 1
+
+
+async def test_drop_unlinked_is_refused_for_a_source_that_cuts_off_what_its_release_lists(
+    held: Held,
+) -> None:
+    over, installs, launcher = held
+    async with Client(build_server(over)) as client:
+        with pytest.raises(ToolError) as caught:
+            await client.call_tool("install_database", {"source": "uslci", "drop_unlinked": True})
+    refused = json.loads(str(caught.value))
+    assert refused["error"] == "invalid"
+    assert "drop_unlinked applies to an openlca install" in refused["message"]
+    assert await installs.list_installs() == [] and launcher.started == []
+
+
 async def test_list_sources_says_which_accounts_are_held_and_never_answers_one(held: Held) -> None:
     over, _installs, _launcher = held
     async with Client(build_server(over)) as client:

@@ -101,6 +101,21 @@ def test_every_exchange_keeps_its_distribution() -> None:
     assert background.biosphere.to_dense().tolist() == [[1.5]]
 
 
+def test_a_label_the_background_does_not_hold_is_not_found_naming_who_asked() -> None:
+    background = small(["mill", "energy"], ["mill", "energy"], [1.0, 1.0], [False, False])
+    assert background.dataset_at("mill", "widget") == background.position("activity", "mill")
+    with pytest.raises(NotFound) as dataset:
+        background.dataset_at("kiln", "widget")
+    assert str(dataset.value) == (
+        "widget names background dataset 'kiln', which 'small' does not hold"
+    )
+    with pytest.raises(NotFound) as flow:
+        background.flow_at("radon", "the demand")
+    assert str(flow.value) == (
+        "the demand names elementary flow 'radon', which 'small-biosphere' does not hold"
+    )
+
+
 def test_a_method_the_background_lacks_is_not_found() -> None:
     background = small(["mill", "energy"], ["mill", "energy"], [1.0, 1.0], [False, False])
     other = Method.of(("small", "water", "water use > m3"), "m3")

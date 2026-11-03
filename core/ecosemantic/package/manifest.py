@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ValidationError
 
-from ecosemantic.errors import Invalid
+from ecosemantic.errors import Invalid, field_error
 
 Mode = Literal["working", "release"]
 SCHEMA_VERSION = 1
@@ -87,9 +87,7 @@ def read_manifest(bundle: Path) -> Manifest:
     try:
         manifest = Manifest.model_validate_json(raw)
     except ValidationError as error:
-        first = error.errors(include_url=False)[0]
-        field = ".".join(str(part) for part in first["loc"])
-        raise Invalid(f"{bundle.name} manifest: {field}: {first['msg']}") from error
+        raise Invalid(f"{bundle.name} manifest: {field_error(error)}") from error
     if manifest.schema_version != SCHEMA_VERSION:
         raise Invalid(
             f"{bundle.name} manifest names schema_version {manifest.schema_version}; "

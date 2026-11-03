@@ -22,6 +22,7 @@ from ecosemantic.runs.supervisor import (
     LocalLauncher,
     start_detached,
 )
+from tests.conformance.launchers import RunLauncherConformance
 
 
 class Started:
@@ -152,3 +153,9 @@ async def test_the_local_launcher_spawns_a_worker_that_finishes_the_run(
     assert run.status == "done" and run.result is not None
     assert (tmp_path / "runs" / str(posted.id) / "worker.log").is_file()
     assert (tmp_path / "runs" / str(posted.id) / HEARTBEAT_FILE).is_file()
+
+
+class TestLocalLauncher(RunLauncherConformance):
+    @pytest.fixture
+    def launcher(self, tmp_path: Path) -> LocalLauncher:
+        return LocalLauncher(tmp_path, tmp_path, tmp_path, "superlu")

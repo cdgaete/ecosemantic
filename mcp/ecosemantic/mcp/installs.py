@@ -6,9 +6,10 @@ from __future__ import annotations
 import asyncio
 
 from fastmcp import FastMCP
+from pydantic import ValidationError
 
 from ecosemantic.compute.accounts import missing
-from ecosemantic.errors import Conflict, Unavailable
+from ecosemantic.errors import Conflict, Invalid, Unavailable
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import READ, WRITE
 from ecosemantic.mcp.envelopes import Answer, as_uuid, bound, boundary
@@ -63,7 +64,10 @@ async def install_database(
 ) -> Answer[Install]:
     """Post an install from a source and start the process that carries it, apart from this
     server so a restart does not stop it. list_installs and get_install follow it, cancel_install
-    asks it to stop. One install at a time: a second is refused while one is open."""
+    asks it to stop. One install at a time: a second is refused while one is open, and a database
+    this server serves is refused before anything is downloaded unless replace is passed. An
+    install cuts off the inputs no dataset provides, and its summary's cut_off names them: a
+    release cuts off what its profile lists, an openlca package only with drop_unlinked."""
     needed = source_credential(source)
     account = context.credentials.get(needed) if needed is not None else None
     if needed is not None and account is None:
@@ -71,24 +75,31 @@ async def install_database(
             f"{source} installs from an account this server does not hold",
             hint=f"{missing(needed)}: {context.page_at('/databases')}",
         )
+    try:
+        draft = InstallDraft(
+            source=source,
+            actor=context.acting(),
+            version=version,
+            system_model=system_model,
+            replace=replace,
+            accept_terms=accept_terms,
+            package=package,
+            name=name,
+            drop_unlinked=drop_unlinked,
+        )
+    except ValidationError as exc:
+        said = [str(error["msg"]).removeprefix("Value error, ") for error in exc.errors()]
+        raise Invalid("; ".join(said)) from exc
+    if not replace:
+        database = context.installer.database(draft)
+        if database in {served.name for served in await context.inventory.list_databases()}:
+            raise Conflict(f"database {database!r} is installed; pass replace to install it again")
     async with context.installs.slot():
         for existing in await context.installs.list_installs():
             settled = await reap_install(context.installs, context.installer, existing)
             if settled.open:
                 raise Conflict(f"install {settled.id} is still {settled.status}")
-        posted = await context.installs.post_install(
-            InstallDraft(
-                source=source,
-                actor=context.acting(),
-                version=version,
-                system_model=system_model,
-                replace=replace,
-                accept_terms=accept_terms,
-                package=package,
-                name=name,
-                drop_unlinked=drop_unlinked,
-            )
-        )
+        posted = await context.installs.post_install(draft)
         pid = await asyncio.to_thread(context.installer.start, posted.id, account)
         started = await context.installs.update_install(posted.id, InstallPatch(pid=pid))
         context.keep_watching(

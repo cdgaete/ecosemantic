@@ -21,7 +21,7 @@ from ecosemantic.model.entities import (
     Scenario,
 )
 from ecosemantic.model.refs import ForegroundRef
-from ecosemantic.ports.types import Layout
+from ecosemantic.ports.types import Layout, Spot
 from ecosemantic.troubles import score, troubles
 from tests.conftest import frame_system, widget_linking
 
@@ -191,6 +191,61 @@ async def test_a_release_takes_a_code_that_names_no_card_as_a_placement_does(
         assert placed.cards == automatic.cards
         assert released.cards == automatic.cards
         assert (await context.storage.get_layout(system.id)).held == {}
+    finally:
+        await context.storage.put_layout(system.id, Layout())
+
+
+async def test_release_all_lets_every_held_code_go_before_the_placements_apply(
+    full_server: FastMCP, fixture_system_stored: ProductSystem, context: ServerContext
+) -> None:
+    system = fixture_system_stored
+    widget, frame = (p.code for p in system.processes)
+    await context.storage.put_layout(
+        system.id, Layout(held={widget: Spot(x=1.0, y=2.0), "gone": Spot(x=3.0, y=4.0)})
+    )
+    try:
+        async with Client(full_server) as client:
+            answer = Arrangement.model_validate(
+                (
+                    await client.call_tool(
+                        "arrange_graph",
+                        {
+                            "product_system_id": str(system.id),
+                            "placements": [{"code": frame, "x": 5.0, "y": 6.0}],
+                            "release_all": True,
+                        },
+                    )
+                ).structured_content["value"]
+            )
+        assert (await context.storage.get_layout(system.id)).held == {frame: Spot(x=5.0, y=6.0)}
+        assert [c.code for c in answer.cards if c.held] == [frame]
+    finally:
+        await context.storage.put_layout(system.id, Layout())
+
+
+async def test_release_all_beside_release_is_refused(
+    full_server: FastMCP, fixture_system_stored: ProductSystem, context: ServerContext
+) -> None:
+    system = fixture_system_stored
+    code = system.processes[0].code
+    held = Layout(held={code: Spot(x=1.0, y=2.0)})
+    await context.storage.put_layout(system.id, held)
+    try:
+        async with Client(full_server) as client:
+            with pytest.raises(ToolError) as caught:
+                await client.call_tool(
+                    "arrange_graph",
+                    {
+                        "product_system_id": str(system.id),
+                        "placements": [],
+                        "release": [code],
+                        "release_all": True,
+                    },
+                )
+        payload = json.loads(str(caught.value))
+        assert payload["error"] == "invalid"
+        assert payload["message"] == "release and release_all both let cards go; pass one of them"
+        assert await context.storage.get_layout(system.id) == held
     finally:
         await context.storage.put_layout(system.id, Layout())
 

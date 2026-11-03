@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from ecosemantic.databases.ecoinvent import build as build_module
+from ecosemantic.databases.ecoinvent import probe as probe_module
 from ecosemantic.databases.ecoinvent.build import build
 from ecosemantic.databases.ecoinvent.profile import default_profile
 from ecosemantic.errors import NotSupported
@@ -40,3 +43,18 @@ def test_the_built_bundle_counts_its_processes_flows_and_categories(tmp_path: Pa
     written = build(release, default_profile(release), tmp_path / "out", NOW)
     assert (written.processes, written.flows, written.methods) == (4, 7, 1)
     assert [path.name for path in written.bundle.parent.iterdir()] == ["ecoinvent-3.10-cutoff.zip"]
+
+
+def test_a_build_reads_the_release_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    release = build_release(tmp_path)
+    calls: list[int] = []
+    original = probe_module.read_datasets
+
+    def counted(*args: Any, **kwargs: Any) -> Any:
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(probe_module, "read_datasets", counted)
+    monkeypatch.setattr(build_module, "read_datasets", counted, raising=False)
+    build(release, default_profile(release), tmp_path / "out", NOW)
+    assert len(calls) == 1

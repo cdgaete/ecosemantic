@@ -12,7 +12,13 @@ from ecosemantic.compute.links import held_pins, linked_credit_loops, linked_doc
 from ecosemantic.compute.montecarlo import paired_delta, paired_samples
 from ecosemantic.compute.overrides import apply_variant, stale
 from ecosemantic.compute.parameters import materialize
-from ecosemantic.compute.results import ContributionResult, ImpactResult, PinBehind, VariantScores
+from ecosemantic.compute.results import (
+    ContributionResult,
+    ImpactResult,
+    InventoryResult,
+    PinBehind,
+    VariantScores,
+)
 from ecosemantic.errors import Invalid, NotFound, StaleScenario
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import COMPUTE, READ
@@ -37,6 +43,12 @@ from ecosemantic.model.validation import credit_loops, reference_of
 from ecosemantic.ports.calculation import CUTOFF, MAX_LEVEL, MAX_NODES, TOP_N, CalculationPort
 from ecosemantic.ports.inventory import InventoryPort
 from ecosemantic.ports.types import (
+    MAX_DRAWS,
+    N_HELP,
+    N_MAX,
+    N_MAX_HELP,
+    N_MIN,
+    N_MIN_HELP,
     Decomposition,
     InventoryRow,
     LinkedLoop,
@@ -53,33 +65,9 @@ class ImpactMonteCarlo(MonteCarloConfig):
     """What `calculate_impact` samples: `MonteCarloConfig`, with every count capped at the draws
     one call takes. `start_monte_carlo` takes the config whole."""
 
-    n_min: int = Field(
-        default=30,
-        ge=1,
-        le=MAX_ITERATIONS,
-        description=(
-            "The fewest draws an adaptive run takes. It bounds the run with `n_max` and "
-            "applies only when `n` is unset."
-        ),
-    )
-    n_max: int = Field(
-        default=200,
-        ge=1,
-        le=MAX_ITERATIONS,
-        description=(
-            "The most draws an adaptive run takes, between `n_min` and `n_max`. It applies "
-            "only when `n` is unset."
-        ),
-    )
-    n: int | None = Field(
-        default=None,
-        ge=1,
-        le=MAX_ITERATIONS,
-        description=(
-            "The count a run takes, fixed. Unset leaves the run adaptive: it stops between "
-            "`n_min` and `n_max` once `rel_se_target` is met."
-        ),
-    )
+    n_min: int = Field(default=N_MIN, ge=1, le=MAX_ITERATIONS, description=N_MIN_HELP)
+    n_max: int = Field(default=N_MAX, ge=1, le=MAX_ITERATIONS, description=N_MAX_HELP)
+    n: int | None = Field(default=None, ge=1, le=MAX_ITERATIONS, description=N_HELP)
 
 
 class InventoryListing(Listing[InventoryRow]):
@@ -255,6 +243,13 @@ async def refuse_stale(
             )
 
 
+async def variant_of(context: ServerContext, stored: ProductSystem, name: str) -> ProductSystem:
+    """The system with the named scenario or case applied, refusing a stale scenario by the log
+    entry that moved its base."""
+    await refuse_stale(context, stored, [name])
+    return apply_variant(stored, name)
+
+
 async def calculate_impact(
     context: ServerContext,
     product_system_id: str,
@@ -290,6 +285,64 @@ async def calculate_impact(
     return Answer[ImpactResult](value=result, hint=hint, view_url=link)
 
 
+async def contributions_of(
+    calculation: CalculationPort,
+    inventory: InventoryPort,
+    base: ProductSystem,
+    linked: dict[uuid.UUID, ProductSystem],
+    method: Method,
+    items: list[DemandItem],
+    by: Decomposition = "process",
+    top_n: int = TOP_N,
+    max_level: int = MAX_LEVEL,
+    max_nodes: int = MAX_NODES,
+    cutoff: float = CUTOFF,
+) -> ContributionResult:
+    """One score of a materialised product system, decomposed along `by`, with the loops holding
+    a credit and the exchanges running a treatment backwards."""
+    system = System.of(base, linked)
+    named = credit_loops(base)
+    inside = linked_credit_loops(linked.values())
+    backwards = await backwards_in(inventory, base, linked)
+    if by == "process":
+        found = await calculation.hotspots(system, items, method, top_n)
+        value = ContributionResult(
+            database=base.database,
+            by=by,
+            total=found.total,
+            processes=found.items,
+            credit_loops=named,
+            linked_credit_loops=inside,
+            treatments_run_backwards=backwards,
+        )
+    elif by == "flow":
+        flows = await calculation.flow_hotspots(system, items, method, top_n)
+        value = ContributionResult(
+            database=base.database,
+            by=by,
+            total=flows.total,
+            flows=flows.items,
+            credit_loops=named,
+            linked_credit_loops=inside,
+            treatments_run_backwards=backwards,
+        )
+    else:
+        tree = await calculation.contribution_tree(
+            system, items, method, max_level, max_nodes, cutoff
+        )
+        value = ContributionResult(
+            database=base.database,
+            by=by,
+            total=tree.total,
+            root=tree.root,
+            truncated=tree.truncated,
+            credit_loops=named,
+            linked_credit_loops=inside,
+            treatments_run_backwards=backwards,
+        )
+    return value
+
+
 async def contribution_analysis(
     context: ServerContext,
     product_system_id: str,
@@ -309,48 +362,42 @@ async def contribution_analysis(
         context.inventory, stored.database.name, method_id, impact_method
     )
     items = demand_of(base, demand)
-    system = System.of(base, linked)
-    named = credit_loops(base)
-    inside = linked_credit_loops(linked.values())
-    backwards = await backwards_in(context.inventory, base, linked)
-    if by == "process":
-        found = await context.calculation.hotspots(system, items, method, top_n)
-        value = ContributionResult(
-            database=base.database,
-            by=by,
-            total=found.total,
-            processes=found.items,
-            credit_loops=named,
-            linked_credit_loops=inside,
-            treatments_run_backwards=backwards,
-        )
-    elif by == "flow":
-        flows = await context.calculation.flow_hotspots(system, items, method, top_n)
-        value = ContributionResult(
-            database=base.database,
-            by=by,
-            total=flows.total,
-            flows=flows.items,
-            credit_loops=named,
-            linked_credit_loops=inside,
-            treatments_run_backwards=backwards,
-        )
-    else:
-        tree = await context.calculation.contribution_tree(
-            system, items, method, max_level, max_nodes, cutoff
-        )
-        value = ContributionResult(
-            database=base.database,
-            by=by,
-            total=tree.total,
-            root=tree.root,
-            truncated=tree.truncated,
-            credit_loops=named,
-            linked_credit_loops=inside,
-            treatments_run_backwards=backwards,
-        )
+    value = await contributions_of(
+        context.calculation,
+        context.inventory,
+        base,
+        linked,
+        method,
+        items,
+        by,
+        top_n,
+        max_level,
+        max_nodes,
+        cutoff,
+    )
     link = result_link(context, stored, "tree", method_id, impact_method, demand=demand)
     return Answer[ContributionResult](value=value, hint=hint, view_url=link)
+
+
+async def inventory_of(
+    calculation: CalculationPort,
+    inventory: InventoryPort,
+    base: ProductSystem,
+    linked: dict[uuid.UUID, ProductSystem],
+    items: list[DemandItem],
+) -> tuple[InventoryResult, list[InventoryRow]]:
+    """Every elementary flow of a materialised product system, with the loops holding a credit,
+    the exchanges running a treatment backwards, and the residue the floor set aside."""
+    found = await calculation.inventory(System.of(base, linked), items)
+    result = InventoryResult(
+        database=base.database,
+        credit_loops=credit_loops(base),
+        floor=found.floor,
+        dropped=found.dropped,
+        linked_credit_loops=linked_credit_loops(linked.values()),
+        treatments_run_backwards=await backwards_in(inventory, base, linked),
+    )
+    return result, found.rows
 
 
 async def calculate_inventory(
@@ -366,26 +413,23 @@ async def calculate_inventory(
     linked = await linked_documents(stored, context.storage.get_version)
     base = materialize(stored)
     items = demand_of(base, demand)
-    system = System.of(base, linked)
-    found = await context.calculation.inventory(system, items)
-    page = inventory_page(found.rows, compartment, query, limit, offset_cursor(cursor))
+    result, rows = await inventory_of(context.calculation, context.inventory, base, linked, items)
+    page = inventory_page(rows, compartment, query, limit, offset_cursor(cursor))
     filters = {"compartment": compartment}
-    words = bool(applied_filters(filters)) and bool(
-        inventory_page(found.rows, None, query, 1, 0).items
-    )
+    words = bool(applied_filters(filters)) and bool(inventory_page(rows, None, query, 1, 0).items)
     out = listing(page, empty_search_hint(filters, words)) if not page.items else listing(page)
     return InventoryListing(
-        database=base.database,
+        database=result.database,
         items=out.items,
         has_more=out.has_more,
         next_cursor=out.next_cursor,
         hint=out.hint,
         view_url=result_link(context, stored, "inventory", demand=demand),
-        credit_loops=credit_loops(base),
-        linked_credit_loops=linked_credit_loops(linked.values()),
-        treatments_run_backwards=await backwards_in(context.inventory, base, linked),
-        floor=found.floor,
-        dropped=found.dropped,
+        credit_loops=result.credit_loops,
+        linked_credit_loops=result.linked_credit_loops,
+        treatments_run_backwards=result.treatments_run_backwards,
+        floor=result.floor,
+        dropped=result.dropped,
     )
 
 
@@ -400,8 +444,9 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "search_methods, or one impact_method to score all of its categories. Add "
             "variants to compare scenarios or cases against the base under one seed: each "
             "variant answers its point scores and its deltas, its score less the base's, "
-            "method by method. A monte_carlo block adds uncertainty and takes at most 200 "
-            "draws; start_monte_carlo runs up to 1000 outside the call. Under that block a "
+            "method by method. A monte_carlo block adds uncertainty and takes at most "
+            f"{MAX_ITERATIONS} draws; start_monte_carlo runs up to {MAX_DRAWS} outside the "
+            "call. Under that block a "
             "pair is the base's and the variant's draws at one position, over the first "
             "draws of each up to the shorter run, since each run's own stop rule ends it, "
             "and paired_deltas holds each difference's median, interval and percentage."

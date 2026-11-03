@@ -62,7 +62,8 @@ def test_install_source_installs_the_fixture_package_and_answers_its_summary(
     assert isinstance(summary, dict)
     assert summary["database"] == NAME
     assert summary["datasets"] == 6
-    assert summary["dropped"] == 1
+    assert [row["flow"] for row in summary["cut_off"]] == ["imported part"]
+    assert summary["cut_off"][0]["reason"] == "its provider is not in the package"
     assert (served_build(Path(str(summary["directory"]))) / "catalog.duckdb").is_file()
 
 

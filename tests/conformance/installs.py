@@ -9,9 +9,9 @@ from datetime import UTC, datetime
 
 import pytest
 
-from ecosemantic.backends.filesystem import records
 from ecosemantic.errors import Conflict, NotFound
 from ecosemantic.model.entities import Actor
+from ecosemantic.ports import posted
 from ecosemantic.ports.types import InstallDraft, InstallPatch, InstallProgress
 
 
@@ -49,7 +49,7 @@ class InstallConformance:
     async def test_installs_list_newest_first(
         self, installs, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(records, "now", lambda: datetime(2024, 1, 1, tzinfo=UTC))
+        monkeypatch.setattr(posted, "now", lambda: datetime(2024, 1, 1, tzinfo=UTC))
         first = await installs.post_install(draft())
         second = await installs.post_install(draft(version="2026"))
         assert [install.id for install in await installs.list_installs()] == [second.id, first.id]
@@ -75,6 +75,11 @@ class InstallConformance:
         posted = await installs.post_install(draft())
         changes = installs.changes()
         await installs.update_install(posted.id, InstallPatch(status="running"))
+        assert await asyncio.wait_for(anext(changes), 5) == posted.id
+
+    async def test_posting_an_install_is_announced(self, installs) -> None:
+        changes = installs.changes()
+        posted = await installs.post_install(draft())
         assert await asyncio.wait_for(anext(changes), 5) == posted.id
 
     async def test_the_slot_admits_one_holder_at_a_time(self, installs) -> None:

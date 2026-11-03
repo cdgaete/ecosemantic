@@ -15,6 +15,7 @@ import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
+from types import ModuleType
 from typing import cast
 
 from opentelemetry.metrics import MeterProvider
@@ -41,8 +42,6 @@ from ecosemantic.cli.text import (
     telemetry_text,
     terms_text,
 )
-from ecosemantic.compute.links import pinned_documents
-from ecosemantic.compute.results import ContributionResult
 from ecosemantic.engine.solver import SOLVERS
 from ecosemantic.errors import (
     Conflict,
@@ -60,7 +59,7 @@ from ecosemantic.mcp.treatments import treatments_in
 from ecosemantic.model.entities import Actor
 from ecosemantic.package.background import Import, read_background
 from ecosemantic.package.manifest import BaseDatabase, Manifest, read_manifest
-from ecosemantic.package.model_package import export_model_package, import_model_package, stated_at
+from ecosemantic.package.model_package import import_model_package
 from ecosemantic.package.release import build_release
 from ecosemantic.package.resolver import InventoryResolver
 from ecosemantic.package.working import (
@@ -70,6 +69,7 @@ from ecosemantic.package.working import (
     write_base_part,
 )
 from ecosemantic.ports.types import (
+    UNIT_PROCESS,
     InstallDraft,
     InstallProgress,
     InstallTerms,
@@ -77,7 +77,6 @@ from ecosemantic.ports.types import (
     Page,
     Reporter,
     SourceName,
-    System,
     source_credential,
 )
 from ecosemantic.settings import TRANSPORTS, ViewSettings, settings_from
@@ -145,7 +144,7 @@ def _parser() -> argparse.ArgumentParser:
     openlca.add_argument("--package", required=True, type=Path)
     openlca.add_argument("--name", required=True)
     openlca.add_argument("--version", required=True)
-    openlca.add_argument("--system-model", default="unit process")
+    openlca.add_argument("--system-model", default=UNIT_PROCESS)
     openlca.add_argument("--replace", action="store_true")
     openlca.add_argument("--drop-unlinked", action="store_true")
     answered(openlca)
@@ -224,7 +223,7 @@ def _defaulted(args: argparse.Namespace) -> None:
 
 async def _compute(args: argparse.Namespace, progress: Reporter) -> dict[str, object]:
     """Score a folder's document against the named method and write one run folder."""
-    from ecosemantic.mcp.calculation import impact_of, methods_for
+    from ecosemantic.mcp.calculation import contributions_of, impact_of, inventory_of, methods_for
     from ecosemantic.mcp.tables import result_key
 
     if not args.folder.is_dir():
@@ -239,7 +238,6 @@ async def _compute(args: argparse.Namespace, progress: Reporter) -> dict[str, ob
             inventory, system.database.name, args.method, args.impact_method
         )
         names = [name for name in args.variants.split(",") if name]
-        scored = System.of(system)
         treatments = await treatments_in(inventory, [system])
         result = await impact_of(
             calculation, system, methods, variants=names, treatments=treatments
@@ -250,34 +248,14 @@ async def _compute(args: argparse.Namespace, progress: Reporter) -> dict[str, ob
         progress(InstallProgress(step="writing"))
         written = [str(write_impact(args.folder, key, result, at))]
         if args.contributions:
-            hotspots = await calculation.hotspots(scored, items, methods[0])
-            decomposed = ContributionResult(
-                database=system.database,
-                by="process",
-                total=hotspots.total,
-                processes=hotspots.items,
-                credit_loops=result.credit_loops,
-                linked_credit_loops=result.linked_credit_loops,
-                treatments_run_backwards=result.treatments_run_backwards,
+            decomposed = await contributions_of(
+                calculation, inventory, system, {}, methods[0], items
             )
             written.append(str(write_contribution(args.folder, key, decomposed, at)))
         if args.inventory:
-            found = await calculation.inventory(scored, items)
-            page = Page[InventoryRow](items=found.rows, has_more=False)
-            written.append(
-                str(
-                    write_inventory(
-                        args.folder,
-                        key,
-                        system.database,
-                        page,
-                        result.credit_loops,
-                        result.linked_credit_loops,
-                        result.treatments_run_backwards,
-                        at,
-                    )
-                )
-            )
+            counted, rows = await inventory_of(calculation, inventory, system, {}, items)
+            page = Page[InventoryRow](items=rows, has_more=False)
+            written.append(str(write_inventory(args.folder, key, counted, page, at)))
     finally:
         store.close()
     return {"folder": written[0], "written": written, "hash": key.hash, "method": key.method}
@@ -317,11 +295,16 @@ async def run(
     systems_dir: Path,
     meter_provider: MeterProvider | None = None,
 ) -> None:
-    """Serve under these settings, loading the process that serves here so no other command
-    loads the server or the page."""
-    from ecosemantic.serve import run as serving
+    """Serve under these settings through the process that serves, which `_serving` loads."""
+    await _serving().run(context, settings, systems_dir, meter_provider=meter_provider)
 
-    await serving(context, settings, systems_dir, meter_provider=meter_provider)
+
+def _serving() -> ModuleType:
+    """The process that serves here, loaded on first use so no other command loads the server or
+    the page, and loaded where a library's print goes to stderr rather than to the wire."""
+    from ecosemantic import serve
+
+    return serve
 
 
 def _context(args: argparse.Namespace) -> ServerContext:
@@ -334,12 +317,9 @@ def _context(args: argparse.Namespace) -> ServerContext:
 
 
 def _export(context: ServerContext, product_system_id: str, target: Path) -> None:
-    from ecosemantic.mcp.envelopes import as_uuid
+    from ecosemantic.mcp.systems import export_product_system
 
-    system = asyncio.run(context.storage.get_product_system(as_uuid(product_system_id)))
-    linked = asyncio.run(pinned_documents(system, context.storage.get_version))
-    at = stated_at(system, asyncio.run(context.storage.log(system.id)))
-    export_model_package(system, target, context.actor, context.resolver, linked=linked, at=at)
+    asyncio.run(export_product_system(context, product_system_id, str(target)))
 
 
 def _import(context: ServerContext, source: Path) -> None:
@@ -493,7 +473,7 @@ def _load(data: Path, systems: Path, bundle: Path, progress: Reporter) -> dict[s
     if manifest.mode == "release":
         imported = read_background(bundle, manifest.name, foreground=frozenset())
         progress(InstallProgress(step="installing"))
-        install(data, imported, bundle, version=manifest.version, system_model="unit process")
+        install(data, imported, bundle, version=manifest.version, system_model=UNIT_PROCESS)
         return {"database": manifest.name, "datasets": len(imported.datasets)}
     imported = read_background(bundle, manifest.base.name, foreground=foreground_processes(bundle))
     base = "kept"
@@ -507,7 +487,7 @@ def _load(data: Path, systems: Path, bundle: Path, progress: Reporter) -> dict[s
                 read_background(part, manifest.base.name, foreground=frozenset()),
                 part,
                 version=manifest.base.version,
-                system_model="unit process",
+                system_model=UNIT_PROCESS,
             )
         base = "installed"
     store, storage, resolver = _parts(data, systems)
@@ -625,7 +605,9 @@ def main(argv: list[str] | None = None) -> int:
         return _refused(exc, as_json)
     try:
         if args.command == "serve":
-            serve_offline()
+            with contextlib.redirect_stdout(sys.stderr):
+                serve_offline()
+                _serving()
             logging.basicConfig(stream=sys.stderr, level=logging.INFO)
             settings = settings_from(
                 os.environ,

@@ -6,7 +6,7 @@
       "open_world_hint": false,
       "read_only_hint": false
     },
-    "description": "Put named cards at given places and answer the drawing that results. A card put here is held exactly as one a person dragged: the automatic arrangement packs the others around it and never moves it. Name cards in release to let them go back to the automatic layout; placements and release naming one card is refused. Move cards, read the map and the score, and move again until the score is 0 or stops falling. The answer is graph_layout's: activity, scaled amounts, labels and scaling, under the variant when one is named; where a card is held does not depend on the variant.",
+    "description": "Put named cards at given places and answer the drawing that results. A card put here is held exactly as one a person dragged: the automatic arrangement packs the others around it and never moves it. Name cards in release to let them go back to the automatic layout; placements and release naming one card is refused. Pass release_all to let every held card go, drawn or not, before placements apply; release_all beside release is refused. Move cards, read the map and the score, and move again until the score is 0 or stops falling. The answer is graph_layout's: activity, scaled amounts, labels and scaling, under the variant when one is named; where a card is held does not depend on the variant.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -49,6 +49,10 @@
             }
           ],
           "default": null
+        },
+        "release_all": {
+          "default": false,
+          "type": "boolean"
         },
         "variant": {
           "anyOf": [

@@ -23,6 +23,7 @@ dev = [
     "pre-commit>=4.6",
     "xlsxwriter>=3.2,<4",
     "opentelemetry-sdk>=1.44,<2",
+    "cryptography>=44,<51",
 ]
 
 [tool.ruff]

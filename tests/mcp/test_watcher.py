@@ -155,8 +155,10 @@ async def test_watch_install_publishes_each_move_and_returns_when_it_settles() -
     posted = await installs.post_install(install_draft())
     bus = EventBus()
     queue = bus.subscribe_all()
+    installer = MemoryInstaller([])
+    installer.start(posted.id, None)
     watching = asyncio.create_task(
-        watch_install(bus, installs, MemoryInstaller([]), posted.id, interval=0.01)
+        watch_install(bus, installs, installer, posted.id, interval=0.01)
     )
     await installs.update_install(
         posted.id, InstallPatch(status="running", progress=InstallProgress(step="fetch", count=2))

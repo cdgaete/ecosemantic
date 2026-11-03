@@ -7,6 +7,7 @@ import pytest
 from ecosemantic.ports.install import InstallLauncher, InstallPort
 from ecosemantic.ports.types import Account, DatabaseSource
 from tests.conformance.installs import InstallConformance
+from tests.conformance.launchers import InstallLauncherConformance
 from tests.memory_installs import MemoryInstaller, MemoryInstalls
 
 
@@ -41,9 +42,17 @@ def test_the_memory_installer_records_who_it_starts_and_names_pid_4242() -> None
     assert installer.started == [(install_id, account), (uuid.UUID(int=2), None)]
 
 
-def test_the_memory_installer_holds_every_install_alive_unless_it_is_named_dead() -> None:
+def test_the_memory_installer_holds_every_started_install_alive_unless_it_is_named_dead() -> None:
     installer = MemoryInstaller(sources())
     live, dead = uuid.UUID(int=1), uuid.UUID(int=2)
+    installer.start(live, None)
+    installer.start(dead, None)
     installer.dead.add(dead)
     assert installer.alive(live) is True
     assert installer.alive(dead) is False
+
+
+class TestMemoryInstaller(InstallLauncherConformance):
+    @pytest.fixture
+    def launcher(self) -> MemoryInstaller:
+        return MemoryInstaller(sources())

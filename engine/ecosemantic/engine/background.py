@@ -8,6 +8,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass, fields
 from pathlib import Path
+from typing import Literal
 
 import nimblend as nb
 import numpy as np
@@ -16,6 +17,7 @@ from ecosemantic.errors import Conflict, Invalid, NotFound
 from ecosemantic.model.entities import DISTRIBUTION_IDS, Method, Uncertainty
 from ecosemantic.model.refs import Database
 
+Axis = Literal["product", "activity", "flow"]
 FORMAT = 1
 _PARAMETERS = ("loc", "scale", "minimum", "maximum")
 
@@ -221,12 +223,31 @@ class Background:
         net = np.bincount(np.asarray(rows.column)[own], weights=signed, minlength=labels.size)
         return frozenset(str(label) for label in labels[net < 0])
 
-    def position(self, dim: str, label: str) -> int | None:
-        """The position of a label along "activity" or "flow", whose labels are sorted, or
-        None."""
+    def position(self, dim: Axis, label: str) -> int | None:
+        """The position of a label along an axis whose labels are sorted, or None."""
         labels = self.coords[dim].labels
         at = int(np.searchsorted(labels, label))
         return at if at < labels.size and labels[at] == label else None
+
+    def dataset_at(self, label: str, owner: str) -> int:
+        """The position of a background dataset; NotFound names who asked for it."""
+        at = self.position("activity", label)
+        if at is None:
+            raise NotFound(
+                f"{owner} names background dataset {label!r}, "
+                f"which {self.database.name!r} does not hold"
+            )
+        return at
+
+    def flow_at(self, label: str, owner: str) -> int:
+        """The position of an elementary flow; NotFound names who asked for it."""
+        at = self.position("flow", label)
+        if at is None:
+            raise NotFound(
+                f"{owner} names elementary flow {label!r}, "
+                f"which {self.database.elementary_flows!r} does not hold"
+            )
+        return at
 
     def positions(self, methods: Sequence[Method]) -> list[int]:
         """The position of each method's category, in the order given; NotFound naming every

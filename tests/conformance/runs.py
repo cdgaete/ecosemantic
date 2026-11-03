@@ -8,8 +8,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from ecosemantic.backends.filesystem import records
 from ecosemantic.errors import Conflict, NotFound
+from ecosemantic.ports import posted
 from ecosemantic.ports.types import MonteCarloConfig, RunDraft, RunPatch, RunProgress
 
 
@@ -45,7 +45,7 @@ class RunConformance:
         self, runs, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         one, other = uuid.UUID(int=1), uuid.UUID(int=2)
-        monkeypatch.setattr(records, "now", lambda: datetime(2024, 1, 1, tzinfo=UTC))
+        monkeypatch.setattr(posted, "now", lambda: datetime(2024, 1, 1, tzinfo=UTC))
         first = await runs.post_run(draft(one))
         second = await runs.post_run(draft(other))
         assert [r.id for r in await runs.list_runs()] == [second.id, first.id]

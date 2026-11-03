@@ -5,14 +5,20 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
-from ecosemantic.databases.ecoinvent.datasets import read_datasets
+from ecosemantic.databases.ecoinvent.datasets import Findings, read_datasets
 from ecosemantic.databases.ecoinvent.lcia import read_methods
-from ecosemantic.databases.ecoinvent.masterdata import flow_type, read_masterdata, read_units
+from ecosemantic.databases.ecoinvent.masterdata import (
+    MasterData,
+    flow_type,
+    read_masterdata,
+    read_units,
+)
 from ecosemantic.databases.ecoinvent.overview import read_urls
-from ecosemantic.databases.ecoinvent.profile import Profile
+from ecosemantic.databases.ecoinvent.profile import Profile, database_name
 from ecosemantic.databases.ecoinvent.release import Release
 from ecosemantic.errors import NotSupported
 from ecosemantic.model import units
+from ecosemantic.package.base_writer import BaseDataset, BaseMethod
 
 _LIMIT = 20
 
@@ -63,13 +69,47 @@ def _known(symbol: str) -> bool:
     return True
 
 
-def probe(release: Release, profile: Profile) -> Probe:
-    """Read a release with its profile's layouts and list what a build could not read."""
+@dataclass(frozen=True)
+class Read:
+    """What a release's files hold, read once: master data, the overview's URLs, the datasets
+    with what the reader found in them, the database's name, the methods, and the factor rows no
+    flow answers."""
+
+    master: MasterData
+    urls: dict[str, str]
+    datasets: tuple[BaseDataset, ...]
+    findings: Findings
+    name: str
+    methods: tuple[BaseMethod, ...]
+    unmatched: list[tuple[str, str, str]]
+
+
+def read_release(release: Release, profile: Profile) -> Read:
+    """Read a release's master data, URLs, datasets and methods with its profile's layouts."""
     master = read_masterdata(release.ecospold)
     urls = read_urls(release.overview, profile.overview)
     datasets, findings = read_datasets(release.ecospold, urls=urls)
-    name = f"ecoinvent-{release.version}-{release.system_model}"
-    _, unmatched = read_methods(release.lcia, profile.lcia, master, name)
+    name = database_name(release.version, release.system_model)
+    methods, unmatched = read_methods(release.lcia, profile.lcia, master, name)
+    return Read(
+        master=master,
+        urls=urls,
+        datasets=datasets,
+        findings=findings,
+        name=name,
+        methods=methods,
+        unmatched=unmatched,
+    )
+
+
+def probe(release: Release, profile: Profile) -> Probe:
+    """Read a release with its profile's layouts and list what a build could not read."""
+    return probe_read(release, profile, read_release(release, profile))
+
+
+def probe_read(release: Release, profile: Profile, read: Read) -> Probe:
+    """List what a build could not read of a release already read."""
+    master, urls, datasets, findings = read.master, read.urls, read.datasets, read.findings
     codes = {dataset.code for dataset in datasets}
     unknown_units = {symbol: list(users) for symbol, users in master.unknown_units.items()}
     for symbol, users in findings.unknown_units.items():
@@ -82,7 +122,7 @@ def probe(release: Release, profile: Profile) -> Probe:
         unknown_units=unknown_units,
         unread=findings.unread,
         degenerate_uncertainty=findings.degenerate_uncertainty,
-        unmatched_factors=unmatched,
+        unmatched_factors=read.unmatched,
         without_url=[dataset.code for dataset in datasets if dataset.url is None],
         urls_without_dataset=[key for key in urls if key not in codes],
         documentation=findings.documentation,

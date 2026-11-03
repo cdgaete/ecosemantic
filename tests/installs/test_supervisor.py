@@ -20,7 +20,8 @@ from ecosemantic.databases.ecoinvent.profile import profiled
 from ecosemantic.databases.uslci.profile import versions as uslci_versions
 from ecosemantic.installs.handover import encoded
 from ecosemantic.installs.supervisor import LocalInstaller
-from ecosemantic.ports.types import STALE_SECONDS, Account, InstallDraft
+from ecosemantic.ports.types import STALE_SECONDS, UNIT_PROCESS, Account, InstallDraft
+from tests.conformance.launchers import InstallLauncherConformance
 from tests.openlca_fixture import NAME, build_package
 from tests.package.conftest import AGENT
 
@@ -32,7 +33,7 @@ def test_sources_lists_the_four_sources_with_their_profiled_versions(tmp_path: P
 
     assert [source.name for source in listed] == ["openlca", "uslci", "bafu", "ecoinvent"]
     assert sources["openlca"].versions == []
-    assert sources["openlca"].system_models == ["unit process"]
+    assert sources["openlca"].system_models == [UNIT_PROCESS]
     assert sources["openlca"].credential is None and sources["openlca"].terms is False
     assert sources["uslci"].versions == list(uslci_versions())
     assert sources["uslci"].credential is None and sources["uslci"].terms is False
@@ -42,6 +43,14 @@ def test_sources_lists_the_four_sources_with_their_profiled_versions(tmp_path: P
     assert set(sources["ecoinvent"].system_models) == {model for _, model in releases}
     assert sources["ecoinvent"].credential == "ecoinvent"
     assert sources["ecoinvent"].terms is False
+
+
+def test_every_unit_process_source_lists_the_one_system_model_it_installs(tmp_path: Path) -> None:
+    sources = {source.name: source for source in LocalInstaller(tmp_path).sources()}
+
+    assert sources["uslci"].system_models == [UNIT_PROCESS]
+    assert sources["bafu"].system_models == [UNIT_PROCESS]
+    assert sources["openlca"].system_models == [UNIT_PROCESS]
 
 
 def test_the_install_process_starts_without_the_credential_variables(
@@ -146,3 +155,33 @@ async def test_a_started_install_process_carries_the_install_in_the_data_directo
         encoding="utf-8"
     )
     assert list(uploads_dir(data).iterdir()) == []
+
+
+def test_the_installer_names_the_database_each_draft_installs(tmp_path: Path) -> None:
+    installer = LocalInstaller(tmp_path)
+    newest_uslci = uslci_versions()[0]
+    assert installer.database(InstallDraft(source="uslci", actor=AGENT)) == f"uslci-{newest_uslci}"
+    assert (
+        installer.database(InstallDraft(source="uslci", actor=AGENT, version="1.2026-09.0"))
+        == "uslci-1.2026-09.0"
+    )
+    assert installer.database(InstallDraft(source="bafu", actor=AGENT)) == (
+        f"bafu-{bafu_versions()[0]}"
+    )
+    ecoinvent = InstallDraft(source="ecoinvent", actor=AGENT, version="3.12", system_model="cutoff")
+    assert installer.database(ecoinvent) == "ecoinvent-3.12-cutoff"
+    openlca = InstallDraft(
+        source="openlca",
+        actor=AGENT,
+        version="1",
+        system_model="unit process",
+        package="fixture.zip",
+        name=NAME,
+    )
+    assert installer.database(openlca) == NAME
+
+
+class TestLocalInstaller(InstallLauncherConformance):
+    @pytest.fixture
+    def launcher(self, tmp_path: Path) -> LocalInstaller:
+        return LocalInstaller(tmp_path)

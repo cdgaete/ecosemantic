@@ -98,7 +98,9 @@ def test_a_linked_system_without_a_reference_process_is_refused() -> None:
     frame = frame_system().model_copy(update={"reference_process": None})
     widget = widget_linking(frame_system())
     link = next(e.input for e in widget.processes[0].exchanges if isinstance(e.input, SystemRef))
-    with pytest.raises(Invalid, match="no reference process"):
+    with pytest.raises(
+        Invalid, match="which has no reference process; set one with update_product_system"
+    ):
         scale(
             widget,
             {link.product_system_id: frame},

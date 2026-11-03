@@ -14,7 +14,7 @@ from lca_data_interface import NexusSession
 
 from ecosemantic.databases.bafu.build import build
 from ecosemantic.databases.bafu.download import Downloads, Nexus, download
-from ecosemantic.databases.bafu.profile import Profile, recorded
+from ecosemantic.databases.bafu.profile import Profile, database_name, recorded
 from ecosemantic.databases.lists import (
     UnlinkedRow,
     distinct_unlinked,
@@ -127,7 +127,7 @@ def prepare(profile: Profile, nexus: Nexus, work: Path, report: Reporter) -> Pre
     report(InstallProgress(step="building"))
     built = build(fetched.inventory, version=profile.version, out_dir=work)
     report(InstallProgress(step="reading"))
-    imported = read_background(built.bundle, f"bafu-{profile.version}", foreground=frozenset())
+    imported = read_background(built.bundle, database_name(profile.version), foreground=frozenset())
     report(InstallProgress(step="checking"))
     found = distinct_unlinked(imported, flow_categories(imported))
     mismatches = unlinked_mismatches(

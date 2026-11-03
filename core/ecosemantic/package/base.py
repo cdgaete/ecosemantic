@@ -13,7 +13,7 @@ from olca_schema.zipio import ZipReader
 
 from ecosemantic.errors import Invalid, NotFound
 from ecosemantic.model import units
-from ecosemantic.package.wholeness import providers, resolve_provider
+from ecosemantic.package.wholeness import provider_of, providers, takes_provider
 
 RESOURCES = "elementary flows/resource"
 
@@ -47,14 +47,11 @@ class BaseBundle:
     def _inputs(self, process: o.Process) -> list[tuple[o.Exchange, str]]:
         found = []
         for e in process.exchanges or []:
-            if e.flow is None or e.flow.id not in self.flows or e.is_quantitative_reference:
+            if e.flow is None or e.flow.id not in self.flows:
                 continue
             kind = self.flows[e.flow.id].flow_type
-            waste = kind == o.FlowType.WASTE_FLOW
-            if (kind == o.FlowType.PRODUCT_FLOW and e.is_input) or (waste and not e.is_input):
-                candidates = (self.treaters if waste else self.producers).get(e.flow.id, [])
-                named = e.default_provider.id if e.default_provider is not None else None
-                provider, _ = resolve_provider(named, candidates)
+            if takes_provider(e, kind):
+                provider, _ = provider_of(e, kind, self.producers, self.treaters)
                 if provider is not None:
                     found.append((e, provider))
         return found

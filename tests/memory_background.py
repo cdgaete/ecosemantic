@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Collection, Sequence
 
-from ecosemantic.errors import Invalid, NotFound
+from ecosemantic.errors import NotFound
 from ecosemantic.model.entities import Method, method_named
 from ecosemantic.model.refs import BackgroundRef, Database, ElementaryFlowRef
+from ecosemantic.ports.search import Phrase, phrases
+from ecosemantic.ports.terms import tokens
 from ecosemantic.ports.types import (
     BackgroundExchange,
     BackgroundProcess,
@@ -52,16 +54,24 @@ def methods() -> list[Method]:
     return [Method.of(key, unit) for key, unit, _ in METHODS]
 
 
-def _terms(query: str) -> list[str]:
-    terms = query.lower().split()
-    if not terms:
-        raise Invalid("a search needs at least one term")
-    return terms
+def _holds(phrase: Phrase, text: str) -> bool:
+    words = tokens(text)
+    size = len(phrase.tokens)
+    for start in range(len(words) - size + 1):
+        window = words[start : start + size]
+        if phrase.prefix:
+            if window[:-1] == list(phrase.tokens[:-1]) and window[-1].startswith(phrase.tokens[-1]):
+                return True
+        elif window == list(phrase.tokens):
+            return True
+    return False
 
 
-def _relevance(terms: list[str], text: str) -> float:
-    """How many of the query's terms the text carries; a positive score, not a ranking."""
-    return float(sum(1 for term in terms if term in text.lower()))
+def _relevance(found: list[Phrase], *fields: str) -> float | None:
+    """The number of phrases matched, when the fields match every one of them and there is at
+    least one; None otherwise."""
+    matched = [any(_holds(phrase, field) for field in fields) for phrase in found]
+    return float(len(found)) if found and all(matched) else None
 
 
 class MemoryInventory:
@@ -209,7 +219,7 @@ class MemorySearch:
         cursor: str | None = None,
     ) -> Page[ProcessHit]:
         _known(database)
-        terms = _terms(query)
+        parsed = phrases(query)
         offset = offset_cursor(cursor)
         hits = [
             ProcessHit(
@@ -218,12 +228,12 @@ class MemorySearch:
                 reference_product=product,
                 location="GLO",
                 unit=process_unit,
-                relevance=_relevance(terms, f"{name} {product}"),
+                relevance=relevance,
             )
             for key, (name, product, process_unit, _, _) in sorted(
                 PROCESSES.items(), key=lambda item: item[1][0]
             )
-            if all(term in f"{name} {product}".lower() for term in terms)
+            if (relevance := _relevance(parsed, name, product)) is not None
             and (location is None or location == "GLO")
             and (unit is None or unit == process_unit)
         ]
@@ -243,13 +253,13 @@ class MemorySearch:
         cursor: str | None = None,
     ) -> Page[ElementaryFlowHit]:
         _known(database)
-        terms = _terms(query)
+        parsed = phrases(query)
         offset = offset_cursor(cursor)
         hits = []
         for key, (name, categories, flow_unit) in sorted(FLOWS.items(), key=lambda i: i[1][0]):
             found_compartment, found_sub = _compartment(categories)
             found_type = _flow_type(categories)
-            if not all(term in name.lower() for term in terms):
+            if _relevance(parsed, name) is None:
                 continue
             if any(
                 value is not None and value != found
@@ -280,8 +290,8 @@ class MemorySearch:
         self, database: str, query: str, limit: int = 20, cursor: str | None = None
     ) -> Page[Method]:
         _known(database)
-        terms = _terms(query)
-        hits = [m for m in methods() if all(t in m.spec.lower() for t in terms)]
+        parsed = phrases(query)
+        hits = [m for m in methods() if _relevance(parsed, m.spec) is not None]
         offset = offset_cursor(cursor)
         return Page.at_offset(
             hits[offset : offset + limit], len(hits) > offset + limit, offset, limit

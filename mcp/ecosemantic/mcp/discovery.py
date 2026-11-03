@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, assert_never
 
 from fastmcp import FastMCP
 from pydantic import BaseModel
@@ -29,7 +29,9 @@ from ecosemantic.ports.types import (
     ProcessHit,
 )
 
-Kind = Literal["units", "locations", "compartments", "impact_methods", "impact_categories"]
+VocabularyKind = Literal[
+    "units", "locations", "compartments", "impact_methods", "impact_categories"
+]
 
 
 class Term(BaseModel):
@@ -119,33 +121,38 @@ async def get_elementary_flow(
     return Answer[ElementaryFlow](value=await context.inventory.get_elementary_flow(ref))
 
 
-async def list_vocabulary(context: ServerContext, database: str, kind: Kind) -> Answer[list[Term]]:
-    if kind == "units":
-        terms = [Term(value=u) for u in await context.inventory.list_units(database)]
-    elif kind == "locations":
-        terms = [Term(value=lo) for lo in await context.inventory.list_locations(database)]
-    elif kind == "compartments":
-        terms = []
-        for compartment in await context.inventory.list_compartments(database):
-            terms.append(Term(value=compartment.name, detail=f"{compartment.flow_count} flows"))
-            terms += [
-                Term(value=f"{compartment.name}/{sub}") for sub in compartment.sub_compartments
+async def list_vocabulary(
+    context: ServerContext, database: str, kind: VocabularyKind
+) -> Answer[list[Term]]:
+    match kind:
+        case "units":
+            terms = [Term(value=u) for u in await context.inventory.list_units(database)]
+        case "locations":
+            terms = [Term(value=lo) for lo in await context.inventory.list_locations(database)]
+        case "compartments":
+            terms = []
+            for compartment in await context.inventory.list_compartments(database):
+                terms.append(Term(value=compartment.name, detail=f"{compartment.flow_count} flows"))
+                terms += [
+                    Term(value=f"{compartment.name}/{sub}") for sub in compartment.sub_compartments
+                ]
+        case "impact_methods":
+            counts: dict[str, int] = {}
+            for method in await context.inventory.list_methods(database):
+                counts[method.impact_method] = counts.get(method.impact_method, 0) + 1
+            terms = [
+                Term(value=name, detail=f"{n} method" if n == 1 else f"{n} methods")
+                for name, n in sorted(counts.items())
             ]
-    elif kind == "impact_methods":
-        counts: dict[str, int] = {}
-        for method in await context.inventory.list_methods(database):
-            counts[method.impact_method] = counts.get(method.impact_method, 0) + 1
-        terms = [
-            Term(value=name, detail=f"{n} method" if n == 1 else f"{n} methods")
-            for name, n in sorted(counts.items())
-        ]
-    else:
-        seen: list[str] = []
-        for method in await context.inventory.list_methods(database):
-            pair = f"{method.impact_method} > {method.impact_category}"
-            if pair not in seen:
-                seen.append(pair)
-        terms = [Term(value=pair) for pair in seen]
+        case "impact_categories":
+            seen: list[str] = []
+            for method in await context.inventory.list_methods(database):
+                pair = f"{method.impact_method} > {method.impact_category}"
+                if pair not in seen:
+                    seen.append(pair)
+            terms = [Term(value=pair) for pair in seen]
+        case _:
+            assert_never(kind)
     return Answer[list[Term]](value=terms)
 
 

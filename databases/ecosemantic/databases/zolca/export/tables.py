@@ -53,7 +53,7 @@ class Tables:
     def by_id(self, table: str) -> dict[int, dict[str, object]]:
         """The rows of one table by their `ID`, indexed the first time the table is asked for."""
         if table not in self._by_id:
-            self._by_id[table] = {_id(row): row for row in self.rows(table)}
+            self._by_id[table] = {row_id(row): row for row in self.rows(table)}
         return self._by_id[table]
 
     def children(self, table: str, column: str, value: int) -> tuple[dict[str, object], ...]:
@@ -69,7 +69,7 @@ class Tables:
         return self._children[key].get(value, ())
 
 
-def _id(row: Mapping[str, object]) -> int:
+def row_id(row: Mapping[str, object]) -> int:
     """A row's own `ID`."""
     found = row["ID"]
     if not isinstance(found, int):

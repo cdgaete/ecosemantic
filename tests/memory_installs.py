@@ -7,8 +7,8 @@ import asyncio
 import uuid
 from collections.abc import AsyncIterator
 
-from ecosemantic.backends.filesystem import records
 from ecosemantic.errors import NotFound
+from ecosemantic.ports import posted
 from ecosemantic.ports.types import (
     Account,
     DatabaseSource,
@@ -59,16 +59,17 @@ class MemoryInstalls:
         install = Install(
             id=uuid.uuid4(),
             draft=draft,
-            posted_at=records.next_posted_at(records.now(), newest),
+            posted_at=posted.next_posted_at(posted.now(), newest),
         )
         self._installs[install.id] = install
+        self._announce(install.id)
         return install
 
     async def get_install(self, install_id: uuid.UUID) -> Install:
         return self.read_record(install_id)
 
     async def list_installs(self) -> list[Install]:
-        return records.newest_first(self._installs.values())
+        return posted.newest_first(self._installs.values())
 
     async def cancel_install(self, install_id: uuid.UUID) -> Install:
         asked = self.apply_patch(install_id, self.read_record(install_id).cancellation())
@@ -93,13 +94,18 @@ class MemoryInstaller:
         self._sources = sources
         self.started: list[tuple[uuid.UUID, Account | None]] = []
         self.dead: set[uuid.UUID] = set()
+        self.names: dict[str, str] = {}
 
     def sources(self) -> list[DatabaseSource]:
         return self._sources
+
+    def database(self, draft: InstallDraft) -> str:
+        return self.names.get(draft.source) or draft.name or f"{draft.source}-{draft.version}"
 
     def start(self, install_id: uuid.UUID, account: Account | None) -> int:
         self.started.append((install_id, account))
         return 4242
 
     def alive(self, install_id: uuid.UUID) -> bool:
-        return install_id not in self.dead
+        started = any(started_id == install_id for started_id, _account in self.started)
+        return started and install_id not in self.dead

@@ -15,7 +15,7 @@ from scipy.sparse.linalg import splu
 
 from ecosemantic.errors import Invalid
 from ecosemantic.model.canonical import base_pin
-from ecosemantic.model.entities import ProductSystem
+from ecosemantic.model.entities import Process, ProductSystem
 from ecosemantic.model.refs import BackgroundRef, Database, ForegroundRef, SystemRef
 
 Node = tuple[uuid.UUID, str]
@@ -236,6 +236,16 @@ def reference_of(product_system: ProductSystem, parameter: str) -> str:
             f"update_product_system or name a {parameter}"
         )
     return product_system.reference_process
+
+
+def linked_reference(linked: ProductSystem, owner: str) -> Process:
+    """The reference process of a system `owner` links; Invalid names both and the remedy."""
+    if linked.reference_process is None:
+        raise Invalid(
+            f"{owner} links {linked.name}, which has no reference process; "
+            "set one with update_product_system"
+        )
+    return linked.process(linked.reference_process)
 
 
 def off_build(documents: Sequence[ProductSystem], installed: Database) -> list[ProductSystem]:

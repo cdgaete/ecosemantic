@@ -3,11 +3,13 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from pydantic import ValidationError
 
 from ecosemantic.compute.edits import (
     add_exchange,
     add_process,
     add_scenario,
+    invalid,
     new_product_system,
     patch_exchange,
     patch_process,
@@ -24,6 +26,7 @@ from ecosemantic.errors import Conflict, Invalid, NotFound
 from ecosemantic.model.canonical import base_pin, content_hash
 from ecosemantic.model.entities import (
     Case,
+    Exchange,
     ExchangeOverride,
     Parameter,
     ParameterOverride,
@@ -50,6 +53,17 @@ def test_patch_product_system_replaces_only_what_is_given(product_system: Produc
     out = patch_product_system(product_system, notes="checked")
     assert out.notes == "checked" and out.name == product_system.name
     assert product_system.notes == "Fixture."
+
+
+def test_an_invalid_document_names_every_field_that_failed() -> None:
+    with pytest.raises(ValidationError) as caught:
+        Exchange.model_validate(
+            {"id": str(uuid.uuid4()), "type": "product", "name": "x", "amount": "abc", "unit": 5}
+        )
+    assert str(invalid(caught.value)) == (
+        "amount: Input should be a valid number, unable to parse string as a number; "
+        "unit: Input should be a valid string"
+    )
 
 
 def test_patch_product_system_needs_a_field(product_system: ProductSystem) -> None:
@@ -471,7 +485,10 @@ def test_a_link_takes_the_unit_and_product_of_the_linked_reference_process() -> 
     for linked, reason in (
         (None, "as it stood at the pin"),
         (elsewhere, "is on 'other'"),
-        (frame.model_copy(update={"reference_process": None}), "no reference process"),
+        (
+            frame.model_copy(update={"reference_process": None}),
+            "which has no reference process; set one with update_product_system",
+        ),
     ):
         with pytest.raises(Invalid, match=reason):
             add_exchange(host, "widget", type="product", input=link, amount=1.0, linked=linked)

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+from pydantic import BaseModel, ValidationError
+
 from ecosemantic.errors import (
     Cancelled,
     Conflict,
@@ -8,9 +11,11 @@ from ecosemantic.errors import (
     StaleScenario,
     Unauthorised,
     error_kind,
+    error_line,
     error_payload,
     error_status,
     failure_payload,
+    field_error,
 )
 
 
@@ -60,3 +65,23 @@ def test_a_surface_adds_its_own_remedy_to_the_error_it_renders() -> None:
     worded = error_payload(stale, {StaleScenario: "rebase it"})
     assert worded.message == f"{stale}; rebase it"
     assert error_payload(Invalid("bad"), {StaleScenario: "rebase it"}).message == "bad"
+
+
+def test_an_error_line_joins_its_location_with_dots_before_its_message() -> None:
+    assert error_line(("processes", 0, "code"), "Field required") == (
+        "processes.0.code: Field required"
+    )
+
+
+def test_a_validation_error_renders_its_first_field_and_message() -> None:
+    class Inner(BaseModel):
+        count: int
+
+    class Outer(BaseModel):
+        inner: Inner
+
+    with pytest.raises(ValidationError) as caught:
+        Outer.model_validate({"inner": {"count": "many"}})
+    assert field_error(caught.value) == (
+        "inner.count: Input should be a valid integer, unable to parse string as an integer"
+    )

@@ -12,6 +12,7 @@ from ecosemantic.errors import Invalid
 from ecosemantic.geometry import linked_code
 from ecosemantic.model.entities import ProductSystem
 from ecosemantic.model.refs import ForegroundRef, LinkedProcessRef, SystemRef
+from ecosemantic.model.validation import linked_reference
 from ecosemantic.ports.types import Activity
 
 
@@ -45,9 +46,7 @@ def scale(
             if not isinstance(e.input, SystemRef):
                 continue
             other = linked[e.input.product_system_id]
-            if other.reference_process is None:
-                raise Invalid(f"{other.name} has no reference process")
-            reference = other.process(other.reference_process)
+            reference = linked_reference(other, system.name)
             levels = [
                 a.level
                 for a in activities

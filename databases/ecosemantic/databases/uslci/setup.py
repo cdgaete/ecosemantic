@@ -14,7 +14,7 @@ from olca_schema.zipio import ZipReader
 from ecosemantic.databases.lists import UnlinkedRow, read_unlinked
 from ecosemantic.databases.uslci.build import build
 from ecosemantic.databases.uslci.download import Commons, download
-from ecosemantic.databases.uslci.profile import Pin, Profile, recorded
+from ecosemantic.databases.uslci.profile import Pin, Profile, database_name, recorded
 from ecosemantic.databases.uslci.validate import list_mismatches
 from ecosemantic.errors import Invalid
 from ecosemantic.package.background import Import, Unlinked, read_background
@@ -83,7 +83,7 @@ def prepare(profile: Profile, server: Commons, work: Path, report: Reporter) -> 
         files.inventory, files.methods, version=profile.version, out_dir=work, bridged=files.bridged
     )
     report(InstallProgress(step="reading"))
-    imported = read_background(built.bundle, f"uslci-{profile.version}", foreground=frozenset())
+    imported = read_background(built.bundle, database_name(profile.version), foreground=frozenset())
     report(InstallProgress(step="checking"))
     mismatches = list_mismatches(imported, built.left_out, profile)
     if mismatches:

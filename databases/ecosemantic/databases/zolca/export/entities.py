@@ -21,7 +21,7 @@ import datetime
 from collections.abc import Mapping
 
 from ecosemantic.databases.zolca.export import geometry, refs, render
-from ecosemantic.databases.zolca.export.tables import Tables, foreign
+from ecosemantic.databases.zolca.export.tables import Tables, foreign, row_id
 from ecosemantic.errors import Invalid, NotSupported
 
 GLOBAL_SCOPE = "GLOBAL"
@@ -47,7 +47,7 @@ def process(tables: Tables, row: dict[str, object]) -> dict[str, object]:
     _reference(found, tables, "exchangeDqSystem", "DQSystem", row, "F_EXCHANGE_DQ_SYSTEM")
     _reference(found, tables, "socialDqSystem", "DQSystem", row, "F_SOCIAL_DQ_SYSTEM")
     _put(found, "dqEntry", row["DQ_ENTRY"])
-    owner = _id(row)
+    owner = row_id(row)
     documentation = foreign(row, "F_PROCESS_DOC")
     if documentation is not None:
         found["processDocumentation"] = _documentation(tables, documentation)
@@ -77,7 +77,7 @@ def flow(tables: Tables, row: dict[str, object]) -> dict[str, object]:
     reference = foreign(row, "F_REFERENCE_FLOW_PROPERTY")
     found["flowProperties"] = [
         _flow_property_factor(tables, child, reference=reference)
-        for child in tables.children("TBL_FLOW_PROPERTY_FACTORS", "F_FLOW", _id(row))
+        for child in tables.children("TBL_FLOW_PROPERTY_FACTORS", "F_FLOW", row_id(row))
     ]
     return found
 
@@ -100,7 +100,7 @@ def unit_group(tables: Tables, row: dict[str, object]) -> dict[str, object]:
     reference = foreign(row, "F_REFERENCE_UNIT")
     found["units"] = [
         _unit(child, reference=reference)
-        for child in tables.children("TBL_UNITS", "F_UNIT_GROUP", _id(row))
+        for child in tables.children("TBL_UNITS", "F_UNIT_GROUP", row_id(row))
     ]
     return found
 
@@ -178,7 +178,7 @@ def dq_system(tables: Tables, row: dict[str, object]) -> dict[str, object]:
     _reference(found, tables, "source", "Source", row, "F_SOURCE")
     found["indicators"] = [
         _indicator(tables, child)
-        for child in tables.children("TBL_DQ_INDICATORS", "F_DQ_SYSTEM", _id(row))
+        for child in tables.children("TBL_DQ_INDICATORS", "F_DQ_SYSTEM", row_id(row))
     ]
     return found
 
@@ -190,13 +190,13 @@ def impact_method(tables: Tables, row: dict[str, object]) -> dict[str, object]:
     _reference(found, tables, "source", "Source", row, "F_SOURCE")
     categories = [
         refs.ref(tables, "ImpactCategory", _key(link, "F_IMPACT_CATEGORY"))
-        for link in tables.children("TBL_IMPACT_LINKS", "F_IMPACT_METHOD", _id(row))
+        for link in tables.children("TBL_IMPACT_LINKS", "F_IMPACT_METHOD", row_id(row))
     ]
     if categories:
         found["impactCategories"] = categories
     sets = [
         _nw_set(tables, child)
-        for child in tables.children("TBL_NW_SETS", "F_IMPACT_METHOD", _id(row))
+        for child in tables.children("TBL_NW_SETS", "F_IMPACT_METHOD", row_id(row))
     ]
     if sets:
         found["nwSets"] = sets
@@ -210,7 +210,7 @@ def impact_category(tables: Tables, row: dict[str, object]) -> dict[str, object]
     _put(found, "refUnit", row["REFERENCE_UNIT"])
     _put(found, "direction", row["DIRECTION"])
     _reference(found, tables, "source", "Source", row, "F_SOURCE")
-    owner = _id(row)
+    owner = row_id(row)
     found["parameters"] = [
         parameter(tables, child)
         for child in tables.children("TBL_PARAMETERS", "F_OWNER", owner)
@@ -267,7 +267,7 @@ def _exchange(
     _reference(found, tables, "defaultProvider", "Process", row, "F_DEFAULT_PROVIDER")
     _reference(found, tables, "currency", "Currency", row, "F_CURRENCY")
     _reference(found, tables, "location", "Location", row, "F_LOCATION")
-    if _id(row) == owner["F_QUANTITATIVE_REFERENCE"]:
+    if row_id(row) == owner["F_QUANTITATIVE_REFERENCE"]:
         found["isQuantitativeReference"] = True
     uncertainty = _uncertainty(row)
     if uncertainty is not None:
@@ -331,7 +331,7 @@ def _review(tables: Tables, row: Mapping[str, object]) -> dict[str, object]:
     _reference(found, tables, "report", "Source", row, "F_REPORT")
     reviewers = [
         refs.ref(tables, "Actor", _key(link, "F_ACTOR"))
-        for link in tables.children("TBL_ACTOR_LINKS", "F_OWNER", _id(row))
+        for link in tables.children("TBL_ACTOR_LINKS", "F_OWNER", row_id(row))
     ]
     if reviewers:
         found["reviewers"] = reviewers
@@ -345,7 +345,7 @@ def _unit(row: Mapping[str, object], *, reference: int | None) -> dict[str, obje
     _put(found, "description", row["DESCRIPTION"])
     _put(found, "conversionFactor", row["CONVERSION_FACTOR"])
     _put(found, "synonyms", _synonyms(row["SYNONYMS"]))
-    if _id(row) == reference:
+    if row_id(row) == reference:
         found["isRefUnit"] = True
     return found
 
@@ -368,7 +368,7 @@ def _indicator(tables: Tables, row: Mapping[str, object]) -> dict[str, object]:
     found: dict[str, object] = {"position": row["POSITION"]}
     _put(found, "name", row["NAME"])
     found["scores"] = [
-        _score(child) for child in tables.children("TBL_DQ_SCORES", "F_DQ_INDICATOR", _id(row))
+        _score(child) for child in tables.children("TBL_DQ_SCORES", "F_DQ_INDICATOR", row_id(row))
     ]
     return found
 
@@ -391,7 +391,7 @@ def _nw_set(tables: Tables, row: Mapping[str, object]) -> dict[str, object]:
     _put(found, "weightedScoreUnit", row["WEIGHTED_SCORE_UNIT"])
     found["factors"] = [
         _nw_factor(tables, child)
-        for child in tables.children("TBL_NW_FACTORS", "F_NW_SET", _id(row))
+        for child in tables.children("TBL_NW_FACTORS", "F_NW_SET", row_id(row))
     ]
     return found
 
@@ -492,14 +492,6 @@ def _reference(
     named = foreign(row, column)
     if named is not None:
         found[key] = refs.ref(tables, model, named)
-
-
-def _id(row: Mapping[str, object]) -> int:
-    """A row's own `ID`."""
-    found = row["ID"]
-    if not isinstance(found, int):
-        raise Invalid(f"a row's ID is {found!r}")
-    return found
 
 
 def _key(row: Mapping[str, object], column: str) -> int:

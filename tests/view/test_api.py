@@ -4,12 +4,14 @@ import dataclasses
 import json
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from importlib.metadata import version
 from pathlib import Path
 
 import pytest
 from fastmcp import FastMCP
+from pydantic import JsonValue
+from starlette.responses import Response
 from starlette.testclient import TestClient
 
 from ecosemantic.mcp.context import ServerContext
@@ -25,7 +27,7 @@ from ecosemantic.model.entities import (
     method_id,
 )
 from ecosemantic.model.refs import ElementaryFlowRef
-from ecosemantic.ports.types import InventoryRow, System
+from ecosemantic.ports.types import InventoryRow, Layout, Spot, System
 from ecosemantic.view.api import call_tool
 from ecosemantic.view.app import build_view
 from tests.fixture_data import FIXTURE_BIO, FIXTURE_DB, FLOW_IDS, GWP
@@ -291,6 +293,61 @@ async def test_the_layout_answers_the_arrangement_and_keeps_what_is_posted(
         assert (held[code]["x"], held[code]["y"], held[code]["held"]) == (11.0, 22.0, True)
         released = client.delete(f"/api/product-systems/{system_id}/layout").json()["value"]
         assert not any(p["held"] for p in released["cards"])
+
+
+async def test_releasing_the_layout_clears_a_held_code_no_card_draws(
+    context: ServerContext, full_server: FastMCP, fixture_system_stored: ProductSystem
+) -> None:
+    system_id = fixture_system_stored.id
+    await context.storage.put_layout(system_id, Layout(held={"gone": Spot(x=1.0, y=2.0)}))
+    try:
+        with TestClient(build_view(context, full_server, static=NOWHERE)) as client:
+            released = client.delete(f"/api/product-systems/{system_id}/layout")
+        assert released.status_code == 200
+        assert (await context.storage.get_layout(system_id)).held == {}
+    finally:
+        await context.storage.put_layout(system_id, Layout())
+
+
+async def test_releasing_the_layout_is_one_arrange_graph_call_releasing_all_under_the_variant(
+    context: ServerContext,
+    full_server: FastMCP,
+    fixture_system_stored: ProductSystem,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system = fixture_system_stored.model_copy(deep=True, update={"hash": None})
+    system.id = uuid.uuid5(system.id, "release-variant")
+    frame = next(e for e in system.process("widget").exchanges if e.name == "frame")
+    frame.formula = "frame_mass"
+    system.parameters = [Parameter(name="frame_mass", value=0.25)]
+    system.cases = [Case(name="heavy frame", values={"frame_mass": 0.5})]
+    await context.storage.put_product_system(system, context.actor, "created")
+    base = f"/api/product-systems/{system.id}/layout"
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    async def spy(
+        server: FastMCP, name: str, arguments: Mapping[str, JsonValue], started: bool = False
+    ) -> Response:
+        calls.append((name, dict(arguments)))
+        return await call_tool(server, name, arguments, started)
+
+    monkeypatch.setattr("ecosemantic.view.api.call_tool", spy)
+    with TestClient(build_view(context, full_server, static=NOWHERE)) as client:
+        client.post(base, json={"placements": [{"code": "frame", "x": 11.0, "y": 22.0}]})
+        calls.clear()
+        released = client.delete(base, params={"variant": "heavy frame"}).json()["value"]
+    assert not any(p["held"] for p in released["cards"])
+    assert calls == [
+        (
+            "arrange_graph",
+            {
+                "product_system_id": str(system.id),
+                "placements": [],
+                "release_all": True,
+                "variant": "heavy frame",
+            },
+        )
+    ]
 
 
 async def test_a_malformed_placement_answers_the_invalid_envelope(

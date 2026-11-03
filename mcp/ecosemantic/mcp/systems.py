@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from pathlib import Path
 
 from fastmcp import FastMCP
@@ -14,9 +15,8 @@ from ecosemantic.compute.edits import (
     patch_product_system,
 )
 from ecosemantic.compute.links import held_pins, pinned_documents, pinning
-from ecosemantic.compute.overrides import apply_variant
 from ecosemantic.errors import Invalid, NotFound
-from ecosemantic.mcp.calculation import refuse_stale
+from ecosemantic.mcp.calculation import variant_of
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import DELETE, READ, WRITE
 from ecosemantic.mcp.envelopes import (
@@ -77,10 +77,8 @@ async def get_product_system(
     context: ServerContext, product_system_id: str, variant: str | None = None
 ) -> SystemRead:
     system = await context.storage.get_product_system(as_uuid(product_system_id))
-    if variant is not None:
-        await refuse_stale(context, system, [variant])
     return SystemRead(
-        value=system if variant is None else apply_variant(system, variant),
+        value=system if variant is None else await variant_of(context, system, variant),
         open_requests=await open_requests(context.storage, system.id),
         view_url=context.deep_link(system.id),
     )
@@ -170,13 +168,12 @@ async def validate_product_system(
     return Answer[ValidationReport](value=validate(system, target, pins, installed, treatments))
 
 
-async def export_product_system(
-    context: ServerContext, product_system_id: str, path: str
-) -> Answer[WrittenPath]:
-    system = await context.storage.get_product_system(as_uuid(product_system_id))
-    destination = Path(path)
-    if not destination.parent.is_dir():
-        raise Invalid(f"{str(destination.parent)!r} does not exist")
+async def export_package(
+    context: ServerContext, product_system_id: uuid.UUID, destination: Path
+) -> tuple[ProductSystem, LogEntry]:
+    """Write a product system and the documents it pins as an openLCA package at the destination,
+    at the state its log states; the system as read and the entry the export records."""
+    system = await context.storage.get_product_system(product_system_id)
     linked = await pinned_documents(system, context.storage.get_version)
     at = stated_at(system, await context.storage.log(system.id))
     entry = await asyncio.to_thread(
@@ -188,6 +185,16 @@ async def export_product_system(
         linked=linked,
         at=at,
     )
+    return system, entry
+
+
+async def export_product_system(
+    context: ServerContext, product_system_id: str, path: str
+) -> Answer[WrittenPath]:
+    destination = Path(path)
+    if not destination.parent.is_dir():
+        raise Invalid(f"{str(destination.parent)!r} does not exist")
+    _, entry = await export_package(context, as_uuid(product_system_id), destination)
     return Answer[WrittenPath](value=WrittenPath(path=str(destination), hash=entry.result_hash))
 
 

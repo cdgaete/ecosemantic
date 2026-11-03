@@ -42,6 +42,21 @@ def test_names_the_store_does_not_serve_are_not_found(native_store: NativeStore)
         native_store.owner_of_elementary_flows("nowhere")
 
 
+def test_a_database_the_store_does_not_serve_is_named_with_those_it_serves(
+    native_store: NativeStore,
+) -> None:
+    message = (
+        f"no database 'nowhere' under {native_store.directory}; "
+        "this store serves ['fixture', 'looped']"
+    )
+    with pytest.raises(NotFound) as registered:
+        native_store.registered("nowhere")
+    with pytest.raises(NotFound) as technosphere:
+        native_store.technosphere_of("nowhere")
+    assert str(registered.value) == message
+    assert str(technosphere.value) == message
+
+
 def test_a_calculation_is_loaded_once_per_database(native_store: NativeStore) -> None:
     first = native_store.call(FIXTURE_DB, lambda: native_store.calculation(FIXTURE_DB))
     again = native_store.call(FIXTURE_DB, lambda: native_store.calculation(FIXTURE_DB))

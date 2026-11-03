@@ -9,6 +9,7 @@ import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.exceptions import ToolError
 
+from ecosemantic.compute.results import InventoryResult
 from ecosemantic.mcp import calculation
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.server import build_server
@@ -185,6 +186,18 @@ async def test_inventory_pages_and_filters(server: FastMCP, widget: uuid.UUID) -
         none = await rows(compartment="water")
         assert none["items"] == [] and "compartment" in none["hint"]
         assert [r["name"] for r in (await rows(query="methane"))["items"]] == ["Methane, fossil"]
+
+
+def test_the_inventory_listing_holds_every_field_of_the_inventory_result_alike() -> None:
+    listing = calculation.InventoryListing.model_fields
+    for name, field in InventoryResult.model_fields.items():
+        assert name in listing, name
+        held = listing[name]
+        assert (held.annotation, held.default, held.default_factory) == (
+            field.annotation,
+            field.default,
+            field.default_factory,
+        ), name
 
 
 async def test_inventory_rows_of_a_water_user_split_by_side(

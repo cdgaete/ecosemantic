@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import ast
+import inspect
+import pkgutil
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
 
 import ecosemantic
@@ -34,6 +37,63 @@ OLCA_ENCODINGS = (
     "package/base.py",
     "package/release.py",
 )
+LAYERS = (
+    ("errors",),
+    ("model",),
+    ("engine", "ports", "quantity"),
+    ("geometry", "compute", "events"),
+    ("routes", "scaling", "package", "tables"),
+    ("troubles",),
+    ("textmap", "layout", "backends", "databases"),
+    ("mcp", "settings", "runs"),
+    ("telemetry", "installs", "view"),
+    ("local", "serve"),
+    ("workspace", "cli"),
+    ("console",),
+)
+RANKS: dict[str, int] = {name: rank for rank, layer in enumerate(LAYERS) for name in layer}
+SURFACES = {"view": "view/", "cli": "cli/", "workspace": "workspace/"}
+CALLABLE_BELOW_MCP: dict[str, frozenset[str]] = {
+    "view": frozenset(
+        {
+            "ecosemantic.errors.error_payload",
+            "ecosemantic.errors.error_status",
+            "ecosemantic.events.pump_installs",
+            "ecosemantic.events.pump_runs",
+            "ecosemantic.events.pump_storage",
+            "ecosemantic.model.validation.anchors",
+            "ecosemantic.package.package.unzip_package",
+            "ecosemantic.package.package.zip_package",
+            "ecosemantic.ports.types.open_trail",
+            "ecosemantic.ports.types.trail",
+            "ecosemantic.tables.results.write_contribution",
+            "ecosemantic.tables.results.write_impact",
+            "ecosemantic.tables.results.write_inventory",
+        }
+    ),
+    "cli": frozenset(
+        {
+            "ecosemantic.backends.native.install.install",
+            "ecosemantic.compute.accounts.account_from",
+            "ecosemantic.compute.accounts.missing",
+            "ecosemantic.errors.error_payload",
+            "ecosemantic.package.background.read_background",
+            "ecosemantic.package.manifest.read_manifest",
+            "ecosemantic.package.model_package.import_model_package",
+            "ecosemantic.package.release.build_release",
+            "ecosemantic.package.working.build_working",
+            "ecosemantic.package.working.foreground_processes",
+            "ecosemantic.package.working.restore_systems",
+            "ecosemantic.package.working.write_base_part",
+            "ecosemantic.ports.types.source_credential",
+            "ecosemantic.tables.reader.assemble",
+            "ecosemantic.tables.results.write_contribution",
+            "ecosemantic.tables.results.write_impact",
+            "ecosemantic.tables.results.write_inventory",
+        }
+    ),
+    "workspace": frozenset(),
+}
 
 
 def modules() -> dict[str, ast.Module]:
@@ -164,6 +224,91 @@ def test_pypardiso_is_imported_inside_the_function_that_uses_it() -> None:
                 assert inside_function(tree, node), path
 
 
+def imported(tree: ast.Module) -> list[tuple[int, str]]:
+    """Each name an import of `ecosemantic` binds at run time, as its line and its dotted path.
+    An import under `if TYPE_CHECKING:` binds nothing at run time."""
+    typing_only = {
+        id(child)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.If)
+        and isinstance(node.test, ast.Name)
+        and node.test.id == "TYPE_CHECKING"
+        for statement in node.body
+        for child in ast.walk(statement)
+    }
+    found = []
+    for node in ast.walk(tree):
+        if id(node) in typing_only:
+            continue
+        if isinstance(node, ast.Import):
+            found += [(node.lineno, alias.name) for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            found += [(node.lineno, f"{node.module}.{alias.name}") for alias in node.names]
+    return [(line, dotted) for line, dotted in found if dotted.startswith("ecosemantic.")]
+
+
+def rank(path: str) -> int:
+    """The rank of the module at this path: its subpackage's, and one below them all for the
+    namespace's own `__init__.py`, which every import of a subpackage runs first. That module is a
+    lazy facade: it reaches the modules behind its public names through `import_module` on first
+    use, a dynamic import the AST does not read."""
+    subpackage, _, inner = path.partition("/")
+    return RANKS[subpackage] if inner else -1
+
+
+def test_every_subpackage_has_a_rank() -> None:
+    assert set(RANKS) == {path.split("/")[0] for path in modules() if "/" in path}
+
+
+def test_every_import_points_down_the_layers() -> None:
+    upward = [
+        f"{path}:{line} {dotted}"
+        for path, tree in modules().items()
+        for line, dotted in imported(tree)
+        if dotted.split(".")[1] != path.split("/")[0] and RANKS[dotted.split(".")[1]] >= rank(path)
+    ]
+    assert upward == [], upward
+
+
+def imported_below_mcp(prefix: str, kind: Callable[[object], bool]) -> dict[str, list[str]]:
+    """Each object of this kind the modules under this path import from a subpackage ranked below
+    `mcp`, by the dotted path the import names, with the `file:line` of each import."""
+    found: dict[str, list[str]] = {}
+    for path, tree in modules().items():
+        if not path.startswith(prefix):
+            continue
+        for line, dotted in imported(tree):
+            below = RANKS[dotted.split(".")[1]] < RANKS["mcp"]
+            if below and kind(pkgutil.resolve_name(dotted)):
+                found.setdefault(dotted, []).append(f"{path}:{line}")
+    return found
+
+
+def test_the_view_and_the_command_line_call_below_mcp_only_what_is_listed() -> None:
+    unlisted: dict[str, list[str]] = {}
+    unused: set[str] = set()
+    for surface, prefix in SURFACES.items():
+        called = imported_below_mcp(prefix, inspect.isfunction)
+        listed = CALLABLE_BELOW_MCP[surface]
+        unlisted |= {
+            f"{surface} {dotted}": at for dotted, at in called.items() if dotted not in listed
+        }
+        unused |= {f"{surface} {dotted}" for dotted in listed - set(called)}
+    assert unlisted == {}, unlisted
+    assert unused == set(), unused
+
+
+def test_no_surface_imports_a_module_from_below_mcp() -> None:
+    """A call through a module's attribute is invisible to the import graph, so a surface imports
+    from below `mcp` the functions it calls, never their module."""
+    found = {
+        f"{surface} {dotted}": at
+        for surface, prefix in SURFACES.items()
+        for dotted, at in imported_below_mcp(prefix, inspect.ismodule).items()
+    }
+    assert found == {}, found
+
+
 def literals(tree: ast.Module) -> list[tuple[int, tuple[str, ...]]]:
     found = []
     for node in ast.walk(tree):
@@ -178,10 +323,10 @@ def literals(tree: ast.Module) -> list[tuple[int, tuple[str, ...]]]:
 
 
 def test_a_literal_vocabulary_is_spelled_once() -> None:
-    spellings: dict[tuple[str, ...], list[str]] = {}
+    spellings: dict[frozenset[str], list[str]] = {}
     for path, tree in modules().items():
         for line, values in literals(tree):
-            spellings.setdefault(values, []).append(f"{path}:{line}")
+            spellings.setdefault(frozenset(values), []).append(f"{path}:{line}")
     repeated = {values: at for values, at in spellings.items() if len(at) > 1}
     assert repeated == {}, repeated
 
@@ -227,5 +372,18 @@ def test_no_mcp_module_names_the_telemetry_sdk() -> None:
         path
         for path, tree in modules().items()
         if path.startswith("mcp/") and names(tree, "opentelemetry.sdk")
+    ]
+    assert offenders == [], offenders
+
+
+TEST_DOUBLES = REPOSITORY / "tests"
+
+
+def test_no_test_double_names_a_backend() -> None:
+    doubles = sorted(TEST_DOUBLES.glob("memory_*.py")) + [TEST_DOUBLES / "dict_resolver.py"]
+    offenders = [
+        path.name
+        for path in doubles
+        if names(ast.parse(path.read_text(encoding="utf-8")), "ecosemantic.backends")
     ]
     assert offenders == [], offenders

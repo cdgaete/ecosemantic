@@ -6,12 +6,11 @@ from fastmcp import FastMCP
 from pydantic import BaseModel
 
 from ecosemantic.compute.links import held_pins, linked_documents
-from ecosemantic.compute.overrides import apply_variant
 from ecosemantic.compute.parameters import materialize
 from ecosemantic.errors import Invalid
 from ecosemantic.geometry import Placement, link_texts, links
 from ecosemantic.layout import arrange, bounds
-from ecosemantic.mcp.calculation import demand_of, refuse_stale
+from ecosemantic.mcp.calculation import demand_of, variant_of
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import READ, WRITE
 from ecosemantic.mcp.envelopes import Answer, as_uuid, bound, boundary
@@ -53,8 +52,7 @@ async def _arrangement(
     if variant is None:
         system = stored
     else:
-        await refuse_stale(context, stored, [variant])
-        system = apply_variant(stored, variant)
+        system = await variant_of(context, stored, variant)
     stored = await context.storage.get_layout(system_id)
     held = {code: (spot.x, spot.y) for code, spot in stored.held.items()}
     flows = {
@@ -73,7 +71,7 @@ async def _arrangement(
     scaled: dict[str, Scaled] | None = None
     if reason is None:
         linked = await linked_documents(system, context.storage.get_version)
-        base = materialize(system)
+        base = system if variant is not None else materialize(system)
         activities = await context.calculation.supply(
             System.of(base, linked), demand_of(base, None)
         )
@@ -111,15 +109,20 @@ async def arrange_graph(
     product_system_id: str,
     placements: list[CardSpot],
     release: list[str] | None = None,
+    release_all: bool = False,
     variant: str | None = None,
 ) -> Answer[Arrangement]:
     system_id = as_uuid(product_system_id)
+    if release and release_all:
+        raise Invalid("release and release_all both let cards go; pass one of them")
     released = set(release or [])
     both = sorted({placement.code for placement in placements} & released)
     if both:
         raise Invalid(f"placements and release both name {', '.join(both)}")
-    stored = await context.storage.get_layout(system_id)
-    held = {code: spot for code, spot in stored.held.items() if code not in released}
+    held: dict[str, Spot] = {}
+    if not release_all:
+        stored = await context.storage.get_layout(system_id)
+        held = {code: spot for code, spot in stored.held.items() if code not in released}
     for placement in placements:
         held[placement.code] = Spot(x=placement.x, y=placement.y)
     await context.storage.put_layout(system_id, Layout(held=held))
@@ -152,7 +155,9 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "Put named cards at given places and answer the drawing that results. A card put "
             "here is held exactly as one a person dragged: the automatic arrangement packs the "
             "others around it and never moves it. Name cards in release to let them go back to "
-            "the automatic layout; placements and release naming one card is refused. Move cards, "
+            "the automatic layout; placements and release naming one card is refused. Pass "
+            "release_all to let every held card go, drawn or not, before placements apply; "
+            "release_all beside release is refused. Move cards, "
             "read the map and the score, and move again until the score is 0 or stops falling. "
             "The answer is graph_layout's: activity, scaled amounts, labels and scaling, under the "
             "variant when one is named; where a card is held does not depend on the variant."

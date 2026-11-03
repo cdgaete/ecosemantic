@@ -3,7 +3,7 @@ import unicodedata
 
 import pytest
 
-from ecosemantic.backends.native.terms import tokens
+from ecosemantic.ports.terms import tokens
 
 TEXTS = [
     "steel production",

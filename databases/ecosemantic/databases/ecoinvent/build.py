@@ -5,11 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from ecosemantic.databases.ecoinvent.datasets import read_datasets
-from ecosemantic.databases.ecoinvent.lcia import read_methods
-from ecosemantic.databases.ecoinvent.masterdata import base_flows, read_masterdata
-from ecosemantic.databases.ecoinvent.overview import read_urls
-from ecosemantic.databases.ecoinvent.probe import Probe, probe
+from ecosemantic.databases.ecoinvent.masterdata import base_flows
+from ecosemantic.databases.ecoinvent.probe import Probe, probe_read, read_release
 from ecosemantic.databases.ecoinvent.profile import Profile, verify
 from ecosemantic.databases.ecoinvent.release import Release
 from ecosemantic.errors import NotSupported
@@ -44,20 +41,16 @@ def _refusal(found: Probe, profile: Profile) -> NotSupported:
 def build(release: Release, profile: Profile, out_dir: Path, now: datetime) -> Written:
     """Probe, refuse anything unknown, and write the release as one bundle."""
     verify(release, profile)
-    found = probe(release, profile)
+    read = read_release(release, profile)
+    found = probe_read(release, profile, read)
     if not found.clean(profile):
         raise _refusal(found, profile)
-    master = read_masterdata(release.ecospold)
-    urls = read_urls(release.overview, profile.overview)
-    datasets, _ = read_datasets(release.ecospold, urls=urls)
-    name = f"ecoinvent-{release.version}-{release.system_model}"
-    methods, _ = read_methods(release.lcia, profile.lcia, master, name)
     out_dir.mkdir(parents=True, exist_ok=True)
     return write_base_bundle(
-        BaseRows(datasets=datasets, flows=base_flows(master), methods=methods),
+        BaseRows(datasets=read.datasets, flows=base_flows(read.master), methods=read.methods),
         scheme="ecoinvent",
-        name=name,
+        name=read.name,
         version=release.version,
-        destination=out_dir / f"{name}.zip",
+        destination=out_dir / f"{read.name}.zip",
         now=now,
     )

@@ -66,7 +66,7 @@ def test_a_failed_export_leaves_no_temp_directory(
     def _boom(*args: object, **kwargs: object) -> None:
         raise RuntimeError("boom")
 
-    monkeypatch.setattr("ecosemantic.view.olca.export_model_package", _boom)
+    monkeypatch.setattr("ecosemantic.mcp.systems.export_model_package", _boom)
     app = build_view(context, full_server, static=Path("/nonexistent-static"))
     with TestClient(app, raise_server_exceptions=False) as c:
         response = c.get(f"/api/product-systems/{fixture_system_stored.id}/package.zip")

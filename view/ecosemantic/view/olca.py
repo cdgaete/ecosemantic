@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
-
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.routing import Route
 
-from ecosemantic.compute.links import pinned_documents
 from ecosemantic.errors import Invalid
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.envelopes import as_uuid
-from ecosemantic.package.model_package import export_model_package, stated_at
+from ecosemantic.mcp.systems import export_package
 from ecosemantic.view.handling import answering, created, sent, uploaded, working
 
 
@@ -31,20 +28,10 @@ def routes(context: ServerContext) -> list[Route]:
 
     @answering
     async def package_zip(request: Request) -> Response:
-        system = await context.storage.get_product_system(as_uuid(request.path_params["id"]))
-        linked = await pinned_documents(system, context.storage.get_version)
-        at = stated_at(system, await context.storage.log(system.id))
+        system_id = as_uuid(request.path_params["id"])
         with working("ecosemantic-export-", keep=True) as work:
-            zipped = work / f"{system.id}.zip"
-            await asyncio.to_thread(
-                export_model_package,
-                system,
-                zipped,
-                context.actor,
-                context.resolver,
-                linked=linked,
-                at=at,
-            )
+            zipped = work / f"{system_id}.zip"
+            system, _ = await export_package(context, system_id, zipped)
             return sent(zipped, work, f"{system.name}.zip")
 
     @answering

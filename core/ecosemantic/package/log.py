@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, JsonValue
 
-from ecosemantic.errors import Invalid
+from ecosemantic.errors import Conflict, Invalid
 from ecosemantic.model.canonical import content_hash, significant
 from ecosemantic.model.entities import Actor, ProductSystem
 from ecosemantic.package.sidecar import read_lines, write_lines
@@ -26,6 +26,27 @@ _ACTIVITY_FIELDS = (
 _EXCHANGE_FIELDS = ("type", "name", "amount", "unit", "input", "formula", "comment", "uncertainty")
 _PARAMETER_FIELDS = ("value", "formula", "unit", "description")
 _PROJECT_FIELDS = ("name", "description", "notes", "database", "reference_process")
+
+
+def refuse_base(before: ProductSystem | None, product_system: ProductSystem) -> None:
+    """Conflict unless the base the write claims is the state stored, or none for a new system."""
+    if before is None:
+        if product_system.hash is not None:
+            raise Conflict(
+                f"no product system {product_system.id} is stored, "
+                f"yet the write claims base {product_system.hash}"
+            )
+        return
+    if product_system.hash is None:
+        raise Conflict(
+            f"product system {product_system.id} is stored already, at {before.hash}; "
+            "a write that names no base adds a new system only"
+        )
+    if product_system.hash != before.hash:
+        raise Conflict(
+            f"product system {product_system.id} is at {before.hash}, "
+            f"the write is based on {product_system.hash}"
+        )
 
 
 def _dump(value: object) -> JsonValue | None:

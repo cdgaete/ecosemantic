@@ -13,7 +13,7 @@ from filelock import FileLock
 
 from ecosemantic.backends.filesystem.watching import touched
 from ecosemantic.compute.links import pinned, pins
-from ecosemantic.errors import Conflict, NotFound
+from ecosemantic.errors import Conflict
 from ecosemantic.model.entities import Actor, ProductSystem
 from ecosemantic.package.log import read_log
 from ecosemantic.package.package import (
@@ -27,6 +27,7 @@ from ecosemantic.package.package import (
 from ecosemantic.package.requests import next_request, read_requests, resolve, write_requests
 from ecosemantic.package.sidecar import LAYOUT_FILE, SIDECAR_DIR, read_sidecar
 from ecosemantic.ports.resolver import Resolver
+from ecosemantic.ports.storage import no_product_system
 from ecosemantic.ports.types import (
     Layout,
     LogEntry,
@@ -54,7 +55,7 @@ class FilesystemStorage:
     def _dir(self, product_system_id: uuid.UUID) -> Path:
         path = self.root / str(product_system_id)
         if not (path / SIDECAR_DIR).is_dir():
-            raise NotFound(f"no product_system {product_system_id}")
+            raise no_product_system(product_system_id)
         return path
 
     def _list(self) -> list[ProductSystemSummary]:
@@ -73,7 +74,7 @@ class FilesystemStorage:
 
     def _version(self, product_system_id: uuid.UUID, content_hash: str) -> ProductSystem:
         with self._lock(str(product_system_id)):
-            return read_version(self._dir(product_system_id), content_hash)
+            return read_version(self._dir(product_system_id), product_system_id, content_hash)
 
     def _pinned(self, product_system: ProductSystem) -> dict[uuid.UUID, ProductSystem]:
         """Each system the document links, as the store holds it at the pin; each is read under

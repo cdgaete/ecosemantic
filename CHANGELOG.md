@@ -2,12 +2,26 @@
 
 Each release names what it adds, changes and removes, newest first.
 
+## 0.1.11
+
+- `list_sources` names `unit process` as the system model of `uslci` and `bafu`, so the page's form for either source shows it as the system model.
+- An inventory's run folder, which `ecosemantic compute` writes into a table folder's `results` and the page's inventory download zips, records `floor` and `dropped` in its `schema.yaml`: the amount at or below which a residue is set aside, and how many were.
+- A miss reads the same from every store and names a product system by its id: `no product system <id>`, `no version <hash> of product system <id>`, `no database '<name>' under <directory>; this store serves [...]`, `product system <id> is at <hash>, the write is based on <hash>` for a write on a stale base, and `<system> links <linked>, which has no reference process; set one with update_product_system`.
+- `ecosemantic export` into a directory that does not exist is refused as `invalid`, naming the directory.
+- `arrange_graph` takes `release_all`, which lets every held card go before the placements apply, and refuses it beside `release`; the page's *Reset layout* releases through it, a held code no process carries included.
+
+## 0.1.10
+
+- An install's summary names the inputs no dataset of the release provides as `cut_off`, the inputs the install cut off from the calculation, in place of `unlinked` and `dropped`; the catalog keeps each as an exchange with its reason, and the record keeps the rows in `cut_off.json` beside it.
+- `install_database` refuses a database the server serves before anything is downloaded, unless `replace` is passed, where the refusal came after the download and the build.
+- `drop_unlinked` is an `openlca` install's choice: a draft of another source that sets it is refused as `invalid`, and a draft's refusal reaches the caller as `invalid` with its reason.
+
 ## 0.1.9
 
 - An install downloads a release's files into `downloads` in the data directory, unless `LCA_DATA_INTERFACE_CACHE` names another folder, so they land under the root the person chose.
-- lca-data-interface 0.1.2 is required, whose cache paths fit Windows.
-- Commands other than `serve` start without loading the server.
-- The telemetry collector's certificate is checked by the operating system's certificate verifier, and a send that fails is an INFO line, never a warning.
+- lca-data-interface 0.1.2 or later is required; its cache paths fit Windows.
+- Importing the command line, and running `doctor`, `telemetry`, `init`, `connect`, `setup`, `database` or `import`, loads no FastMCP and no page; `compute` and `export` load FastMCP through the tool functions they call.
+- The telemetry collector's certificate is checked by the operating system's certificate verifier, and a failed send is logged at INFO, below the warning level the server writes, so nothing is written.
 
 ## 0.1.8
 
