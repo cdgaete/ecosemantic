@@ -31,6 +31,14 @@ async def treatments_in(
     return frozenset(await inventory.treatments(sent))
 
 
+async def treatments_of(
+    inventory: InventoryPort, base: ProductSystem, linked: Mapping[uuid.UUID, ProductSystem]
+) -> frozenset[BackgroundRef] | None:
+    """`treatments_in` over a materialised system and the systems it links: the treatments among
+    their background inputs, or None when the store does not serve the system's database."""
+    return await treatments_in(inventory, [base, *linked.values()])
+
+
 def named_backwards(
     document: ProductSystem,
     linked: Mapping[uuid.UUID, ProductSystem],
@@ -43,12 +51,3 @@ def named_backwards(
         return []
     documents = [(None, document), *((d.name, d) for d in linked.values())]
     return [b.named for b in sent_backwards(documents, treatments)]
-
-
-async def backwards_in(
-    inventory: InventoryPort, document: ProductSystem, linked: Mapping[uuid.UUID, ProductSystem]
-) -> list[str]:
-    """`named_backwards` over the treatments the inventory port finds among the inputs of a
-    materialised document and of the systems it links."""
-    treatments = await treatments_in(inventory, [document, *linked.values()])
-    return named_backwards(document, linked, treatments)

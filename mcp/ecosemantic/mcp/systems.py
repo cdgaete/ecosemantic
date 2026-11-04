@@ -168,7 +168,7 @@ async def validate_product_system(
     return Answer[ValidationReport](value=validate(system, target, pins, installed, treatments))
 
 
-async def export_package(
+async def export_model(
     context: ServerContext, product_system_id: uuid.UUID, destination: Path
 ) -> tuple[ProductSystem, LogEntry]:
     """Write a product system and the documents it pins as an openLCA package at the destination,
@@ -194,7 +194,7 @@ async def export_product_system(
     destination = Path(path)
     if not destination.parent.is_dir():
         raise Invalid(f"{str(destination.parent)!r} does not exist")
-    _, entry = await export_package(context, as_uuid(product_system_id), destination)
+    _, entry = await export_model(context, as_uuid(product_system_id), destination)
     return Answer[WrittenPath](value=WrittenPath(path=str(destination), hash=entry.result_hash))
 
 

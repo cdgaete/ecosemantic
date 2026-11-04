@@ -13,7 +13,7 @@ from ecosemantic.mcp.calculation import demand_of, methods_for
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import COMPUTE, READ, WRITE
 from ecosemantic.mcp.envelopes import Answer, as_uuid, bound, boundary
-from ecosemantic.mcp.treatments import backwards_in
+from ecosemantic.mcp.treatments import named_backwards, treatments_of
 from ecosemantic.mcp.watcher import reap, watch
 from ecosemantic.model.canonical import content_hash
 from ecosemantic.model.entities import DemandItem
@@ -41,6 +41,7 @@ async def start_monte_carlo(
                 raise RunOpen(settled.id, settled.product_system_id, settled.status)
         stored = await context.storage.get_product_system(system_id)
         linked = await linked_documents(stored, context.storage.get_version)
+        base = materialize(stored)
         methods, _ = await methods_for(
             context.inventory, stored.database.name, method_id, impact_method
         )
@@ -51,8 +52,8 @@ async def start_monte_carlo(
                 demand=demand_of(stored, demand),
                 methods=methods,
                 config=monte_carlo or MonteCarloConfig(),
-                treatments_run_backwards=await backwards_in(
-                    context.inventory, materialize(stored), linked
+                treatments_run_backwards=named_backwards(
+                    base, linked, await treatments_of(context.inventory, base, linked)
                 ),
             )
         )

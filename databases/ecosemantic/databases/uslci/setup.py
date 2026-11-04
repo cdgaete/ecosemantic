@@ -11,13 +11,14 @@ import olca_schema as o
 from lca_data_interface import CommonsServer
 from olca_schema.zipio import ZipReader
 
-from ecosemantic.databases.lists import UnlinkedRow, read_unlinked
+from ecosemantic.databases.lists import read_unlinked
+from ecosemantic.databases.prepared import PreparedRelease
 from ecosemantic.databases.uslci.build import build
 from ecosemantic.databases.uslci.download import Commons, download
 from ecosemantic.databases.uslci.profile import Pin, Profile, database_name, recorded
 from ecosemantic.databases.uslci.validate import list_mismatches
 from ecosemantic.errors import Invalid
-from ecosemantic.package.background import Import, Unlinked, read_background
+from ecosemantic.package.background import read_background
 from ecosemantic.ports.types import InstallProgress, Reporter
 
 
@@ -30,15 +31,10 @@ class Notice:
 
 
 @dataclass(frozen=True)
-class Prepared:
-    """What a release becomes before it is installed: its bundle, the import of it with the inputs
-    no process provides left out, the unlinked inputs its profile holds it to, the records of those
-    inputs the install lists as cut off, the pins it was read at, and its access notices."""
+class Prepared(PreparedRelease):
+    """A USLCI release prepared for an install, with the pins it was read at and its access
+    notices."""
 
-    bundle: Path
-    imported: Import
-    unlinked: tuple[UnlinkedRow, ...]
-    dropped: tuple[Unlinked, ...]
     pins: tuple[Pin, ...]
     notices: tuple[Notice, ...]
 

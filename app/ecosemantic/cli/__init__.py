@@ -249,11 +249,11 @@ async def _compute(args: argparse.Namespace, progress: Reporter) -> dict[str, ob
         written = [str(write_impact(args.folder, key, result, at))]
         if args.contributions:
             decomposed = await contributions_of(
-                calculation, inventory, system, {}, methods[0], items
+                calculation, treatments, system, {}, methods[0], items
             )
             written.append(str(write_contribution(args.folder, key, decomposed, at)))
         if args.inventory:
-            counted, rows = await inventory_of(calculation, inventory, system, {}, items)
+            counted, rows = await inventory_of(calculation, treatments, system, {}, items)
             page = Page[InventoryRow](items=rows, has_more=False)
             written.append(str(write_inventory(args.folder, key, counted, page, at)))
     finally:

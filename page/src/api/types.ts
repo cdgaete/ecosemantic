@@ -77,8 +77,9 @@ export type ActorKind = 'agent' | 'person' | 'service'
 export interface Actor { kind: ActorKind; id: string | null; name: string | null }
 export type Source = 'mcp' | 'openlca' | 'import' | 'handover' | 'tables'
 export type Entity = 'product_system' | 'process' | 'exchange' | 'parameter' | 'case' | 'scenario'
+export type ChangeOp = 'add' | 'update' | 'delete'
 export interface Change {
-  op: 'add' | 'update' | 'delete'
+  op: ChangeOp
   entity: Entity
   id: string
   field: string | null
@@ -97,9 +98,11 @@ export interface LogEntry {
 }
 export type Effect = 'read' | 'write' | 'delete' | 'compute'
 export type Origin = 'agent' | 'view'
-export interface SummaryItem { label: string; detail: string | null; kind: 'background' | 'elementary_flow' | null; database: string | null; ref: string | null }
+export type SummaryKind = 'background' | 'elementary_flow'
+export interface SummaryItem { label: string; detail: string | null; kind: SummaryKind | null; database: string | null; ref: string | null }
 export interface SummaryScore { method: string; value: number; unit: string }
 export interface Summary { count: number | null; more: boolean; items: SummaryItem[]; scores: SummaryScore[] }
+export type CallOutcome = 'ok' | 'error'
 export interface Call {
   id: string
   agent: string
@@ -113,7 +116,7 @@ export interface Call {
   entry_seq: number | null
   started_at: string
   duration_ms: number
-  outcome: 'ok' | 'error'
+  outcome: CallOutcome
   summary: Summary | null
   error: ErrorEnvelope | null
 }

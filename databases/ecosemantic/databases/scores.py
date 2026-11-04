@@ -66,12 +66,7 @@ def score_every_dataset(imported: Import, *, name: str, compiled: Path | None = 
     methods = [Method.of(method.key, method.unit) for method in imported.methods]
     codes = [code for _, code in imported.datasets]
     table = np.asarray(calculation.intensities(methods).values()).reshape(len(methods), -1)
-    positions: dict[str, int] = {}
-    for code in codes:
-        position = loaded.position("activity", code)
-        if position is None:
-            raise Invalid(f"dataset {code} is not in the compiled background")
-        positions[code] = position
+    positions = {code: loaded.dataset_at(code, "the import") for code in codes}
     values = {
         (code, method.tuple[1], method.tuple[2]): float(table[at, positions[code]])
         for at, method in enumerate(methods)

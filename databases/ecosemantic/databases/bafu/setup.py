@@ -16,14 +16,14 @@ from ecosemantic.databases.bafu.build import build
 from ecosemantic.databases.bafu.download import Downloads, Nexus, download
 from ecosemantic.databases.bafu.profile import Profile, database_name, recorded
 from ecosemantic.databases.lists import (
-    UnlinkedRow,
     distinct_unlinked,
     flow_categories,
     process_ids,
     unlinked_mismatches,
 )
+from ecosemantic.databases.prepared import PreparedRelease
 from ecosemantic.errors import Invalid
-from ecosemantic.package.background import Import, Unlinked, read_background
+from ecosemantic.package.background import read_background
 from ecosemantic.ports.types import Account, InstallProgress, Reporter
 
 
@@ -40,16 +40,10 @@ class NotApplied:
 
 
 @dataclass(frozen=True)
-class Prepared:
-    """What a release becomes before it is installed: its bundle, the import of it with the inputs
-    no process provides left out, the unlinked inputs its profile holds it to, the records of those
-    inputs the install lists as cut off, the licence file a person reads to accept the pack's
-    terms, the release's citation, and what the bundle holds and the core does not apply."""
+class Prepared(PreparedRelease):
+    """A BAFU release prepared for an install, with the licence file a person reads to accept the
+    pack's terms, the release's citation, and what the bundle holds and the core does not apply."""
 
-    bundle: Path
-    imported: Import
-    unlinked: tuple[UnlinkedRow, ...]
-    dropped: tuple[Unlinked, ...]
     licence: Path
     citation: str
     not_applied: NotApplied

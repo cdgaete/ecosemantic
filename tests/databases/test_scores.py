@@ -3,10 +3,15 @@ is, and what a score per one unit is per another."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from ecosemantic.databases.scores import per_unit, relative_differences
-from ecosemantic.errors import Invalid
+from ecosemantic.databases.scores import per_unit, relative_differences, score_every_dataset
+from ecosemantic.engine.background import Background
+from ecosemantic.errors import Invalid, NotFound
+from ecosemantic.package.background import read_background
+from tests.openlca_fixture import NAME, build_package
 
 Key = tuple[str, str]
 SAME = ("small", "one group")
@@ -55,3 +60,23 @@ def test_a_score_per_mass_is_not_one_per_energy() -> None:
     message = str(refused.value)
     assert "kilogram" in message
     assert "megajoule" in message
+
+
+def test_a_dataset_the_compiled_background_lacks_is_not_found_naming_the_import(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    imported = read_background(
+        build_package(tmp_path / "fixture.zip"), NAME, foreground=frozenset()
+    )
+    left_out = next(iter(imported.datasets))
+    position = Background.position
+
+    def position_lacking(self: Background, kind: str, label: str) -> int | None:
+        return None if label == left_out[1] else position(self, kind, label)
+
+    monkeypatch.setattr(Background, "position", position_lacking)
+    with pytest.raises(NotFound) as raised:
+        score_every_dataset(imported, name=NAME)
+    assert str(raised.value).startswith(
+        f"the import names background dataset {left_out[1]!r}, which {NAME!r} does not hold"
+    )

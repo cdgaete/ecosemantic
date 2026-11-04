@@ -9,7 +9,7 @@ import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Protocol, cast
+from typing import cast
 
 from ecoinvent_interface import EcoinventRelease, Settings
 from pydantic import JsonValue
@@ -24,13 +24,13 @@ from ecosemantic.databases.bafu.setup import session as bafu_session
 from ecosemantic.databases.ecoinvent.profile import pinned
 from ecosemantic.databases.ecoinvent.release import SystemModel
 from ecosemantic.databases.ecoinvent.setup import prepare as prepare_ecoinvent
-from ecosemantic.databases.lists import UnlinkedRow
+from ecosemantic.databases.prepared import PreparedRelease
 from ecosemantic.databases.uslci.profile import chosen as uslci_chosen
 from ecosemantic.databases.uslci.profile import read_profile as read_uslci
 from ecosemantic.databases.uslci.setup import commons
 from ecosemantic.databases.uslci.setup import prepare as prepare_uslci
 from ecosemantic.errors import Unavailable
-from ecosemantic.package.background import Import, Unlinked, read_background
+from ecosemantic.package.background import Import, read_background
 from ecosemantic.ports.types import (
     UNIT_PROCESS,
     Account,
@@ -106,25 +106,8 @@ def _installed_summary(
     }
 
 
-class _Prepared(Protocol):
-    """A release ready to install: its import and bundle, the inputs it drops, and the rows of the
-    inputs the install lists as cut off."""
-
-    @property
-    def imported(self) -> Import: ...
-
-    @property
-    def bundle(self) -> Path: ...
-
-    @property
-    def dropped(self) -> tuple[Unlinked, ...]: ...
-
-    @property
-    def unlinked(self) -> tuple[UnlinkedRow, ...]: ...
-
-
 def _installed_release(
-    data_dir: Path, prepared: _Prepared, version: str, replace: bool
+    data_dir: Path, prepared: PreparedRelease, version: str, replace: bool
 ) -> dict[str, JsonValue]:
     """Install a prepared release of unit processes and answer the summary with the inputs it cuts
     off."""

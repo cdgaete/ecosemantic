@@ -53,6 +53,10 @@ class SearchConformance:
             with pytest.raises(Invalid, match="a search needs at least one term"):
                 await call(FIXTURE_DB, query)
 
+    async def test_a_flow_query_matches_its_compartment(self, search) -> None:
+        hits = await search.elementary_flows(FIXTURE_DB, "air")
+        assert {h.ref.id for h in hits.items} == {FLOW_IDS[k] for k in ("co2", "ch4", "pm")}
+
     async def test_a_prefix_term_matches_a_longer_word(self, search) -> None:
         hits = await search.processes(FIXTURE_DB, "ste*")
         assert CODES["steel"] in {h.ref.id for h in hits.items}

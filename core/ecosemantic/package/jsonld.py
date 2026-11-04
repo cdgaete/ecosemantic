@@ -43,6 +43,7 @@ from ecosemantic.package.sidecar import (
     Sidecar,
     supplier_key,
 )
+from ecosemantic.package.wholeness import named_provider
 from ecosemantic.ports.resolver import Resolver
 
 DESCRIPTOR = "olca-schema.json"
@@ -552,7 +553,7 @@ class _Reader:
                 return "elementary", known
             elementary_flows = self.sidecar.product_system.database.elementary_flows
             return "elementary", ElementaryFlowRef(database=elementary_flows, id=flow_id)
-        provider_id = exchange.default_provider.id if exchange.default_provider else None
+        provider_id = named_provider(exchange)
         supplier = (
             self.ident.suppliers.get(supplier_key(provider_id, flow_id))
             if provider_id and flow_id
@@ -563,8 +564,8 @@ class _Reader:
         owner = self.ident.product_flows.get(flow_id) if flow_id else None
         if owner is not None:
             return "product", ForegroundRef(code=self.code_of[owner])
-        if exchange.default_provider and exchange.default_provider.id in self.codes:
-            return "product", ForegroundRef(code=self.codes[exchange.default_provider.id])
+        if provider_id is not None and provider_id in self.codes:
+            return "product", ForegroundRef(code=self.codes[provider_id])
         raise Invalid(
             f"exchange {exchange.internal_id} of {process.name!r} references a flow "
             "the package cannot place"

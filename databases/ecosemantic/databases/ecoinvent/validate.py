@@ -249,9 +249,7 @@ def _installed(imported: Import, background: Background, calculation: Calculatio
     activities: dict[tuple[str, str, str], _Activity] = {}
     catalog: list[tuple[str, str, str]] = []
     for (_, code), dataset in imported.datasets.items():
-        at = background.position("activity", code)
-        if at is None:
-            raise Invalid(f"dataset {code} is not in the compiled background")
+        at = background.dataset_at(code, "the import")
         rows = cast(list[Dataset], dataset["exchanges"])
         reference = next(
             float(cast(float, row["amount"])) for row in rows if row["type"] == "production"

@@ -75,6 +75,11 @@ def providers(
     return producers, treaters
 
 
+def named_provider(e: o.Exchange) -> str | None:
+    """The id of the provider an exchange names, or none when it names none."""
+    return e.default_provider.id if e.default_provider is not None else None
+
+
 def provider_of(
     e: o.Exchange,
     kind: o.FlowType | None,
@@ -86,8 +91,7 @@ def provider_of(
     if e.flow is None:
         raise Invalid("an exchange that takes a provider names no flow")
     candidates = (treaters if kind == o.FlowType.WASTE_FLOW else producers).get(e.flow.id, [])
-    named = e.default_provider.id if e.default_provider is not None else None
-    return resolve_provider(named, candidates)
+    return resolve_provider(named_provider(e), candidates)
 
 
 def _resolved(

@@ -2,6 +2,11 @@
 
 Each release names what it adds, changes and removes, newest first.
 
+## 0.1.12
+
+- A release's validation and the scoring of every dataset in `ecosemantic-databases` refuse a dataset the compiled background lacks as `not_found`, naming it as `the import names background dataset '<code>', which '<database>' does not hold`, where they answered `invalid`.
+- `ecosemantic compute` asks the store for a folder's treatments once and names the exchanges run backwards from that one answer in the impact, the contributions and the inventory it writes; `contribution_analysis` and `calculate_inventory` ask once per call.
+
 ## 0.1.11
 
 - `list_sources` names `unit process` as the system model of `uslci` and `bafu`, so the page's form for either source shows it as the system model.

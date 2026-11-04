@@ -35,7 +35,7 @@ from ecosemantic.mcp.envelopes import (
 )
 from ecosemantic.mcp.linking import moved_by
 from ecosemantic.mcp.panels import panel
-from ecosemantic.mcp.treatments import backwards_in, named_backwards, treatments_in
+from ecosemantic.mcp.treatments import named_backwards, treatments_of
 from ecosemantic.model.canonical import base_pin
 from ecosemantic.model.entities import DemandItem, Method, ProductSystem
 from ecosemantic.model.refs import BackgroundRef, Database, ForegroundRef
@@ -274,7 +274,7 @@ async def calculate_impact(
         variants=variants or (),
         monte_carlo=monte_carlo,
         linked=linked,
-        treatments=await treatments_in(context.inventory, [base, *linked.values()]),
+        treatments=await treatments_of(context.inventory, base, linked),
     )
     result.links_behind = [
         PinBehind(product_system_id=p.ref.product_system_id, name=p.name, at_hash=pinned(p.ref))
@@ -287,7 +287,7 @@ async def calculate_impact(
 
 async def contributions_of(
     calculation: CalculationPort,
-    inventory: InventoryPort,
+    treatments: frozenset[BackgroundRef] | None,
     base: ProductSystem,
     linked: dict[uuid.UUID, ProductSystem],
     method: Method,
@@ -303,7 +303,7 @@ async def contributions_of(
     system = System.of(base, linked)
     named = credit_loops(base)
     inside = linked_credit_loops(linked.values())
-    backwards = await backwards_in(inventory, base, linked)
+    backwards = named_backwards(base, linked, treatments)
     if by == "process":
         found = await calculation.hotspots(system, items, method, top_n)
         value = ContributionResult(
@@ -364,7 +364,7 @@ async def contribution_analysis(
     items = demand_of(base, demand)
     value = await contributions_of(
         context.calculation,
-        context.inventory,
+        await treatments_of(context.inventory, base, linked),
         base,
         linked,
         method,
@@ -381,7 +381,7 @@ async def contribution_analysis(
 
 async def inventory_of(
     calculation: CalculationPort,
-    inventory: InventoryPort,
+    treatments: frozenset[BackgroundRef] | None,
     base: ProductSystem,
     linked: dict[uuid.UUID, ProductSystem],
     items: list[DemandItem],
@@ -395,7 +395,7 @@ async def inventory_of(
         floor=found.floor,
         dropped=found.dropped,
         linked_credit_loops=linked_credit_loops(linked.values()),
-        treatments_run_backwards=await backwards_in(inventory, base, linked),
+        treatments_run_backwards=named_backwards(base, linked, treatments),
     )
     return result, found.rows
 
@@ -413,7 +413,8 @@ async def calculate_inventory(
     linked = await linked_documents(stored, context.storage.get_version)
     base = materialize(stored)
     items = demand_of(base, demand)
-    result, rows = await inventory_of(context.calculation, context.inventory, base, linked, items)
+    treatments = await treatments_of(context.inventory, base, linked)
+    result, rows = await inventory_of(context.calculation, treatments, base, linked, items)
     page = inventory_page(rows, compartment, query, limit, offset_cursor(cursor))
     filters = {"compartment": compartment}
     words = bool(applied_filters(filters)) and bool(inventory_page(rows, None, query, 1, 0).items)

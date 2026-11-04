@@ -13,7 +13,7 @@ from olca_schema.zipio import ZipReader
 from ecosemantic.errors import Invalid, NotSupported
 from ecosemantic.model import units
 from ecosemantic.package.olca import from_olca_uncertainty
-from ecosemantic.package.wholeness import makes, provider_of, providers, treats
+from ecosemantic.package.wholeness import makes, named_provider, provider_of, providers, treats
 from ecosemantic.ports.types import FlowType
 
 Key = tuple[str, str]
@@ -234,7 +234,7 @@ class _Reader:
         """The provider of an input, and the record of the dataset's exchange when none provides
         it."""
         provider, reason = provider_of(e, flow.entity.flow_type, self.producers, self.treaters)
-        named = e.default_provider.id if e.default_provider is not None else None
+        named = named_provider(e)
         if provider is None:
             self.unlinked.append(
                 Unlinked(

@@ -9,13 +9,15 @@ from pydantic import BaseModel, Field
 
 SUMMARY_ITEMS = 5
 
+SummaryKind = Literal["background", "elementary_flow"]
+
 
 class SummaryItem(BaseModel):
     """One thing an answer listed: what to call it, and the kind of reference that opens it."""
 
     label: str
     detail: str | None = None
-    kind: Literal["background", "elementary_flow"] | None = None
+    kind: SummaryKind | None = None
     database: str | None = None
     ref: str | None = None
 

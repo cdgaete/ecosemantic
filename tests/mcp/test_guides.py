@@ -7,6 +7,7 @@ from importlib import resources
 import pytest
 from fastmcp import Client, FastMCP
 
+from ecosemantic.mcp.calculation import MAX_ITERATIONS
 from ecosemantic.mcp.guides import GUIDES
 from ecosemantic.mcp.server import INSTRUCTIONS
 
@@ -71,3 +72,10 @@ async def test_each_guide_s_worked_example_runs_on_the_fixture_database(
                     step["expect"]["equals"], rel=1e-9
                 )
     assert expected
+
+
+def test_the_sensitivity_guide_names_the_draws_one_call_takes() -> None:
+    text = (resources.files("ecosemantic.mcp") / "guides" / "sensitivity-study.md").read_text(
+        encoding="utf-8"
+    )
+    assert f"Up to {MAX_ITERATIONS} draws" in text

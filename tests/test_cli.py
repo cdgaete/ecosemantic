@@ -8,6 +8,7 @@ import os
 import sys
 import uuid
 import zipfile
+from collections.abc import Sequence
 from pathlib import Path
 
 import duckdb
@@ -15,6 +16,7 @@ import pytest
 import yaml
 
 from ecosemantic.backends.filesystem.storage import FilesystemStorage
+from ecosemantic.backends.native.inventory import NativeInventory
 from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.cli import main
 from ecosemantic.cli.clients import SERVER
@@ -850,8 +852,12 @@ def test_compute_writes_the_contributions_and_the_inventory_the_tools_answer(
     contributions = next(r for r in written if (r / "contributions.csv").is_file())
     inventory = next(r for r in written if (r / "inventory.csv").is_file())
     with (contributions / "contributions.csv").open(encoding="utf-8", newline="") as handle:
-        scores = [float(row["score"]) for row in csv.DictReader(handle)]
+        rows = list(csv.DictReader(handle))
+    scores = [float(row["score"]) for row in rows]
     assert contributed.value.processes is not None
+    assert [row["ref"] for row in rows] == [
+        p.ref.model_dump_json() for p in contributed.value.processes
+    ]
     assert scores == pytest.approx([p.score for p in contributed.value.processes], rel=1e-12)
     schema = yaml.safe_load((inventory / "schema.yaml").read_text(encoding="utf-8"))
     assert schema["floor"] == listed.floor
@@ -891,7 +897,6 @@ def test_compute_names_a_positive_input_to_a_treatment_in_every_table_it_writes(
         return frozenset({BackgroundRef(database=FIXTURE_DB, id=CODES["steel"])})
 
     monkeypatch.setattr("ecosemantic.cli.treatments_in", steel_treats)
-    monkeypatch.setattr("ecosemantic.mcp.treatments.treatments_in", steel_treats)
     folder = write_folder(tmp_path, fixture_system_stored)
     argv = [
         "compute",
@@ -910,6 +915,36 @@ def test_compute_names_a_positive_input_to_a_treatment_in_every_table_it_writes(
         schema = yaml.safe_load((Path(run) / "schema.yaml").read_text(encoding="utf-8"))
         # the folder's document lists its processes in its own order
         assert sorted(schema["treatments_run_backwards"]) == named
+
+
+def test_compute_looks_the_treatments_up_once(
+    fixture_system_stored: ProductSystem,
+    bundle_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[Sequence[BackgroundRef]] = []
+    looked_up = NativeInventory.treatments
+
+    async def counted(self: NativeInventory, refs: Sequence[BackgroundRef]) -> list[BackgroundRef]:
+        calls.append(refs)
+        return await looked_up(self, refs)
+
+    monkeypatch.setattr(NativeInventory, "treatments", counted)
+    folder = write_folder(tmp_path, fixture_system_stored)
+    argv = [
+        "compute",
+        "--data-dir",
+        str(bundle_dir),
+        "--folder",
+        str(folder),
+        "--method",
+        GWP_ID,
+        "--contributions",
+        "--inventory",
+    ]
+    assert main(argv) == 0
+    assert len(calls) == 1
 
 
 def test_compute_scores_a_case_against_the_base(

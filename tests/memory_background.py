@@ -259,7 +259,7 @@ class MemorySearch:
         for key, (name, categories, flow_unit) in sorted(FLOWS.items(), key=lambda i: i[1][0]):
             found_compartment, found_sub = _compartment(categories)
             found_type = _flow_type(categories)
-            if _relevance(parsed, name) is None:
+            if _relevance(parsed, name, found_compartment, found_sub or "") is None:
                 continue
             if any(
                 value is not None and value != found

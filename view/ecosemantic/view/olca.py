@@ -9,7 +9,7 @@ from starlette.routing import Route
 from ecosemantic.errors import Invalid
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.envelopes import as_uuid
-from ecosemantic.mcp.systems import export_package
+from ecosemantic.mcp.systems import export_model
 from ecosemantic.view.handling import answering, created, sent, uploaded, working
 
 
@@ -31,7 +31,7 @@ def routes(context: ServerContext) -> list[Route]:
         system_id = as_uuid(request.path_params["id"])
         with working("ecosemantic-export-", keep=True) as work:
             zipped = work / f"{system_id}.zip"
-            system, _ = await export_package(context, system_id, zipped)
+            system, _ = await export_model(context, system_id, zipped)
             return sent(zipped, work, f"{system.name}.zip")
 
     @answering

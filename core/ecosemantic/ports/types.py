@@ -718,8 +718,11 @@ class StoreChange(BaseModel):
     gone: bool = False
 
 
+ChangeOp = Literal["add", "update", "delete"]
+
+
 class Change(BaseModel):
-    op: Literal["add", "update", "delete"]
+    op: ChangeOp
     entity: Entity
     id: str
     field: str | None = None

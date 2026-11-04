@@ -7,9 +7,9 @@ from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.errors import NotFound
 from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef
 from ecosemantic.package.resolver import InventoryResolver
-from ecosemantic.ports.resolver import FlowInfo, Resolver
+from ecosemantic.ports.resolver import BackgroundInfo, FlowInfo, Resolver
 from tests.conformance.resolver import ResolverConformance
-from tests.conftest import CO2, COTTON
+from tests.conftest import BACKGROUNDS, CO2, COTTON, FLOWS
 from tests.dict_resolver import DictResolver
 from tests.fixture_data import CODES, FIXTURE_BIO, FIXTURE_DB, FLOW_IDS
 
@@ -100,8 +100,16 @@ class TestDictResolver(ResolverConformance):
         return COTTON
 
     @pytest.fixture
+    def known_background_info(self) -> BackgroundInfo:
+        return BACKGROUNDS[COTTON.id]
+
+    @pytest.fixture
     def known_flow(self) -> ElementaryFlowRef:
         return CO2
+
+    @pytest.fixture
+    def known_flow_info(self) -> FlowInfo:
+        return FLOWS[CO2.id]
 
 
 class TestInventoryResolver(ResolverConformance):
@@ -114,5 +122,21 @@ class TestInventoryResolver(ResolverConformance):
         return BackgroundRef(database=FIXTURE_DB, id=CODES["steel"])
 
     @pytest.fixture
+    def known_background_info(self) -> BackgroundInfo:
+        return BackgroundInfo(
+            name="steel production", reference_product="steel", location="GLO", unit="kilogram"
+        )
+
+    @pytest.fixture
     def known_flow(self) -> ElementaryFlowRef:
         return ElementaryFlowRef(database=FIXTURE_BIO, id=FLOW_IDS["co2"])
+
+    @pytest.fixture
+    def known_flow_info(self) -> FlowInfo:
+        return FlowInfo(
+            name="Carbon dioxide, fossil",
+            compartment="air",
+            sub_compartment=None,
+            unit="kilogram",
+            flow_type="emission",
+        )

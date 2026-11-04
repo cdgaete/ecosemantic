@@ -11,6 +11,7 @@ from ecosemantic.errors import Invalid
 from ecosemantic.package.wholeness import (
     makes,
     misses,
+    named_provider,
     require_whole,
     resolve_provider,
     takes_provider,
@@ -80,15 +81,22 @@ def test_an_exchange_in_a_unit_its_group_lacks_is_named_without_providers(
 @pytest.mark.parametrize(
     "kind", [o.FlowType.PRODUCT_FLOW, o.FlowType.WASTE_FLOW, o.FlowType.ELEMENTARY_FLOW]
 )
-@pytest.mark.parametrize("is_input", [True, False])
-@pytest.mark.parametrize("reference", [True, False])
+@pytest.mark.parametrize("is_input", [True, False, None])
+@pytest.mark.parametrize("reference", [True, False, None])
 def test_an_exchange_makes_treats_or_takes_a_provider_by_its_flow_and_side(
-    kind: o.FlowType, is_input: bool, reference: bool
+    kind: o.FlowType, is_input: bool | None, reference: bool | None
 ) -> None:
     e = o.Exchange(is_input=is_input, is_quantitative_reference=reference)
+    is_input, reference = bool(is_input), bool(reference)
     product, waste = kind == o.FlowType.PRODUCT_FLOW, kind == o.FlowType.WASTE_FLOW
     assert makes(e, kind) == (product and not is_input)
     assert treats(e, kind) == (waste and is_input and reference)
     assert takes_provider(e, kind) == (
         not reference and ((product and is_input) or (waste and not is_input))
     )
+
+
+def test_an_exchange_names_its_default_provider_or_none() -> None:
+    named = o.Exchange(default_provider=o.Ref(ref_type=o.RefType.Process, id="p1"))
+    assert named_provider(named) == "p1"
+    assert named_provider(o.Exchange()) is None
