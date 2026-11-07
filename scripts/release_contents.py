@@ -1,6 +1,6 @@
-"""What a release carries: each of the six wheels and six sdists holds the licence and the notice,
-and the view's wheel holds the built page and its third-party notices. Prints one JSON report
-and exits 1 when a file lacks one or the build holds other than six of each.
+"""What a release carries: each of the seven wheels and seven sdists holds the licence and the
+notice, and the view's wheel holds the built page and its third-party notices. Prints one JSON
+report and exits 1 when a file lacks one or the build holds other than seven of each.
 
     python scripts/release_contents.py DIST
 """
@@ -46,7 +46,7 @@ def main() -> int:
     wheels = sorted(dist.glob("*.whl"))
     sdists = sorted(dist.glob("*.tar.gz"))
     report = {path.name: missing(path) for path in wheels + sdists}
-    passed = len(wheels) == 6 and len(sdists) == 6 and not any(report.values())
+    passed = len(wheels) == 7 and len(sdists) == 7 and not any(report.values())
     print(json.dumps({"passed": passed, "missing": report}, indent=1))
     return 0 if passed else 1
 

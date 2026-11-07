@@ -4,15 +4,20 @@ import asyncio
 import contextlib
 import dataclasses
 import ipaddress
+import json
 import os
+import signal
 import socket
 import subprocess
 import sys
 import threading
 import time
 import urllib.request
+import uuid
 from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 import uvicorn
@@ -24,15 +29,20 @@ from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from ecosemantic import serve
+from ecosemantic.bridge.proofs import ProofCheck
+from ecosemantic.bridge.start import BridgeStart
 from ecosemantic.errors import Invalid, Unavailable
 from ecosemantic.events import EventBus
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.server import ROSTER, build_server
 from ecosemantic.serve import (
     OPEN_WAIT_SECONDS,
+    STOP_NONCE_FILE,
+    Listener,
     ViewSettings,
     announce,
     announced_host,
+    ask_to_stop,
     bind,
     bind_or_yield,
     derived_port,
@@ -43,12 +53,29 @@ from ecosemantic.serve import (
     opens,
     run,
     settings_from,
+    stop_route,
     token_for,
     workspace_digest,
     yield_route,
 )
 from ecosemantic.view.app import build_view
 from ecosemantic.view.stream import RETRY_MILLISECONDS
+from tests.bridge.fake_bridge import (
+    ACCOUNT,
+    BEARER,
+    HANDLE,
+    ISSUER,
+    FakeBridge,
+    configuration,
+    serving,
+)
+from tests.bridge.test_relay import (
+    INITIALIZE,
+    MCP_HEADERS,
+    Refusing,
+    Session,
+    payload,
+)
 
 NOWHERE = Path("/nonexistent-static")
 
@@ -123,6 +150,52 @@ def test_settings_read_ecosemantic_view_open(tmp_path: Path) -> None:
     assert settings_from({}, tmp_path, opening=False).open is False
     with pytest.raises(Invalid, match="ECOSEMANTIC_VIEW_OPEN"):
         settings_from({"ECOSEMANTIC_VIEW_OPEN": "yes"}, tmp_path)
+
+
+def test_the_bridge_serves_over_http_when_no_transport_is_named(tmp_path: Path) -> None:
+    assert settings_from({}, tmp_path).bridge is False
+    assert settings_from({"ECOSEMANTIC_BRIDGE": "on"}, tmp_path).bridge is True
+    assert settings_from({"ECOSEMANTIC_BRIDGE": "on"}, tmp_path).transport == "http"
+    assert settings_from({"ECOSEMANTIC_BRIDGE": "off"}, tmp_path, bridge=True).bridge is True
+    assert settings_from({}, tmp_path, bridge=True).transport == "http"
+    assert settings_from({"ECOSEMANTIC_TRANSPORT": "http"}, tmp_path).bridge is False
+    with pytest.raises(Invalid, match="ECOSEMANTIC_BRIDGE"):
+        settings_from({"ECOSEMANTIC_BRIDGE": "yes"}, tmp_path)
+
+
+def test_the_bridge_refuses_the_stdio_transport_by_flag_or_variable(tmp_path: Path) -> None:
+    with pytest.raises(Invalid, match="the bridge serves over HTTP"):
+        settings_from({}, tmp_path, bridge=True, transport="stdio")
+    with pytest.raises(Invalid, match="the bridge serves over HTTP"):
+        settings_from({"ECOSEMANTIC_BRIDGE": "on", "ECOSEMANTIC_TRANSPORT": "stdio"}, tmp_path)
+    assert settings_from({}, tmp_path, bridge=False, transport="stdio").transport == "stdio"
+
+
+def test_the_bridge_refuses_a_view_url_override(tmp_path: Path) -> None:
+    with pytest.raises(Invalid, match="--view-url and --bridge"):
+        settings_from({}, tmp_path, bridge=True, url="http://lab.example:8765")
+    with pytest.raises(Invalid, match="--view-url and --bridge"):
+        settings_from(
+            {"ECOSEMANTIC_BRIDGE": "on", "ECOSEMANTIC_VIEW_URL": "http://lab.example:8765"},
+            tmp_path,
+        )
+    assert settings_from({}, tmp_path, bridge=True).url is None
+
+
+def test_a_bridge_address_without_the_bridge_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(Invalid, match="--bridge-url names the bridge"):
+        settings_from({}, tmp_path, bridge_url="https://bridge.test")
+    with pytest.raises(Invalid, match="--bridge-url names the bridge"):
+        settings_from({"ECOSEMANTIC_BRIDGE_URL": "https://bridge.test"}, tmp_path)
+    assert settings_from({}, tmp_path, bridge=True, bridge_url="https://bridge.test").bridge is True
+
+
+def test_a_credential_file_without_the_bridge_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(Invalid, match="--credential-file names the credential"):
+        settings_from({}, tmp_path, credential_file=tmp_path / "credential.json")
+    with pytest.raises(Invalid, match="--credential-file names the credential"):
+        settings_from({"ECOSEMANTIC_BRIDGE_CREDENTIAL_FILE": "credential.json"}, tmp_path)
+    assert settings_from({}, tmp_path, bridge=True, credential_file=tmp_path / "c").bridge is True
 
 
 async def test_the_page_opens_when_no_page_follows_within_the_wait() -> None:
@@ -253,6 +326,43 @@ def test_announce_uses_the_override_and_carries_the_token() -> None:
     derived = announce(ViewSettings(host="0.0.0.0"), 8765, "abc", {})
     assert derived.startswith("http://") and derived.endswith(":8765?token=abc")
     assert announce(ViewSettings(host="::1"), 8765, None, {}) == "http://[::1]:8765"
+
+
+def test_a_bridged_engine_announces_its_page_address_without_the_token() -> None:
+    announced = announce(
+        ViewSettings(), 8765, "t", {}, bridged="https://ana.bridge.ecosemantic.com/"
+    )
+    assert announced == "https://ana.bridge.ecosemantic.com"
+    assert "token" not in announced
+
+
+async def test_every_link_a_tool_hands_out_descends_from_the_bridged_address(
+    context: ServerContext, systems_dir: Path
+) -> None:
+    listener = listener_for(
+        context,
+        ViewSettings(transport="http"),
+        systems_dir,
+        bridged_url="https://ana.bridge.ecosemantic.com/",
+    )
+    listener.socket.close()
+    assert listener.url == "https://ana.bridge.ecosemantic.com"
+    system = uuid.uuid4()
+    async with Client(listener.server) as client:
+        whole = await client.call_tool("view_link", {})
+        one = await client.call_tool("view_link", {"product_system_id": str(system)})
+        sources = await client.call_tool("list_sources", {})
+    links = [
+        whole.structured_content["value"],
+        one.structured_content["value"],
+        sources.structured_content["view_url"],
+    ]
+    assert links == [
+        "https://ana.bridge.ecosemantic.com",
+        f"https://ana.bridge.ecosemantic.com/systems/{system}",
+        "https://ana.bridge.ecosemantic.com/databases",
+    ]
+    assert not [link for link in links if "token" in link]
 
 
 def test_the_instructions_carry_the_link(context: ServerContext) -> None:
@@ -581,6 +691,246 @@ async def test_run_over_http_registers_no_yield(
     assert given == [None]
 
 
+def asking(url: str, timeout: float = 10) -> tuple[int, bytes]:
+    """A local call's status and body, waiting out the moment a server takes to accept one."""
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            with urllib.request.urlopen(url, timeout=5) as answer:
+                return answer.status, answer.read()
+        except OSError:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.05)
+
+
+async def test_a_relay_that_returns_at_once_leaves_the_listener_answering_locally(
+    context: ServerContext,
+    systems_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    engine = uuid.uuid4()
+    built = listener_for
+    listeners: list[Listener] = []
+    started = asyncio.Event()
+    stop = asyncio.Event()
+    serving_task = uvicorn.Server.serve
+
+    def recording(*args: object, **kwargs: object) -> Listener:
+        held = built(*args, **kwargs)
+        listeners.append(held)
+        return held
+
+    async def recorded(self: uvicorn.Server, sockets: list[socket.socket] | None = None) -> None:
+        begun = asyncio.create_task(serving_task(self, sockets))
+        await _wait_until_started(self)
+        started.set()
+        await stop.wait()
+        self.should_exit = True
+        await begun
+
+    start = BridgeStart(
+        config=configuration("ws://127.0.0.1:1/tunnel"),
+        session=Refusing(),
+        engine=engine,
+        account=ACCOUNT,
+        handle=HANDLE,
+        page_url=f"https://{HANDLE}.bridge.test",
+        check=ProofCheck(ISSUER, ACCOUNT, engine, lambda: datetime.now(UTC)),
+    )
+    handlers = {name: signal.getsignal(name) for name in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        monkeypatch.setattr(serve, "listener_for", recording)
+        monkeypatch.setattr(uvicorn.Server, "serve", recorded)
+        running = asyncio.create_task(
+            run(
+                dataclasses.replace(context, client={}),
+                ViewSettings(transport="http"),
+                systems_dir,
+                bridge=start,
+            )
+        )
+        await asyncio.wait_for(started.wait(), 10)
+        assert not running.done()
+        port = listeners[0].socket.getsockname()[1]
+        status, body = await asyncio.to_thread(
+            asking, f"http://127.0.0.1:{port}/api/product-systems"
+        )
+        stop.set()
+        await asyncio.wait_for(running, 20)
+    finally:
+        for name, handler in handlers.items():
+            signal.signal(name, handler)
+    assert status == 200
+    assert isinstance(json.loads(body)["value"], list)
+    assert "bridge: signed out; run `ecosemantic bridge sign-in`" in capsys.readouterr().err
+
+
+def test_health_names_a_bridged_server_s_state_and_off_otherwise(context: ServerContext) -> None:
+    bridged = {
+        "state": "connected",
+        "handle": HANDLE,
+        "page": f"https://{HANDLE}.bridge.test",
+        "connector": f"{ISSUER}/mcp",
+    }
+    off = build_view(
+        context,
+        build_server(context),
+        static=NOWHERE,
+        routes=[health_route("abcd1234abcd1234", yields=False)],
+    )
+    with TestClient(off) as client:
+        assert client.get("/health").json()["bridge"] == {"state": "off"}
+    named = build_view(
+        context,
+        build_server(context),
+        static=NOWHERE,
+        routes=[health_route("abcd1234abcd1234", yields=False, bridge=lambda: bridged)],
+    )
+    with TestClient(named) as client:
+        assert client.get("/health").json()["bridge"] == bridged
+
+
+def test_stop_without_the_nonce_is_refused_and_the_server_serves_on(
+    context: ServerContext, tmp_path: Path
+) -> None:
+    stopped: list[bool] = []
+    app = build_view(
+        context,
+        build_server(context),
+        static=NOWHERE,
+        routes=[
+            health_route("abcd1234abcd1234", yields=False),
+            stop_route(tmp_path, lambda: stopped.append(True)),
+        ],
+    )
+    with TestClient(app) as client:
+        refused = client.post("/stop", json={"nonce": "guessed"})
+        assert refused.status_code == 401
+        assert refused.json() == {
+            "error": "unauthorised",
+            "message": "the nonce in the directory is required",
+            "details": {},
+        }
+        assert stopped == []
+        (tmp_path / STOP_NONCE_FILE).write_text("the-real-nonce", encoding="utf-8")
+        assert client.post("/stop", json={"nonce": "guessed"}).status_code == 401
+        assert stopped == []
+        assert client.get("/health").status_code == 200
+        answered = client.post("/stop", json={"nonce": "the-real-nonce"})
+        assert answered.status_code == 200
+        assert answered.json() == {"stopped": True}
+        assert stopped == [True]
+
+
+async def _health_reporting(url: str, state: str, timeout: float = 10) -> dict[str, Any]:
+    """The health document once the server reports the tunnel in this state."""
+    deadline = time.monotonic() + timeout
+    while True:
+        status, body = await asyncio.to_thread(asking, url)
+        answered = json.loads(body)
+        if status == 200 and answered["bridge"]["state"] == state:
+            return answered
+        if time.monotonic() > deadline:
+            raise AssertionError(f"the server never reported {state}: {answered}")
+        await asyncio.sleep(0.05)
+
+
+async def test_stop_with_the_directory_s_nonce_ends_an_http_server(
+    context: ServerContext, systems_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine = uuid.uuid4()
+    bridge = FakeBridge(engine, handle="ana")
+    started = asyncio.Event()
+    listeners: list[Listener] = []
+    built = listener_for
+    serving_task = uvicorn.Server.serve
+
+    def recording(*args: object, **kwargs: object) -> Listener:
+        held = built(*args, **kwargs)
+        listeners.append(held)
+        return held
+
+    async def recorded(self: uvicorn.Server, sockets: list[socket.socket] | None = None) -> None:
+        begun = asyncio.create_task(serving_task(self, sockets))
+        await _wait_until_started(self)
+        started.set()
+        await begun
+
+    handlers = {name: signal.getsignal(name) for name in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        async with serving(bridge) as tunnel_url:
+            monkeypatch.setattr(serve, "listener_for", recording)
+            monkeypatch.setattr(uvicorn.Server, "serve", recorded)
+            start = BridgeStart(
+                config=configuration(tunnel_url),
+                session=Session(BEARER),
+                engine=engine,
+                account=ACCOUNT,
+                handle=HANDLE,
+                page_url=f"https://{HANDLE}.bridge.test",
+                check=ProofCheck(ISSUER, ACCOUNT, engine, lambda: datetime.now(UTC)),
+            )
+            running = asyncio.create_task(
+                run(
+                    dataclasses.replace(context, client={}),
+                    ViewSettings(transport="http", token=True),
+                    systems_dir,
+                    bridge=start,
+                )
+            )
+            try:
+                await asyncio.wait_for(started.wait(), 10)
+                await bridge.welcomed()
+                assert len(listeners) == 1
+                port = listeners[0].socket.getsockname()[1]
+                health = await _health_reporting(f"http://127.0.0.1:{port}/health", "connected")
+                assert health["bridge"] == {
+                    "state": "connected",
+                    # the welcome's handle, while the page stays the one this start announced
+                    "handle": "ana",
+                    "page": f"https://{HANDLE}.bridge.test",
+                    "connector": start.config.connector_url,
+                }
+                assert await asyncio.to_thread(ask_to_stop, "127.0.0.1", port, systems_dir)
+                await asyncio.wait_for(running, 20)
+                assert not (systems_dir / STOP_NONCE_FILE).exists()
+                assert not await asyncio.to_thread(ask_to_stop, "127.0.0.1", port, systems_dir)
+            finally:
+                running.cancel()
+                await asyncio.gather(running, return_exceptions=True)
+    finally:
+        for name, handler in handlers.items():
+            signal.signal(name, handler)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="only POSIX carries a file mode")
+def test_the_stop_nonce_is_readable_only_by_its_owner(tmp_path: Path) -> None:
+    modes: list[int] = []
+    probe = bind("127.0.0.1", 0)
+    port = probe.getsockname()[1]
+    probe.close()
+
+    def on_stop() -> None:
+        modes.append((tmp_path / STOP_NONCE_FILE).stat().st_mode & 0o777)
+
+    app = Starlette(routes=[stop_route(tmp_path, on_stop)])
+    server = uvicorn.Server(
+        uvicorn.Config(app, host="127.0.0.1", port=port, log_config=None, access_log=False)
+    )
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        time.sleep(0.05)
+    try:
+        assert ask_to_stop("127.0.0.1", port, tmp_path)
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5)
+    assert modes == [0o600]
+
+
 def test_health_names_the_workspace_and_needs_no_token(context: ServerContext) -> None:
     app = build_view(
         context,
@@ -596,6 +946,7 @@ def test_health_names_the_workspace_and_needs_no_token(context: ServerContext) -
             "service": "ecosemantic-view",
             "workspace": "abcd1234abcd1234",
             "yields": True,
+            "bridge": {"state": "off"},
         }
         # the gate still covers the API
         refused = client.get("/api/product-systems")
@@ -704,3 +1055,75 @@ async def test_a_server_with_its_collector_out_of_service_answers_its_tools(
     stopping = time.monotonic()
     end(provider)
     assert time.monotonic() - stopping < 7
+
+
+async def test_a_bridged_run_writes_its_page_and_connector_addresses_and_relays(
+    context: ServerContext,
+    systems_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    engine = uuid.uuid4()
+    bridge = FakeBridge(engine)
+    started = asyncio.Event()
+    stop = asyncio.Event()
+    serving_task = uvicorn.Server.serve
+
+    async def recorded(self: uvicorn.Server, sockets: list[socket.socket] | None = None) -> None:
+        begun = asyncio.create_task(serving_task(self, sockets))
+        while not self.started:
+            await asyncio.sleep(0.01)
+        started.set()
+        await stop.wait()
+        self.should_exit = True
+        await begun
+
+    # two uvicorn servers in one loop restore one another's signal handlers, so the test puts back
+    # the ones it found
+    handlers = {name: signal.getsignal(name) for name in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        async with serving(bridge) as tunnel_url:
+            # the fake bridge has started its own server, so this wrapper sees the engine's alone
+            monkeypatch.setattr(uvicorn.Server, "serve", recorded)
+            start = BridgeStart(
+                config=configuration(tunnel_url),
+                session=Session(BEARER),
+                engine=engine,
+                account=ACCOUNT,
+                handle=HANDLE,
+                page_url=f"https://{HANDLE}.bridge.test",
+                check=ProofCheck(ISSUER, ACCOUNT, engine, lambda: datetime.now(UTC)),
+            )
+            running = asyncio.create_task(
+                run(
+                    dataclasses.replace(context, client={}),
+                    ViewSettings(transport="http", token=True),
+                    systems_dir,
+                    bridge=start,
+                )
+            )
+            try:
+                await asyncio.wait_for(started.wait(), 10)
+                await bridge.welcomed()
+                await bridge.start(
+                    1,
+                    "/mcp",
+                    method="POST",
+                    headers=MCP_HEADERS,
+                    body=json.dumps(INITIALIZE).encode(),
+                )
+                answered = await bridge.finished(1)
+            finally:
+                stop.set()
+                await asyncio.wait_for(running, 20)
+    finally:
+        for name, handler in handlers.items():
+            signal.signal(name, handler)
+    assert answered.status == 200
+    assert payload(answered.body)["result"]["serverInfo"]["name"] == "ecosemantic"
+    lines = [line for line in capsys.readouterr().err.splitlines() if line]
+    assert lines[:2] == [
+        f"view: https://{HANDLE}.bridge.test",
+        f"connector: {start.config.connector_url}",
+    ]
+    assert f"bridge: connected as {HANDLE}" in lines

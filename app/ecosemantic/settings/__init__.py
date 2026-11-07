@@ -46,6 +46,7 @@ class ViewSettings:
     transport: Transport = "stdio"
     token: bool = False
     open: bool = True
+    bridge: bool = False
 
 
 def settings_from(
@@ -58,11 +59,40 @@ def settings_from(
     transport: str | None = None,
     token: bool | None = None,
     opening: bool | None = None,
+    bridge: bool | None = None,
+    bridge_url: str | None = None,
+    credential_file: Path | None = None,
 ) -> ViewSettings:
-    """The settings: a flag wins over its variable, and a variable over the default."""
-    chosen = transport if transport is not None else environ.get("ECOSEMANTIC_TRANSPORT", "stdio")
+    """The settings: a flag wins over its variable, and a variable over the default. A bridge
+    serves over HTTP and announces the address it is reached by, so --view-url is not named, and a
+    bridge address or a credential file names nothing a server without the bridge reads."""
+    named_bridge = bridge if bridge is not None else _named_switch(environ, "ECOSEMANTIC_BRIDGE")
+    resolved_bridge = bool(named_bridge)
+    named_url = bridge_url if bridge_url is not None else environ.get("ECOSEMANTIC_BRIDGE_URL")
+    named_credential = (
+        credential_file
+        if credential_file is not None
+        else environ.get("ECOSEMANTIC_BRIDGE_CREDENTIAL_FILE")
+    )
+    if not resolved_bridge:
+        if named_url is not None:
+            raise Invalid("--bridge-url names the bridge of a server started with --bridge")
+        if named_credential is not None:
+            raise Invalid(
+                "--credential-file names the credential of a server started with --bridge"
+            )
+    chosen = (
+        transport
+        if transport is not None
+        else environ.get("ECOSEMANTIC_TRANSPORT", "http" if resolved_bridge else "stdio")
+    )
     if chosen not in TRANSPORTS:
         raise Invalid(f"transport {chosen!r} is neither stdio nor http")
+    if resolved_bridge and chosen != "http":
+        raise Invalid("the bridge serves over HTTP; drop --transport stdio")
+    resolved_url = url if url is not None else environ.get("ECOSEMANTIC_VIEW_URL")
+    if resolved_bridge and resolved_url is not None:
+        raise Invalid("--view-url and --bridge both name the announced address")
     from_env = environ.get("ECOSEMANTIC_VIEW", "on").lower() != "off"
     resolved_enabled = enabled if enabled is not None else from_env
     if chosen == "http" and not resolved_enabled:
@@ -78,11 +108,20 @@ def settings_from(
         enabled=resolved_enabled,
         host=resolved_host,
         port=resolved_port,
-        url=url if url is not None else environ.get("ECOSEMANTIC_VIEW_URL"),
+        url=resolved_url,
         transport=cast(Transport, chosen),
         token=bool(named_token),
         open=True if named_open is None else named_open,
+        bridge=resolved_bridge,
     )
+
+
+def browser_reachable(environ: Mapping[str, str], platform: str) -> bool:
+    """Whether this machine can show a browser: Windows and macOS always, elsewhere only with a
+    display, which a session over SSH leaves unset."""
+    if platform in ("win32", "darwin"):
+        return True
+    return "DISPLAY" in environ or "WAYLAND_DISPLAY" in environ
 
 
 def _named_port(environ: Mapping[str, str]) -> int | None:

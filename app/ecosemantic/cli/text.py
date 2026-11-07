@@ -15,6 +15,10 @@ Renderer = Callable[[Mapping[str, object]], str]
 INSTALL = "install one from the page, or run: ecosemantic setup uslci"
 FIRST_START = "the server makes it on its first start"
 PARDISO = 'install "ecosemantic[mkl]" for PARDISO on Linux and Windows x86-64'
+NOTHING_REVOKED = "this systems directory is not signed in to the bridge; nothing was revoked"
+BRIDGE_RENEWAL = (
+    "a server serving this systems directory stops its bridge at its next token renewal"
+)
 
 
 def _map(value: object) -> Mapping[str, object]:
@@ -76,6 +80,65 @@ def database_text(answer: Mapping[str, object]) -> str:
     )
 
 
+def bridge_sign_in_text(answer: Mapping[str, object]) -> str:
+    """The connector address to add in a chat, the page address the engine answers at, and where
+    the credential is kept."""
+    return "\n".join(
+        [
+            f"add {answer['connector']} as a connector in your chat",
+            _row("page", answer["page"]),
+            _row("kept in", answer["where"]),
+        ]
+    )
+
+
+def bridge_sign_out_text(answer: Mapping[str, object]) -> str:
+    """What a sign-out did: the bridge whose grant it revoked and the engine it named, the store
+    the credential was revoked from with the renewal that stops a server serving this systems
+    directory; or that the store held no credential to revoke."""
+    if not answer["signed_out"]:
+        return NOTHING_REVOKED
+    return "\n".join(
+        [
+            f"signed out of {answer['bridge']}",
+            _row("engine", answer["engine"]),
+            _row("revoked", f"the credential in {answer['where']}"),
+            BRIDGE_RENEWAL,
+        ]
+    )
+
+
+def bridge_status_text(answer: Mapping[str, object]) -> str:
+    """Whether this engine is signed in: its handle, page address and engine id with the store
+    that keeps its credential, the engine token's variable, the sign-in that comes next, or the
+    machine having no credential store with the two ways that need none."""
+    if not answer["signed_in"]:
+        if "hint" in answer:
+            return f"not signed in; this machine has no credential store: {answer['hint']}"
+        return "\n".join(
+            [
+                "not signed in to the bridge",
+                _row("run", "ecosemantic bridge sign-in"),
+                _row("kept in", answer["where"]),
+            ]
+        )
+    if "handle" not in answer:
+        return "\n".join(
+            [
+                "signed in through the engine token",
+                _row("variable", answer["where"]),
+            ]
+        )
+    return "\n".join(
+        [
+            f"signed in as {answer['handle']}",
+            _row("page", answer["page"]),
+            _row("engine", answer["engine"]),
+            _row("kept in", answer["where"]),
+        ]
+    )
+
+
 def compute_text(answer: Mapping[str, object]) -> str:
     """Where a compute wrote its run folder, the method and hash it scored, and each table it
     wrote beside the folder."""
@@ -116,6 +179,15 @@ def _database_rows(databases: object) -> list[str]:
     if isinstance(databases, list):
         return [_row("none", INSTALL)]
     return [_row("unreadable", databases)]
+
+
+def _page_rows(page: Mapping[str, object]) -> list[str]:
+    """The page's address and whether its port is free, or the message of a setting the install
+    cannot use."""
+    if "error" in page:
+        return [_row("error", page["error"])]
+    free = "" if page["free"] else ", the port is in use"
+    return [_row("address", f"{page['host']}:{page['port']}{free}")]
 
 
 def _client_row(client: str, answered: Mapping[str, object]) -> str:
@@ -176,7 +248,6 @@ def doctor_text(report: Mapping[str, object]) -> str:
     directories = _map(report["directories"])
     page = _map(report["view"])
     clients = _map(report["clients"])
-    free = "" if page["free"] else ", the port is in use"
     return "\n".join(
         [
             "EcoSemantic",
@@ -190,7 +261,7 @@ def doctor_text(report: Mapping[str, object]) -> str:
             "Databases",
             *_database_rows(report["databases"]),
             "Page",
-            _row("address", f"{page['host']}:{page['port']}{free}"),
+            *_page_rows(page),
             "Telemetry",
             *_telemetry_rows(_map(report["telemetry"])),
             "Chatbots",

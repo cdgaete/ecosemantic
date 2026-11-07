@@ -59,8 +59,14 @@ def run_name(at: datetime, label: str) -> str:
     return f"{at.strftime('%Y%m%dT%H%M%SZ')}-{slug(label, '-')}"
 
 
+def results_dir(root: Path, at: datetime, label: str) -> Path:
+    """The folder one result's tables are written to: the folder the caller hands over, its
+    `results`, and a run named for the instant it was computed at and what it scored."""
+    return root / RESULTS_DIR / run_name(at, label)
+
+
 def _open(root: Path, key: ResultKey, at: datetime, label: str, extra: dict[str, object]) -> Path:
-    folder = root / RESULTS_DIR / run_name(at, label)
+    folder = results_dir(root, at, label)
     folder.mkdir(parents=True, exist_ok=True)
     schema: dict[str, object] = {
         "format": FORMAT,

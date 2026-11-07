@@ -125,15 +125,14 @@ def _matrix_export_scores(export: _Export, labels: Sequence[str]) -> dict[str, n
     """The scores ecoinvent's matrix export implies, per dataset, for each named category: the
     export's own reference amount times ``C B A^-1``, solved by the engine's refined SuperLU as
     the bundle's are. A category whose cumulative workbook disagrees
-    with these is compared against them instead. A named label that no category of the release's
-    cumulative workbook or matrix export names is invalid."""
-    known = {_label(tuple(triple[:3])) for triple in export.lcia} | {
-        _label(triple) for triple in export.cumulative_triples
-    }
+    with these is compared against them instead. A named label that no category of the matrix
+    export names is invalid: the export is what the category is compared against."""
+    known = {_label(tuple(triple[:3])) for triple in export.lcia}
     for label in labels:
         if label not in known:
             raise Invalid(
-                f"workbook_disagrees names {label}, which no category of the release names"
+                f"workbook_disagrees names {label}, which no category of the release's "
+                "matrix export names"
             )
     wanted = [
         (position, _label(tuple(export.lcia[position][:3])))

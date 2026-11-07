@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import dataclasses
 import json
 import shutil
+import threading
 import time
 import uuid
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
@@ -17,6 +20,7 @@ from ecosemantic.local import build_context
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.server import build_server
 from ecosemantic.model.entities import DemandItem, ProductSystem, method_id
+from ecosemantic.ports.run import RunLauncher, RunPort
 from ecosemantic.ports.types import MonteCarloConfig, MonteCarloResult, RunDraft, RunPatch, System
 from tests.conftest import fixture_system
 from tests.fixture_data import CODES, GWP
@@ -41,6 +45,56 @@ def starting(system: ProductSystem, **monte_carlo: object) -> dict[str, object]:
     return {"product_system_id": str(system.id), "method_id": GWP_ID, "monte_carlo": monte_carlo}
 
 
+async def settle(runs: RunPort, *run_ids: uuid.UUID) -> None:
+    """Settle runs no worker carries, so the next test does not find them open."""
+    for run_id in run_ids:
+        await runs.update_run(run_id, RunPatch(status="done"))
+
+
+@pytest.fixture(autouse=True)
+async def _every_run_settled(context: ServerContext) -> AsyncIterator[None]:
+    """Settle the runs a test leaves open, so an assertion that fails before a test settles its
+    run cannot refuse every later start in this file."""
+    yield
+    held = await context.runs.list_runs()
+    await settle(context.runs, *[run.id for run in held if run.open])
+
+
+class RecordingLauncher:
+    """Starts nothing, so the run it is handed stays open however fast the machine is, and keeps
+    the run ids it was asked to start."""
+
+    def __init__(self) -> None:
+        self.started: list[uuid.UUID] = []
+
+    def start(self, run_id: uuid.UUID) -> int:
+        self.started.append(run_id)
+        return 4242
+
+    def alive(self, run_id: uuid.UUID) -> bool:
+        return run_id in self.started
+
+
+class GatedLauncher:
+    """Hands a run to the launcher it wraps only once the test opens the gate, so the run is still
+    open when the test stops it, and names the run it was handed."""
+
+    def __init__(self, inner: RunLauncher) -> None:
+        self.inner = inner
+        self.entered = threading.Event()
+        self.opened = threading.Event()
+        self.run_id: uuid.UUID | None = None
+
+    def start(self, run_id: uuid.UUID) -> int:
+        self.run_id = run_id
+        self.entered.set()
+        self.opened.wait()
+        return self.inner.start(run_id)
+
+    def alive(self, run_id: uuid.UUID) -> bool:
+        return self.inner.alive(run_id)
+
+
 async def test_a_started_run_finishes_with_the_answer_the_synchronous_call_gives(
     full_server: FastMCP, context: ServerContext, fixture_system_stored: ProductSystem
 ) -> None:
@@ -63,9 +117,10 @@ async def test_a_started_run_finishes_with_the_answer_the_synchronous_call_gives
 
 
 async def test_a_second_run_is_refused_while_one_is_open(
-    full_server: FastMCP, fixture_system_stored: ProductSystem
+    context: ServerContext, fixture_system_stored: ProductSystem
 ) -> None:
-    async with Client(full_server) as client:
+    bound = dataclasses.replace(context, launcher=RecordingLauncher())
+    async with Client(build_server(bound)) as client:
         first = await client.call_tool(
             "start_monte_carlo", starting(fixture_system_stored, n=40, n_min=1, seed=12345)
         )
@@ -80,14 +135,13 @@ async def test_a_second_run_is_refused_while_one_is_open(
             "run_id": run["id"],
             "product_system_id": str(fixture_system_stored.id),
         }
-        await client.call_tool("cancel_run", {"run_id": run["id"]})
-        await finished(client, run["id"])
 
 
 async def test_two_starts_at_once_leave_one_run(
-    full_server: FastMCP, fixture_system_stored: ProductSystem
+    context: ServerContext, fixture_system_stored: ProductSystem
 ) -> None:
-    async with Client(full_server) as client:
+    bound = dataclasses.replace(context, launcher=RecordingLauncher())
+    async with Client(build_server(bound)) as client:
         outcomes = await asyncio.gather(
             client.call_tool(
                 "start_monte_carlo", starting(fixture_system_stored, n=40, n_min=1, seed=1)
@@ -97,10 +151,8 @@ async def test_two_starts_at_once_leave_one_run(
             ),
             return_exceptions=True,
         )
-        started = [o.structured_content["value"] for o in outcomes if not isinstance(o, Exception)]
-        refused = [json.loads(str(o)) for o in outcomes if isinstance(o, ToolError)]
-        for run in started:
-            await finished(client, run["id"])
+    started = [o.structured_content["value"] for o in outcomes if not isinstance(o, Exception)]
+    refused = [json.loads(str(o)) for o in outcomes if isinstance(o, ToolError)]
     assert len(started) == 1 and len(refused) == 1, (started, refused)
     assert refused[0]["error"] == "conflict" and started[0]["id"] in refused[0]["message"]
 
@@ -108,12 +160,16 @@ async def test_two_starts_at_once_leave_one_run(
 async def test_two_servers_over_one_workspace_start_one_run(
     bundle_dir: Path,
     context: ServerContext,
-    full_server: FastMCP,
     fixture_system_stored: ProductSystem,
 ) -> None:
     other = build_context(bundle_dir, context.systems_dir)
+    one_context = dataclasses.replace(context, launcher=RecordingLauncher())
+    two_context = dataclasses.replace(other, launcher=RecordingLauncher())
     try:
-        async with Client(full_server) as one, Client(build_server(other)) as two:
+        async with (
+            Client(build_server(one_context)) as one,
+            Client(build_server(two_context)) as two,
+        ):
             outcomes = await asyncio.gather(
                 one.call_tool(
                     "start_monte_carlo", starting(fixture_system_stored, n=40, n_min=1, seed=1)
@@ -123,15 +179,10 @@ async def test_two_servers_over_one_workspace_start_one_run(
                 ),
                 return_exceptions=True,
             )
-            started = [
-                o.structured_content["value"] for o in outcomes if not isinstance(o, Exception)
-            ]
-            refused = [json.loads(str(o)) for o in outcomes if isinstance(o, ToolError)]
-            for run in started:
-                await one.call_tool("cancel_run", {"run_id": run["id"]})
-                await finished(one, run["id"])
     finally:
         other.close()
+    started = [o.structured_content["value"] for o in outcomes if not isinstance(o, Exception)]
+    refused = [json.loads(str(o)) for o in outcomes if isinstance(o, ToolError)]
     assert len(started) == 1 and len(refused) == 1, (started, refused)
     assert refused[0]["details"]["run_id"] == started[0]["id"]
 
@@ -166,19 +217,36 @@ async def test_a_start_over_a_record_this_version_cannot_read_names_it(
 
 
 async def test_a_cancelled_run_settles_as_cancelled_and_keeps_its_samples(
-    full_server: FastMCP, fixture_system_stored: ProductSystem
+    context: ServerContext, fixture_system_stored: ProductSystem
 ) -> None:
-    async with Client(full_server) as client:
-        started = await client.call_tool(
-            "start_monte_carlo", starting(fixture_system_stored, n=60, n_min=1, seed=12345)
+    gated = GatedLauncher(context.launcher)
+    bound = dataclasses.replace(context, launcher=gated)
+    async with Client(build_server(bound)) as client:
+        carrying = asyncio.create_task(
+            client.call_tool(
+                "start_monte_carlo", starting(fixture_system_stored, n=60, n_min=1, seed=12345)
+            )
         )
-        run_id = started.structured_content["value"]["id"]
-        asked = await client.call_tool("cancel_run", {"run_id": run_id})
-        assert asked.structured_content["value"]["cancel_requested"] is True
-        settled = await finished(client, run_id)
-        with pytest.raises(ToolError) as caught:
-            await client.call_tool("cancel_run", {"run_id": run_id})
+        try:
+            await asyncio.wait_for(asyncio.to_thread(gated.entered.wait), 60)
+            assert gated.run_id is not None
+            asked = await client.call_tool("cancel_run", {"run_id": str(gated.run_id)})
+            # the worker starts only once the gate opens, so the run was still in flight
+            assert asked.structured_content["value"]["cancel_requested"] is True
+            assert asked.structured_content["value"]["status"] == "queued"
+            gated.opened.set()
+            await carrying
+            settled = await finished(client, str(gated.run_id))
+            with pytest.raises(ToolError) as caught:
+                await client.call_tool("cancel_run", {"run_id": str(gated.run_id)})
+        finally:
+            gated.opened.set()
+            if not carrying.done():
+                carrying.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await carrying
     assert settled["status"] == "cancelled"
+    assert settled["result"]["stopped"] == "cancelled"
     assert settled["result"]["n"] == len(settled["result"]["categories"][0]["samples"])
     assert json.loads(str(caught.value))["error"] == "conflict"
 
@@ -261,20 +329,6 @@ async def test_the_server_publishes_the_run_it_started_until_it_settles(
     assert moved[-1].run.status == "done" and moved[-1].run.result.n == 3
 
 
-class RecordingLauncher:
-    """Starts nothing, and keeps the run ids it was asked to start."""
-
-    def __init__(self) -> None:
-        self.started: list[uuid.UUID] = []
-
-    def start(self, run_id: uuid.UUID) -> int:
-        self.started.append(run_id)
-        return 4242
-
-    def alive(self, run_id: uuid.UUID) -> bool:
-        return run_id in self.started
-
-
 async def test_start_monte_carlo_starts_the_run_through_the_context_launcher(
     context: ServerContext, fixture_system_stored: ProductSystem
 ) -> None:
@@ -287,7 +341,6 @@ async def test_start_monte_carlo_starts_the_run_through_the_context_launcher(
     run = answer.structured_content["value"]
     assert launcher.started == [uuid.UUID(run["id"])]
     assert run["pid"] == 4242
-    await bound.runs.update_run(uuid.UUID(run["id"]), RunPatch(status="done"))
 
 
 async def test_a_run_names_each_positive_input_to_a_treatment_from_the_moment_it_is_posted(
@@ -305,7 +358,6 @@ async def test_a_run_names_each_positive_input_to_a_treatment_from_the_moment_it
     named = ["frame · steel at 2.4", "widget · steel at 0.5"]
     assert answer.structured_content["value"]["treatments_run_backwards"] == named
     assert read.structured_content["value"]["treatments_run_backwards"] == named
-    await bound.runs.update_run(uuid.UUID(run_id), RunPatch(status="done"))
 
 
 async def test_the_run_tools_link_to_the_simulation_page(

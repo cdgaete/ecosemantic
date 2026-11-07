@@ -38,7 +38,7 @@ OLCA_ENCODINGS = (
     "package/release.py",
 )
 LAYERS = (
-    ("errors",),
+    ("errors", "relay"),
     ("model",),
     ("engine", "ports", "quantity"),
     ("geometry", "compute", "events"),
@@ -46,9 +46,9 @@ LAYERS = (
     ("troubles",),
     ("textmap", "layout", "backends", "databases"),
     ("mcp", "settings", "runs"),
-    ("telemetry", "installs", "view"),
+    ("telemetry", "installs", "view", "bridge"),
     ("local", "serve"),
-    ("workspace", "cli"),
+    ("workspace", "cli", "tray"),
     ("console",),
 )
 RANKS: dict[str, int] = {name: rank for rank, layer in enumerate(LAYERS) for name in layer}
@@ -166,6 +166,18 @@ def test_nothing_the_view_stands_on_names_the_view() -> None:
     assert offenders == [], offenders
 
 
+def test_the_relay_imports_nothing_from_the_rest_of_the_core() -> None:
+    """The bridge imports the relay alone, so no module of `relay/` names another subpackage."""
+    naming = sorted(
+        f"{path}:{line} {dotted}"
+        for path, tree in modules().items()
+        if path.startswith("relay/")
+        for line, dotted in imported(tree)
+        if dotted.split(".")[1] != "relay"
+    )
+    assert naming == [], naming
+
+
 def test_layout_is_pure() -> None:
     tree = modules()["layout/__init__.py"]
     offenders = names(
@@ -248,12 +260,15 @@ def imported(tree: ast.Module) -> list[tuple[int, str]]:
 
 
 def rank(path: str) -> int:
-    """The rank of the module at this path: its subpackage's, and one below them all for the
-    namespace's own `__init__.py`, which every import of a subpackage runs first. That module is a
-    lazy facade: it reaches the modules behind its public names through `import_module` on first
-    use, a dynamic import the AST does not read."""
+    """The rank of the module at this path: its subpackage's; above every layer for the entry
+    point beside the namespace, `__main__.py`, which runs the command and which nothing imports;
+    and one below them all for the namespace's own `__init__.py`, which every import of a
+    subpackage runs first. That module is a lazy facade: it reaches the modules behind its public
+    names through `import_module` on first use, a dynamic import the AST does not read."""
     subpackage, _, inner = path.partition("/")
-    return RANKS[subpackage] if inner else -1
+    if inner:
+        return RANKS[subpackage]
+    return len(LAYERS) if subpackage == "__main__.py" else -1
 
 
 def test_every_subpackage_has_a_rank() -> None:

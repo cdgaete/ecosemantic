@@ -22,7 +22,13 @@ def _directory(path: Path) -> dict[str, object]:
 
 
 def _view(systems: Path) -> dict[str, object]:
-    settings = settings_from(os.environ, systems)
+    """The page's address and whether its port is free, or the message of a setting this install
+    cannot use: the one place that answers `settings_from`'s refusal, since reporting a refusal is
+    what doctor is for."""
+    try:
+        settings = settings_from(os.environ, systems)
+    except Invalid as refused:
+        return {"error": str(refused)}
     try:
         bind(settings.host, settings.port).close()
     except OSError:

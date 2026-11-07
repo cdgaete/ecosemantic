@@ -5,6 +5,7 @@ import csv
 import io
 import json
 import os
+import subprocess
 import sys
 import uuid
 import zipfile
@@ -18,7 +19,7 @@ import yaml
 from ecosemantic.backends.filesystem.storage import FilesystemStorage
 from ecosemantic.backends.native.inventory import NativeInventory
 from ecosemantic.backends.native.store import NativeStore
-from ecosemantic.cli import main
+from ecosemantic.cli import _parser, main
 from ecosemantic.cli.clients import SERVER
 from ecosemantic.compute.edits import add_scenario
 from ecosemantic.databases.bafu import profile as bafu_profile
@@ -39,7 +40,7 @@ from ecosemantic.model.refs import BackgroundRef
 from ecosemantic.package.log import read_log
 from ecosemantic.package.manifest import read_manifest
 from ecosemantic.tables.folder import write_folder
-from tests.conftest import frame_system, widget_linking
+from tests.conftest import frame_system, subcommands, widget_linking
 from tests.database_fixture import BASE, backgrounds, casing_system, flows
 from tests.databases.bafu.test_download import CITATION as BAFU_CITATION
 from tests.databases.bafu.test_download import INVENTORY_UUID as BAFU_INVENTORY_UUID
@@ -62,6 +63,29 @@ GWP_ID = method_id(" > ".join(GWP))
 def test_no_subcommand_is_an_error(capsys: pytest.CaptureFixture[str]) -> None:
     assert main([]) == 2
     assert "serve" in capsys.readouterr().err
+
+
+def test_python_dash_m_ecosemantic_runs_the_command() -> None:
+    ran = subprocess.run(
+        [sys.executable, "-m", "ecosemantic", "--help"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+        timeout=120,
+    )
+    assert ran.returncode == 0
+    assert "serve" in ran.stdout
+    bare = subprocess.run(
+        [sys.executable, "-m", "ecosemantic"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+        timeout=120,
+    )
+    assert bare.returncode == 2
+    assert "serve" in bare.stderr
 
 
 def test_a_missing_data_directory_names_itself(tmp_path: Path) -> None:
@@ -1351,6 +1375,18 @@ def test_every_command_but_serve_takes_json(
     assert ("--json" in helped) is (argv[0] != "serve")
 
 
+def test_every_option_of_serve_and_of_each_bridge_verb_says_what_it_does() -> None:
+    commands = subcommands(_parser())
+    parsers = {"serve": commands["serve"]} | {
+        f"bridge {verb}": parser for verb, parser in subcommands(commands["bridge"]).items()
+    }
+    for command, parser in parsers.items():
+        options = [action for action in parser._actions if action.option_strings]
+        assert options
+        silent = [action.option_strings[0] for action in options if action.help is None]
+        assert silent == [], command
+
+
 def test_a_refusal_is_text_on_stderr_and_json_under_json(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1638,6 +1674,47 @@ def test_doctor_does_not_tell_what_is_counted_when_off(tmp_path: Path) -> None:
     from ecosemantic.telemetry import NOTICE
 
     assert NOTICE not in doctor_text(report(tmp_path, tmp_path, []))
+
+
+@pytest.mark.parametrize(
+    ("variable", "message"),
+    [
+        (
+            "ECOSEMANTIC_BRIDGE_URL",
+            "--bridge-url names the bridge of a server started with --bridge",
+        ),
+        (
+            "ECOSEMANTIC_BRIDGE_CREDENTIAL_FILE",
+            "--credential-file names the credential of a server started with --bridge",
+        ),
+    ],
+)
+def test_doctor_reports_a_bridge_setting_it_cannot_use(
+    variable: str,
+    message: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.delenv("ECOSEMANTIC_BRIDGE", raising=False)
+    values = {
+        "ECOSEMANTIC_BRIDGE_URL": "https://bridge.test",
+        "ECOSEMANTIC_BRIDGE_CREDENTIAL_FILE": str(tmp_path / "credential.json"),
+    }
+    monkeypatch.setenv(variable, values[variable])
+    argv = [
+        "doctor",
+        "--data-dir",
+        str(tmp_path / "data"),
+        "--systems-dir",
+        str(tmp_path / "systems"),
+    ]
+    assert main([*argv, "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["view"] == {"error": message}
+    assert main(argv) == 0
+    text = capsys.readouterr().out
+    assert "Page" in text
+    assert message in text
 
 
 def test_doctor_names_a_broken_telemetry_file(

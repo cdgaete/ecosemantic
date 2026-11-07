@@ -1,9 +1,10 @@
 [tool.uv.workspace]
-members = ["engine", "core", "mcp", "view", "app", "databases"]
+members = ["engine", "relay", "core", "mcp", "view", "app", "databases"]
 
 [tool.uv.sources]
 ecosemantic = { workspace = true }
 ecosemantic-engine = { workspace = true }
+ecosemantic-relay = { workspace = true }
 ecosemantic-core = { workspace = true }
 ecosemantic-mcp = { workspace = true }
 ecosemantic-view = { workspace = true }
@@ -13,6 +14,7 @@ ecosemantic-databases = { workspace = true }
 dev = [
     "ecosemantic[mkl]",
     "ecosemantic-databases[ecoinvent]",
+    "pillow>=13,<14",
     "pytest>=8",
     "packaging>=24",
     "pytest-asyncio>=1.1",
@@ -24,6 +26,7 @@ dev = [
     "xlsxwriter>=3.2,<4",
     "opentelemetry-sdk>=1.44,<2",
     "cryptography>=44,<51",
+    "pystray==0.19.5",
 ]
 
 [tool.ruff]
@@ -57,6 +60,9 @@ known-third-party = ["mcp"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S104", "S106", "S310", "S314", "S603", "ANN"]
 "scripts/**" = ["S101", "S603"]
+"scripts/payload.py" = ["S310"]
+"app/ecosemantic/settings/handover.py" = ["S104", "S310"]
+"app/ecosemantic/tray/windows.py" = ["S603", "S606"]
 "core/ecosemantic/backends/native/search.py" = ["S608"]
 "tests/backends/native/test_search_ranking.py" = ["S608"]
 "app/ecosemantic/serve/__init__.py" = ["S104", "S310", "S603", "S606"]
@@ -67,11 +73,12 @@ known-third-party = ["mcp"]
 "databases/ecosemantic/databases/ecoinvent/datasets.py" = ["S314"]
 
 [tool.ty.environment]
-root = ["engine", "core", "mcp", "view", "app", "databases"]
+root = ["engine", "relay", "core", "mcp", "view", "app", "databases"]
 
 [tool.ty.src]
 include = [
     "engine/ecosemantic",
+    "relay/ecosemantic",
     "core/ecosemantic",
     "mcp/ecosemantic",
     "view/ecosemantic",
@@ -109,6 +116,7 @@ not-iterable = "ignore"
 [tool.coverage.run]
 branch = true
 source_pkgs = ["ecosemantic"]
+omit = ["app/ecosemantic/tray/windows.py"]
 
 [tool.coverage.report]
 show_missing = true
@@ -120,6 +128,7 @@ exclude_also = ["if TYPE_CHECKING:"]
 min_confidence = 80
 paths = [
     "engine/ecosemantic",
+    "relay/ecosemantic",
     "core/ecosemantic",
     "mcp/ecosemantic",
     "view/ecosemantic",
@@ -132,7 +141,10 @@ sort_by_size = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-filterwarnings = ["error::EncodingWarning"]
+filterwarnings = [
+    "error::EncodingWarning",
+    "error::pytest.PytestUnhandledThreadExceptionWarning",
+]
 testpaths = ["tests"]
 markers = [
     "zolca_live: exports BAFU:2026 and imports it; set ECOSEMANTIC_BAFU_ZOLCA and run with -m zolca_live",

@@ -19,6 +19,7 @@ from packaging.requirements import Requirement
 REPOSITORY = Path(__file__).resolve().parents[1]
 LEVELS = {
     "ecosemantic-engine": 1,
+    "ecosemantic-relay": 1,
     "ecosemantic-core": 2,
     "ecosemantic-mcp": 3,
     "ecosemantic-view": 4,

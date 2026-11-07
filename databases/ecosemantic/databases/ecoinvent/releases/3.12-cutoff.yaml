@@ -8,8 +8,8 @@ files:
     path: ecoinvent 3.12_LCIA_implementation/LCIA Implementation 3.12.xlsx
     sha256: 6bc4e6475877e8e90d8a6184b681366154cc5f6ec42c7cec54eb871224b33e02
   matrix:
-    path: universal_matrix_export_3.12_cut-off
-    sha256: 014869086266a99d0236231a272c566de066a1f737c08c8b68154dd70a496a76
+    path: universal_matrix_export_3.12_cut-off/universal_matrix_export
+    sha256: 79c9c6cca4b52fea13f1cdee40a5e99a4213894945422cc56a4eb2489ceed005
   cumulative_lcia:
     path: ecoinvent 3.12_cut-off_cumulative_lcia_xlsx/Cut-off Cumulative LCIA v3.12.xlsx
     sha256: dbb6694f2aafed067bbb70c4f714bd0428f91093fc25525abc161918fa94a8b4

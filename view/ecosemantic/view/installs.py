@@ -24,6 +24,11 @@ CHUNK_BYTES = 1_000_000
 CARRIES = "the openLCA zip"
 
 
+def upload_path(uploads: Path, identity: uuid.UUID) -> Path:
+    """The file an uploaded openLCA zip is streamed into before its install reads it."""
+    return uploads / f"{identity}.zip"
+
+
 def _stated(form: FormData, field: str) -> str | None:
     """A form's text field, None when the form carries none."""
     value = form.get(field)
@@ -101,7 +106,7 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             "replace": _flag(form, "replace"),
             "drop_unlinked": _flag(form, "drop_unlinked"),
         }
-        zipped = context.uploads_dir / f"{uuid.uuid4()}.zip"
+        zipped = upload_path(context.uploads_dir, uuid.uuid4())
         zipped.parent.mkdir(parents=True, exist_ok=True)
         try:
             await _stored(upload, zipped)

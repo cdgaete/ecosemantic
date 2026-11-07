@@ -18,12 +18,13 @@ from ecosemantic.errors import Conflict, Invalid
 from tests.databases.spold_fixture import build_release
 
 
-def test_profiled_lists_the_four_cutoff_releases() -> None:
+def test_profiled_lists_the_five_cutoff_releases() -> None:
     assert profiled() == [
         ("3.10", "cutoff"),
         ("3.10.1", "cutoff"),
         ("3.11", "cutoff"),
         ("3.12", "cutoff"),
+        ("3.13", "cutoff"),
     ]
 
 

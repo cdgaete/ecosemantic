@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import math
 import sys
 import uuid
@@ -7,6 +8,7 @@ from collections.abc import Iterator
 from importlib.metadata import requires
 from pathlib import Path
 
+import keyring
 import pytest
 from fastmcp import FastMCP
 from packaging.requirements import Requirement
@@ -41,8 +43,17 @@ from tests.engine_fixture import install_fixtures
 from tests.fixture_data import CODES as FIXTURE_CODES
 from tests.fixture_data import FIXTURE_BIO, FIXTURE_DATABASE, FIXTURE_DB
 from tests.fixture_data import FLOW_IDS as FIXTURE_FLOWS
+from tests.memory_keyring import MemoryKeyring
 
 NS = uuid.UUID("6f1b5a5e-0c3e-4b52-9a1e-2f0d6c1a7d10")
+
+
+def subcommands(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:
+    """The subcommands a parser offers, by the name each answers to."""
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return dict(action.choices)
+    raise AssertionError(f"{parser.prog} holds no subcommand")
 
 
 def _pardiso_installs() -> bool:
@@ -351,6 +362,16 @@ def _telemetry_off(monkeypatch: pytest.MonkeyPatch) -> None:
     """No test counts a start or reaches a collector unless it switches telemetry on itself."""
     monkeypatch.setenv("ECOSEMANTIC_TELEMETRY", "off")
     monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _memory_keyring() -> Iterator[None]:
+    """Every test keeps its credentials in this process, and the machine's store is put back
+    untouched."""
+    previous = keyring.get_keyring()
+    keyring.set_keyring(MemoryKeyring())
+    yield
+    keyring.set_keyring(previous)
 
 
 @pytest.fixture

@@ -2,6 +2,16 @@
 
 Each release names what it adds, changes and removes, newest first.
 
+## Unreleased
+
+- `ecosemantic-relay`, a seventh distribution, holds the bridge's tunnel: the messages and frames of its one WebSocket, the bridge's discovery document and the Ed25519 proof a bridged request carries.
+- `ecosemantic serve --bridge` serves the engine over HTTP, signs it in to `https://bridge.ecosemantic.com` when the machine holds no credential for it, and serves the bridge's tunnel beside the page, announcing `https://<handle>.bridge.ecosemantic.com` as the page's address and writing the connector's address and the tunnel's lines on stderr.
+- `ecosemantic bridge sign-in` signs an engine in through the browser or `--device`, `ecosemantic bridge sign-out` revokes the grant, and `ecosemantic bridge status` says whether the engine is signed in and where its credential is kept, renewing nothing.
+- `ecosemantic bridge status` answers on a machine without a credential store, naming the two sign-ins that need none.
+- `ecosemantic bridge sign-out` refuses while an engine token gives the engine its sign-in, and answers that nothing was revoked when this systems directory holds no credential.
+- `ecosemantic doctor` reports a bridge setting it cannot use, in its view section, and exits 0.
+- `ecosemantic-databases` and `ecosemantic setup ecoinvent`: ecoinvent 3.13 cutoff, built from the release's own files and validated against ecoinvent's published results, its two Ecological Scarcity 2021 biotic resources categories against the release's matrix export.
+
 ## 0.1.12
 
 - A release's validation and the scoring of every dataset in `ecosemantic-databases` refuse a dataset the compiled background lacks as `not_found`, naming it as `the import names background dataset '<code>', which '<database>' does not hold`, where they answered `invalid`.

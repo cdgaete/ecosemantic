@@ -28,6 +28,7 @@ from ecosemantic.view.handling import (
     error_response,
 )
 
+BRIDGE_EXTENSION = "ecosemantic.bridge"
 GATE_PARAMETER = "token"
 IMPACT_TOOL = "calculate_impact"
 STARTED_PARAMETER = "started"

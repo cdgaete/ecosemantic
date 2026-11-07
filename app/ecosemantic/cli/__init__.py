@@ -12,7 +12,8 @@ import os
 import sys
 import tempfile
 import time
-from collections.abc import Mapping
+import webbrowser
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
@@ -26,12 +27,32 @@ from ecosemantic.backends.native.calculation import NativeCalculation
 from ecosemantic.backends.native.install import install
 from ecosemantic.backends.native.inventory import NativeInventory
 from ecosemantic.backends.native.store import NativeStore
+from ecosemantic.bridge.credentials import (
+    NO_STORE_HINT,
+    Credential,
+    CredentialStore,
+    engine_token,
+    has_credential_store,
+    store_for,
+    token_variable,
+)
+from ecosemantic.bridge.signin import CREDENTIAL_KEPT, client, discover, sign_in, sign_out
+from ecosemantic.bridge.start import (
+    DEFAULT_BRIDGE_URL,
+    BridgeStart,
+    bridge_start,
+    engine_name,
+    engine_version,
+)
 from ecosemantic.cli.accounts import account_for
 from ecosemantic.cli.clients import CLIENTS, connect, found
 from ecosemantic.cli.doctor import directories, report
 from ecosemantic.cli.progress import printer
 from ecosemantic.cli.text import (
     Renderer,
+    bridge_sign_in_text,
+    bridge_sign_out_text,
+    bridge_status_text,
     compute_text,
     connect_text,
     database_text,
@@ -49,6 +70,7 @@ from ecosemantic.errors import (
     Invalid,
     Remedies,
     StaleScenario,
+    Unauthorised,
     Unavailable,
     error_payload,
 )
@@ -94,30 +116,71 @@ def _parser() -> argparse.ArgumentParser:
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     def data(sub: argparse.ArgumentParser) -> None:
-        sub.add_argument("--data-dir", type=Path)
+        sub.add_argument(
+            "--data-dir", type=Path, help="The directory the databases are installed in."
+        )
 
     def answered(sub: argparse.ArgumentParser) -> None:
-        sub.add_argument("--json", dest="as_json", action="store_true")
+        sub.add_argument(
+            "--json",
+            dest="as_json",
+            action="store_true",
+            help="Print the answer as one JSON document.",
+        )
 
     def solved(sub: argparse.ArgumentParser) -> None:
-        sub.add_argument("--solver", choices=SOLVERS, default="superlu")
+        sub.add_argument(
+            "--solver",
+            choices=SOLVERS,
+            default="superlu",
+            help="The solver a calculation runs on.",
+        )
 
     def shared(name: str, help_text: str) -> argparse.ArgumentParser:
         sub = subcommands.add_parser(name, help=help_text)
         data(sub)
         solved(sub)
-        sub.add_argument("--systems-dir", type=Path)
+        sub.add_argument(
+            "--systems-dir", type=Path, help="The directory the product systems are kept in."
+        )
         return sub
 
     serve = shared("serve", "Run the MCP server, with the browser view beside it.")
-    serve.add_argument("--transport", choices=TRANSPORTS)
-    serve.add_argument("--view-host")
-    serve.add_argument("--view-port", type=int)
-    serve.add_argument("--view-url")
-    serve.add_argument("--token", dest="token", action="store_true", default=None)
-    serve.add_argument("--no-token", dest="token", action="store_false", default=None)
-    serve.add_argument("--no-view", action="store_true")
-    serve.add_argument("--no-open", action="store_true")
+    serve.add_argument(
+        "--transport", choices=TRANSPORTS, help="Serve over stdio or over the page's listener."
+    )
+    serve.add_argument("--view-host", help="The host the page's listener binds.")
+    serve.add_argument("--view-port", type=int, help="The port the page's listener binds.")
+    serve.add_argument("--view-url", help="The address the server announces to chats.")
+    serve.add_argument(
+        "--token",
+        dest="token",
+        action="store_true",
+        default=None,
+        help="Require the workspace's token on the page's requests.",
+    )
+    serve.add_argument(
+        "--no-token",
+        dest="token",
+        action="store_false",
+        default=None,
+        help="Admit the page's requests without a token.",
+    )
+    serve.add_argument("--no-view", action="store_true", help="Serve with no page.")
+    serve.add_argument("--no-open", action="store_true", help="Do not open the page in a browser.")
+    serve.add_argument(
+        "--bridge",
+        action="store_true",
+        default=None,
+        help="Serve this engine to chats through the bridge.",
+    )
+    serve.add_argument("--bridge-url", help="The bridge this engine connects to.")
+    serve.add_argument(
+        "--credential-file",
+        dest="credential_file",
+        type=Path,
+        help="The file the bridge's credential is kept in.",
+    )
     export = shared("export", "Write a stored product system as a portable package.")
     export.add_argument("--id", required=True)
     export.add_argument("--to", required=True, type=Path)
@@ -186,6 +249,41 @@ def _parser() -> argparse.ArgumentParser:
     loader.add_argument("--systems-dir", type=Path)
     loader.add_argument("--from", dest="source", required=True, type=Path)
     answered(loader)
+    bridge = subcommands.add_parser(
+        "bridge", help="Sign this engine in to the bridge, out of it, or report it."
+    )
+    verbs = bridge.add_subparsers(dest="action", required=True)
+
+    def bridged(sub: argparse.ArgumentParser) -> None:
+        sub.add_argument("--bridge-url", help="The bridge this engine connects to.")
+        sub.add_argument(
+            "--credential-file",
+            dest="credential_file",
+            type=Path,
+            help="The file the bridge's credential is kept in.",
+        )
+        sub.add_argument(
+            "--systems-dir", type=Path, help="The directory the product systems are kept in."
+        )
+
+    signing = verbs.add_parser("sign-in", help="Sign this engine in to the bridge.")
+    bridged(signing)
+    signing.add_argument(
+        "--device", action="store_true", help="Sign in with the device flow, without a browser."
+    )
+    signing.add_argument("--name", help="The name this engine registers with the bridge.")
+    answered(signing)
+    signing.set_defaults(handler=_signed_in, renderer=bridge_sign_in_text)
+    signing_out = verbs.add_parser("sign-out", help="Sign this engine out of the bridge.")
+    bridged(signing_out)
+    answered(signing_out)
+    signing_out.set_defaults(
+        handler=_signed_out, renderer=bridge_sign_out_text, remedy=CREDENTIAL_KEPT
+    )
+    reporting = verbs.add_parser("status", help="Report whether this engine is signed in.")
+    bridged(reporting)
+    answered(reporting)
+    reporting.set_defaults(handler=_status, renderer=bridge_status_text)
     connecting = subcommands.add_parser(
         "connect", help="Write this server into a chatbot's MCP configuration."
     )
@@ -219,6 +317,128 @@ def _defaulted(args: argparse.Namespace) -> None:
         defaults = dict(zip(("data_dir", "systems_dir"), default_directories(), strict=True))
         for name in lacking:
             setattr(args, name, defaulted(None, defaults[name]))
+
+
+def _bridge_url(named: str | None, environ: Mapping[str, str]) -> str:
+    """The bridge a command works with: the address it names, the variable standing in for it, or
+    the bridge's own default address."""
+    if named is not None:
+        return named
+    return environ.get("ECOSEMANTIC_BRIDGE_URL", DEFAULT_BRIDGE_URL)
+
+
+def _credential_file(named: Path | None, environ: Mapping[str, str]) -> Path | None:
+    """The file the credential is kept in, when the command or its variable names one."""
+    if named is not None:
+        return named
+    held = environ.get("ECOSEMANTIC_BRIDGE_CREDENTIAL_FILE")
+    return None if held is None else Path(held)
+
+
+def _shown(code: str, address: str) -> None:
+    """Show a device sign-in's code and the address the person enters it at."""
+    print(f"code: {code}\naddress: {address}", file=sys.stderr, flush=True)
+
+
+def _browser(url: str) -> None:
+    """Show a sign-in's address in this machine's default browser."""
+    webbrowser.open(url)
+
+
+def _bridge(args: argparse.Namespace) -> tuple[dict[str, object], Renderer]:
+    """Answer the bridge command the parsed verb bound, and name the renderer it bound with it."""
+    handler: Callable[[argparse.Namespace], dict[str, object]] = args.handler
+    return handler(args), args.renderer
+
+
+def _status(args: argparse.Namespace) -> dict[str, object]:
+    """Whether this engine is signed in to the bridge, from the store and the engine token's
+    variables alone: the handle, the page address and the engine it serves, and where the
+    credential is kept; a machine with no credential store names that and the ways that need
+    none."""
+    environ = os.environ
+    if engine_token(environ) is not None:
+        return {"signed_in": True, "where": token_variable(environ)}
+    credential_file = _credential_file(args.credential_file, environ)
+    if credential_file is None and not has_credential_store():
+        return {"signed_in": False, "where": None, "hint": NO_STORE_HINT}
+    store = store_for(_bridge_url(args.bridge_url, environ), args.systems_dir, credential_file)
+    credential = store.load()
+    if credential is None:
+        return {"signed_in": False, "where": store.where}
+    return {
+        "signed_in": True,
+        "handle": credential.handle,
+        "page": credential.page_url,
+        "engine": str(credential.engine),
+        "where": store.where,
+    }
+
+
+def _signed_in(args: argparse.Namespace) -> dict[str, object]:
+    """Sign this systems directory's engine in to the bridge, through the browser or the device
+    flow, and answer the connector address, the page address and where the credential is kept."""
+    return asyncio.run(_signing_in(args))
+
+
+async def _signing_in(args: argparse.Namespace) -> dict[str, object]:
+    """The sign-in itself: the bridge's discovery document, the sign-in it grants, and the
+    registration it answers with the engine's handle and page address."""
+    from ecosemantic.serve import browser_reachable
+
+    environ = os.environ
+    url = _bridge_url(args.bridge_url, environ)
+    store = store_for(url, args.systems_dir, _credential_file(args.credential_file, environ))
+    async with client() as http:
+        config = await discover(http, url)
+        credential = await sign_in(
+            http,
+            url,
+            store,
+            args.device or not browser_reachable(environ, sys.platform),
+            args.name or engine_name(),
+            engine_version(),
+            _browser,
+            _shown,
+        )
+    return {
+        "connector": config.connector_url,
+        "page": credential.page_url,
+        "where": store.where,
+    }
+
+
+def _signed_out(args: argparse.Namespace) -> dict[str, object]:
+    """Sign this systems directory out of the bridge, refusing while an engine token gives it its
+    sign-in: the bridge and the engine whose grant was revoked, or that nothing was stored, a
+    machine with no credential store having nothing to revoke."""
+    environ = os.environ
+    variable = token_variable(environ)
+    if variable is not None and engine_token(environ) is not None:
+        raise Invalid(
+            f"{variable} names an engine token, which is revoked on the bridge's account page"
+        )
+    url = _bridge_url(args.bridge_url, environ)
+    credential_file = _credential_file(args.credential_file, environ)
+    if credential_file is None and not has_credential_store():
+        return {"signed_out": False, "bridge": url, "where": None}
+    store = store_for(url, args.systems_dir, credential_file)
+    revoked = asyncio.run(_signing_out(store))
+    if revoked is None:
+        return {"signed_out": False, "bridge": url, "where": store.where}
+    return {
+        "signed_out": True,
+        "bridge": url,
+        "engine": str(revoked.engine),
+        "where": store.where,
+    }
+
+
+async def _signing_out(store: CredentialStore) -> Credential | None:
+    """The revocation the bridge's Logto answers for the credential this store holds, and the
+    credential it revoked, or None when the store holds none."""
+    async with client() as http:
+        return await sign_out(http, store)
 
 
 async def _compute(args: argparse.Namespace, progress: Reporter) -> dict[str, object]:
@@ -294,9 +514,35 @@ async def run(
     settings: ViewSettings,
     systems_dir: Path,
     meter_provider: MeterProvider | None = None,
+    bridge: BridgeStart | None = None,
 ) -> None:
     """Serve under these settings through the process that serves, which `_serving` loads."""
-    await _serving().run(context, settings, systems_dir, meter_provider=meter_provider)
+    await _serving().run(
+        context, settings, systems_dir, meter_provider=meter_provider, bridge=bridge
+    )
+
+
+async def _serve(
+    context: ServerContext,
+    settings: ViewSettings,
+    args: argparse.Namespace,
+    meter_provider: MeterProvider | None,
+) -> None:
+    """Serve, having started the bridge first when the server was told to: its engine token, its
+    stored credential or a sign-in, and the page address and proof the listener is built on."""
+    if not settings.bridge:
+        await run(context, settings, args.systems_dir, meter_provider=meter_provider)
+        return
+    bridge = await bridge_start(
+        _bridge_url(args.bridge_url, os.environ),
+        args.systems_dir,
+        _credential_file(args.credential_file, os.environ),
+        os.environ,
+        sys.stdin.isatty(),
+        _browser,
+        _shown,
+    )
+    await run(context, settings, args.systems_dir, meter_provider=meter_provider, bridge=bridge)
 
 
 def _serving() -> ModuleType:
@@ -334,9 +580,15 @@ REMEDIES: Remedies = {
 }
 
 
-def _refused(exc: EcoSemanticError, as_json: bool) -> int:
+def _refused(exc: EcoSemanticError, as_json: bool, remedy: str | None = None) -> int:
     """Name the refusal on standard error: the error line under `--json`, the message and its
-    hint otherwise."""
+    hint otherwise. A verb that names what its caller does next about a refusal it cannot act on
+    binds that remedy, and it answers as the hint of the refusal that carries none."""
+    if remedy is not None:
+        if isinstance(exc, Unavailable):
+            exc = Unavailable(str(exc), hint=exc.hint or remedy)
+        elif isinstance(exc, Unauthorised):
+            exc = Unauthorised(str(exc), hint=exc.hint or remedy)
     envelope = error_payload(exc, REMEDIES)
     print(envelope.model_dump_json() if as_json else refusal_text(envelope), file=sys.stderr)
     return 1
@@ -540,7 +792,7 @@ def main(argv: list[str] | None = None) -> int:
     if argv is not None and not argv:
         parser.print_usage(sys.stderr)
         print(
-            "a subcommand is required: serve, export, import, compute, setup, database, "
+            "a subcommand is required: serve, export, import, compute, setup, database, bridge, "
             "connect, doctor, init, telemetry",
             file=sys.stderr,
         )
@@ -552,11 +804,14 @@ def main(argv: list[str] | None = None) -> int:
         _defaulted(args)
     except EcoSemanticError as exc:
         return _refused(exc, as_json)
-    if args.command in ("connect", "doctor", "init", "telemetry"):
+    if args.command in ("bridge", "connect", "doctor", "init", "telemetry"):
         try:
             if args.command == "connect":
                 answered = connect(args.client, args.workspace, args.command_path)
                 _answered(answered, as_json, connect_text)
+            elif args.command == "bridge":
+                answered, render = _bridge(args)
+                _answered(answered, as_json, render)
             elif args.command == "init":
                 answered = _init(args)
                 _answered(answered, as_json, init_text)
@@ -570,7 +825,7 @@ def main(argv: list[str] | None = None) -> int:
                 answered = report(data, systems, _databases(data))
                 _answered(answered, as_json, doctor_text)
         except EcoSemanticError as exc:
-            return _refused(exc, as_json)
+            return _refused(exc, as_json, getattr(args, "remedy", None))
         return 0
     if args.command in ("setup", "database"):
         try:
@@ -619,10 +874,13 @@ def main(argv: list[str] | None = None) -> int:
                 transport=args.transport,
                 token=args.token,
                 opening=False if args.no_open else None,
+                bridge=args.bridge,
+                bridge_url=args.bridge_url,
+                credential_file=args.credential_file,
             )
             provider = begin(os.environ, args.data_dir, settings.transport, sys.stderr)
             with serving(provider):
-                asyncio.run(run(context, settings, args.systems_dir, meter_provider=provider))
+                asyncio.run(_serve(context, settings, args, provider))
         elif args.command == "export":
             _export(context, args.id, args.to)
         else:
