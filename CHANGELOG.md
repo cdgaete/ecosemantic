@@ -2,6 +2,10 @@
 
 Each release names what it adds, changes and removes, newest first.
 
+## 0.1.14
+
+- The sign-in through the browser asks Logto for consent beside `offline_access`, which Logto requires before it issues the refresh token the engine keeps, where it answered `Logto's grant names no refresh_token`.
+
 ## 0.1.13
 
 - `ecosemantic-relay`, a seventh distribution, holds the bridge's tunnel: the messages and frames of its one WebSocket, the bridge's discovery document and the Ed25519 proof a bridged request carries.

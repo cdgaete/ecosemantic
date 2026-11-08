@@ -403,7 +403,8 @@ def _authorization_url(
     challenge: str,
 ) -> str:
     """The address the browser is opened at: the code flow with PKCE, for the tunnel's resource and
-    the scopes the engine needs."""
+    the scopes the engine needs. It asks for consent, which Logto requires before it keeps
+    `offline_access` and issues the refresh token."""
     query = urlencode(
         {
             "response_type": "code",
@@ -414,6 +415,7 @@ def _authorization_url(
             "state": state,
             "code_challenge": challenge,
             "code_challenge_method": "S256",
+            "prompt": "consent",
         }
     )
     return f"{oidc.authorization_endpoint}?{query}"

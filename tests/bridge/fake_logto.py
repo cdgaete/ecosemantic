@@ -257,7 +257,11 @@ class FakeLogto:
             verifier = form.get("code_verifier", "")
             if self.authorized.get("code_challenge") != pkce_challenge(verifier):
                 return refused("invalid_grant", "the verifier does not answer the challenge")
-            return self._granted(form.get("client_id", BROWSER_CLIENT_ID))
+            consent = "consent" in self.authorized.get("prompt", "").split()
+            asked = "offline_access" in self.authorized.get("scope", "").split()
+            return self._granted(
+                form.get("client_id", BROWSER_CLIENT_ID), offline=consent and asked
+            )
         if grant == "refresh_token":
             presented = form.get("refresh_token", "")
             if presented not in self.live_refresh:
@@ -274,23 +278,25 @@ class FakeLogto:
             return self._granted(DEVICE_CLIENT_ID)
         return refused("unsupported_grant_type", f"{grant} is no grant this server runs")
 
-    def _granted(self, client_id: str) -> httpx2.Response:
+    def _granted(self, client_id: str, offline: bool = True) -> httpx2.Response:
+        """The tokens of one grant, a refresh token beside them only while the grant keeps
+        `offline_access`, as Logto issues one."""
         self.minted += 1
         access = f"at-{self.minted}"
         refresh = f"rt-{self.minted}"
         self.access_tokens[access] = self.account
-        self.live_refresh.add(refresh)
-        return httpx2.Response(
-            200,
-            json={
-                "access_token": access,
-                "refresh_token": refresh,
-                "token_type": "Bearer",
-                "expires_in": self.expires_in,
-                "scope": f"openid offline_access {TUNNEL_SCOPE}",
-                "id_token": self.mint(client_id),
-            },
-        )
+        scope = f"openid offline_access {TUNNEL_SCOPE}" if offline else f"openid {TUNNEL_SCOPE}"
+        body: dict[str, Any] = {
+            "access_token": access,
+            "token_type": "Bearer",
+            "expires_in": self.expires_in,
+            "scope": scope,
+            "id_token": self.mint(client_id),
+        }
+        if offline:
+            self.live_refresh.add(refresh)
+            body["refresh_token"] = refresh
+        return httpx2.Response(200, json=body)
 
     def _device(self) -> httpx2.Response:
         body: dict[str, Any] = {

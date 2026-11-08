@@ -248,6 +248,28 @@ async def test_a_browser_sign_in_sends_pkce_the_resource_and_the_scopes_and_stor
     ]
 
 
+async def test_the_browser_is_opened_at_a_request_that_asks_for_consent_with_offline_access(
+    tmp_path: Path,
+) -> None:
+    logto = FakeLogto()
+    browser = Browser(logto)
+    async with httpx2.AsyncClient(transport=logto.transport) as http:
+        await sign_in(
+            http,
+            BRIDGE,
+            store_for(BRIDGE, tmp_path, None),
+            False,
+            "workstation",
+            "0.1.12",
+            browser,
+            Shown(),
+        )
+    browser.finished()
+    query = parse_qs(urlsplit(browser.urls[0]).query)
+    assert query["prompt"] == ["consent"]
+    assert "offline_access" in query["scope"][0].split()
+
+
 async def test_a_request_that_is_no_get_callback_does_not_end_the_sign_in(
     tmp_path: Path,
 ) -> None:
