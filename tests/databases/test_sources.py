@@ -15,6 +15,7 @@ def test_the_release_profiles_ship_inside_the_package() -> None:
         "3.10.1-cutoff.yaml",
         "3.11-cutoff.yaml",
         "3.12-cutoff.yaml",
+        "3.13-cutoff.yaml",
     ]
 
 

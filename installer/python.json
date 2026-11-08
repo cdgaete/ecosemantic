@@ -1,0 +1,28 @@
+{
+  "release": "20261026",
+  "version": "3.13.18",
+  "assets": {
+    "win-x64": {
+      "asset": "cpython-3.13.18+20261026-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+      "sha256": "7369f7a35f261222a6ac8b3a87c1c88eeebee8af945d85346202591a64038dd3"
+    }
+  },
+  "licence": {
+    "url": "https://raw.githubusercontent.com/python/cpython/v3.13.18/Doc/license.rst",
+    "sha256": "952ac05720d7f1dcb63589b35eb0931b1442eb250230a4ad31198eddf0ad6abc",
+    "bundled": {
+      "SQLite": {
+        "release": "20261026",
+        "version": "3.53.1",
+        "url": "https://raw.githubusercontent.com/sqlite/sqlite/version-3.53.1/LICENSE.md",
+        "sha256": "ee6af51062b30d532991face5164136ae6f84e265ecf8abe89dc69dac45ca1e7"
+      },
+      "liblzma": {
+        "release": "20261026",
+        "version": "5.8.4",
+        "url": "https://raw.githubusercontent.com/tukaani-project/xz/v5.8.4/COPYING",
+        "sha256": "616a3ad264ce29b8f1cb97e53037b139d406899ca8d1f799651e17bfa09830b8"
+      }
+    }
+  }
+}

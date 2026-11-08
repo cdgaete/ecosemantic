@@ -127,6 +127,12 @@ def _servable(path: Path) -> bool:
     return path.is_dir() and not path.name.startswith(".")
 
 
+def migrated_name(bundle: str) -> str:
+    """The build id a format-4 database is migrated under: the first 32 characters of the hash of
+    the bundle it was installed from."""
+    return MIGRATED_PREFIX + bundle[:32]
+
+
 def _migrated_build(path: Path) -> Path | None:
     """The half-moved build of a database directory: its `builds/migrated-*` directory, or None."""
     builds = path / BUILDS_DIR
@@ -185,7 +191,7 @@ def _migrate_build(path: Path) -> None:
         held = json.loads(root_entry.read_text(encoding="utf-8"))
         if held.get("format") != 4:
             return
-        build = path / BUILDS_DIR / (MIGRATED_PREFIX + held["bundle"][:32])
+        build = path / BUILDS_DIR / migrated_name(held["bundle"])
         build.mkdir(parents=True, exist_ok=True)
         _move_files(path, build)
         shutil.move(str(root_entry), str(build / ENTRY_FILE))

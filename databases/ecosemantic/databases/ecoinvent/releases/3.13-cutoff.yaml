@@ -1,0 +1,71 @@
+version: '3.13'
+system_model: cutoff
+files:
+  ecospold:
+    path: ecoinvent 3.13_cutoff_ecoSpold02
+    sha256: 944b3e8fb9e59ec697d7592c4490d605bb81f174458aa7506af46bb636d46d96
+  lcia:
+    path: ecoinvent 3.13_LCIA_implementation/LCIA Implementation 3.13.xlsx
+    sha256: 81a82f52e7c74b1ba2a15bf4251559e34b0c801e173e98688377318aadbf6320
+  matrix:
+    path: universal_matrix_export_3.13_cut-off/universal_matrix_export
+    sha256: b08d99d08b797623ea24f3bcb2d074689c867b24474c7c449ee76ca39750d45e
+  cumulative_lcia:
+    path: ecoinvent 3.13_cut-off_cumulative_lcia_xlsx/Cut-off Cumulative LCIA v3.13.xlsx
+    sha256: d1a908648e30de5f84f5d84fa4ac267463853ea063e66c96b39c4a49e67c2126
+  overview:
+    path: Database-Overview-for-ecoinvent-v3.13.xlsx
+    sha256: 98b6edd2c1d7271225fda0f741d37fff0f0324caa3cf31fd7e43b9eee17944b6
+lcia:
+  factors:
+    sheet: CFs
+    columns:
+    - Method
+    - Category
+    - Indicator
+    - Name
+    - Compartment
+    - Subcompartment
+    - CF
+  units:
+    sheet: Indicators
+    columns:
+    - Method
+    - Category
+    - Indicator
+    - Indicator Unit
+overview:
+  sheet: Cut-Off AO
+  columns:
+  - Activity UUID & Product UUID
+  - ecoQuery URL
+zero_spread: none
+expected_unmatched_factors: 0
+expected_zero_spread: 14
+expected_without_url: 0
+read_as_documentation:
+- isCalculatedAmount
+- mathematicalRelation
+- parameter
+- productionVolumeAmount
+- property
+- specialActivityType 0
+- specialActivityType 1
+- specialActivityType 10
+- specialActivityType 4
+- variableName
+workbook_disagrees:
+- Ecological Scarcity 2021 no LT > natural resources no LT > biotic resources no LT
+- Ecological Scarcity 2021 > natural resources > biotic resources
+matrix_reference_tolerance: 1.0e-06
+validated:
+  datasets: 27400
+  categories: 614
+  largest_rel_diff:
+    A: 2.2193659621125133e-16
+    B: 2.2179541150498476e-16
+    C: 1.725118018847862e-16
+    units: 0.0
+    scores: 1.2739820880720825e-10
+    scores_against_matrix_export: 1.4099199935721723e-15
+    workbook_disagrees: 3.7012362035151235e-06

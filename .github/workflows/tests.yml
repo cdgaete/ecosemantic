@@ -91,6 +91,8 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: uv sync --frozen --all-packages --all-extras
+      - if: runner.os == 'Windows'
+        run: uv run ty check app/ecosemantic/tray
       - run: uv run pytest
       - run: uv run python scripts/end_to_end.py
       - run: uv build --all-packages
@@ -102,3 +104,168 @@ jobs:
           name: cold-start-${{ matrix.os }}-${{ matrix.python }}
           path: cold_start.json
           if-no-files-found: error
+
+  installer:
+    runs-on: windows-latest
+    needs: page
+    timeout-minutes: 60
+    env:
+      PYTHONWARNDEFAULTENCODING: "1"
+      ECOSEMANTIC_TELEMETRY: "off"
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: page-static
+          path: view/ecosemantic/view/static
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: "3.13"
+      - name: Sync the workspace, in the time it takes
+        shell: pwsh
+        run: |
+          $began = Get-Date
+          uv sync --frozen --all-packages
+          if ($LASTEXITCODE -ne 0) { throw "uv sync ended $LASTEXITCODE" }
+          "uv sync took $([math]::Round(((Get-Date) - $began).TotalSeconds, 1)) s"
+      - name: Build the seven wheels the payload installs, in the time it takes
+        shell: pwsh
+        run: |
+          $began = Get-Date
+          uv build --all-packages
+          if ($LASTEXITCODE -ne 0) { throw "uv build ended $LASTEXITCODE" }
+          "uv build took $([math]::Round(((Get-Date) - $began).TotalSeconds, 1)) s"
+      - name: Build the payload the installer carries, in the time it takes
+        shell: pwsh
+        run: |
+          $began = Get-Date
+          uv run python scripts/payload.py build --platform win-x64 --dist dist --out payload
+          if ($LASTEXITCODE -ne 0) { throw "the payload build ended $LASTEXITCODE" }
+          "the payload build took $([math]::Round(((Get-Date) - $began).TotalSeconds, 1)) s"
+      - name: Write the payload's third-party notices
+        shell: pwsh
+        run: |
+          uv run python scripts/payload.py notices --payload payload --out payload/THIRD_PARTY_NOTICES.txt
+          if ($LASTEXITCODE -ne 0) { throw "writing the notices ended $LASTEXITCODE" }
+      - name: Write the defines beside the Inno script that includes them
+        shell: pwsh
+        run: |
+          uv run python scripts/payload.py defines --payload payload --out installer/windows/defines.iss
+          if ($LASTEXITCODE -ne 0) { throw "writing the defines ended $LASTEXITCODE" }
+      - name: Print the versions of the tools this job uses and refuse an Inno older than 6.7
+        shell: pwsh
+        run: |
+          uv --version
+          .\payload\python\python.exe -c "import sys; print('payload Python', sys.version)"
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          $compil32 = 'C:\Program Files (x86)\Inno Setup 6\Compil32.exe'
+          foreach ($program in @($iscc, $compil32)) {
+            if (-not (Test-Path -LiteralPath $program)) { "no $program"; continue }
+            $info = (Get-Item -LiteralPath $program).VersionInfo
+            foreach ($field in @('FileVersion', 'FileVersionRaw', 'ProductVersion', 'ProductVersionRaw')) {
+              "$program $field = $($info.$field)"
+            }
+          }
+          $candidates = @(
+            @{ source = 'ISCC.exe ProductVersionRaw'; value = (Get-Item -LiteralPath $iscc -ErrorAction SilentlyContinue).VersionInfo.ProductVersionRaw },
+            @{ source = 'ISCC.exe FileVersionRaw'; value = (Get-Item -LiteralPath $iscc -ErrorAction SilentlyContinue).VersionInfo.FileVersionRaw }
+          )
+          foreach ($key in @(
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1',
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup 6_is1'
+          )) {
+            if (-not (Test-Path -LiteralPath $key)) { "no $key"; continue }
+            $held = (Get-ItemProperty -LiteralPath $key).DisplayVersion
+            "$key DisplayVersion = $held"
+            $candidates += @{ source = "Inno Setup 6_is1 DisplayVersion under $key"; value = $held }
+          }
+          $decided = $null
+          foreach ($candidate in $candidates) {
+            if ([string]::IsNullOrWhiteSpace($candidate.value)) { continue }
+            $parsed = $null
+            if (-not [version]::TryParse(([string]$candidate.value).Trim(), [ref]$parsed)) { continue }
+            if ($parsed -eq [version]'0.0.0.0') { continue }
+            $decided = $parsed
+            "Inno Setup $parsed, read from $($candidate.source)"
+            break
+          }
+          if ($null -eq $decided) {
+            throw "none of the version fields above and neither Inno Setup 6_is1 DisplayVersion reads as a version, so this job cannot tell whether the compiler is new enough"
+          }
+          if ($decided -lt [version]'6.7') { throw "Inno Setup $decided is older than 6.7, which the installer needs" }
+      - name: Decide whether the installer is signed, and mask what the command holds besides $f
+        id: signing
+        shell: pwsh
+        env:
+          ECOSEMANTIC_SIGN_COMMAND: ${{ secrets.ECOSEMANTIC_SIGN_COMMAND }}
+        run: |
+          $command = $env:ECOSEMANTIC_SIGN_COMMAND
+          $signing = -not [string]::IsNullOrWhiteSpace($command)
+          "signing=$($signing.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          if (-not $signing) { exit 0 }
+          foreach ($piece in ($command -split [regex]::Escape('$f'))) {
+            if (-not [string]::IsNullOrWhiteSpace($piece)) { Write-Output "::add-mask::$piece" }
+          }
+      - name: Say the installer is unsigned when the workflow holds no sign command
+        if: steps.signing.outputs.signing == 'false'
+        run: 'echo "unsigned: ECOSEMANTIC_SIGN_COMMAND is not set"'
+      - name: 'Sign the payload with a command that holds no double quote and uses $f alone'
+        if: steps.signing.outputs.signing == 'true'
+        shell: pwsh
+        env:
+          ECOSEMANTIC_SIGN_COMMAND: ${{ secrets.ECOSEMANTIC_SIGN_COMMAND }}
+        run: |
+          foreach ($file in @('payload\python\python.exe', 'payload\python\pythonw.exe')) {
+            $path = (Resolve-Path -LiteralPath $file).Path
+            $command = $env:ECOSEMANTIC_SIGN_COMMAND.Replace('$f', '"' + $path + '"')
+            Invoke-Expression $command
+            if ($LASTEXITCODE -ne 0) { throw "signing $path ended $LASTEXITCODE" }
+          }
+      - name: Compile the installer, in the time it takes
+        shell: pwsh
+        env:
+          ECOSEMANTIC_SIGN_COMMAND: ${{ secrets.ECOSEMANTIC_SIGN_COMMAND }}
+          SIGNING: ${{ steps.signing.outputs.signing }}
+        run: |
+          $arguments = @()
+          if ($env:SIGNING -eq 'true') {
+            $arguments += '/DSignCommand'
+            $arguments += "/Secosemantic=$($env:ECOSEMANTIC_SIGN_COMMAND)"
+          }
+          $arguments += 'installer\windows\EcoSemanticEngine.iss'
+          $began = Get-Date
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' @arguments
+          if ($LASTEXITCODE -ne 0) { throw "ISCC ended $LASTEXITCODE" }
+          "ISCC took $([math]::Round(((Get-Date) - $began).TotalSeconds, 1)) s"
+      - name: Name the installer after the version it carries
+        id: installer
+        shell: pwsh
+        run: |
+          $found = @(Get-ChildItem -LiteralPath dist -Filter 'EcoSemantic-Engine-Setup-*.exe')
+          if ($found.Count -ne 1) { throw "dist holds $($found.Count) installers, and this job builds one" }
+          "file=$($found[0].FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "name=$($found[0].BaseName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+      - name: Print the signatures of the installer and of every program in the payload
+        shell: pwsh
+        run: |
+          $programs = @(Get-ChildItem -LiteralPath 'payload\python' -Filter '*.exe' -Recurse | ForEach-Object { $_.FullName })
+          foreach ($file in @('${{ steps.installer.outputs.file }}') + $programs) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $file
+            $subject = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { 'no certificate' }
+            "${file}: $($signature.Status), $subject"
+          }
+      - name: Prove the installer installs, upgrades and uninstalls, in the time it takes
+        shell: pwsh
+        run: |
+          $began = Get-Date
+          uv run python -X utf8 scripts/installer_check.py "${{ steps.installer.outputs.file }}"
+          if ($LASTEXITCODE -ne 0) { throw "the installer check ended $LASTEXITCODE" }
+          "the installer check took $([math]::Round(((Get-Date) - $began).TotalSeconds, 1)) s"
+      - name: Upload the installer
+        if: (success() || failure()) && steps.installer.outcome == 'success'
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ${{ steps.installer.outputs.name }}
+          path: dist/EcoSemantic-Engine-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 3

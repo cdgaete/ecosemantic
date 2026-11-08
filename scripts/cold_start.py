@@ -1,5 +1,5 @@
 """How long a stdio start takes to answer `initialize` from a fresh `uv tool install` of a
-build's six wheels, the way a chatbot starts the server: the tool and its command live in a
+build's seven wheels, the way a chatbot starts the server: the tool and its command live in a
 temporary directory, never the person's own; the first start after the install is reported
 apart from the rest. Prints one JSON report.
 
@@ -35,8 +35,8 @@ def tool(root: Path, dist: Path, python: str) -> Path:
         sys.exit("uv is not on PATH")
     found = sorted(dist.glob("ecosemantic*-py3-none-any.whl"))
     app = [wheel for wheel in found if wheel.name.startswith("ecosemantic-")]
-    if len(found) != 6 or len(app) != 1:
-        sys.exit(f"{dist} holds no build of the six wheels")
+    if len(found) != 7 or len(app) != 1:
+        sys.exit(f"{dist} holds no build of the seven wheels")
     siblings = [str(wheel) for wheel in found if wheel not in app]
     bins = root / "bin"
     environ = {**os.environ, "UV_TOOL_DIR": str(root / "tools"), "UV_TOOL_BIN_DIR": str(bins)}

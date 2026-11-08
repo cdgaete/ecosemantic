@@ -1,4 +1,4 @@
-"""The clean-environment check: the six wheels of a build, installed by path into an empty
+"""The clean-environment check: the seven wheels of a build, installed by path into an empty
 environment with uv, with any dependency the build directory carries taken from it, serve over
 scratch directories with no browser opened, answer `initialize` and list every tool of
 the roster, and `import ecosemantic as es` opens a workspace over the same directories. Prints
@@ -37,10 +37,10 @@ with es.open(data_dir=Path(sys.argv[1]), systems_dir=Path(sys.argv[2])) as ws:
 
 
 def wheels(dist: Path) -> list[Path]:
-    """The build's six wheels, refused when the directory holds another count."""
+    """The build's seven wheels, refused when the directory holds another count."""
     found = sorted(dist.glob("ecosemantic*-py3-none-any.whl"))
-    if len(found) != 6:
-        sys.exit(f"{dist} holds {len(found)} ecosemantic wheels, not six")
+    if len(found) != 7:
+        sys.exit(f"{dist} holds {len(found)} ecosemantic wheels, not seven")
     return found
 
 

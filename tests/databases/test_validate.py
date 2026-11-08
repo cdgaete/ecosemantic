@@ -259,6 +259,23 @@ def test_a_workbook_disagreeing_label_no_category_names_is_invalid(tmp_path: Pat
     assert label in str(raised.value)
 
 
+def test_a_workbook_disagreeing_label_the_matrix_export_lacks_is_invalid() -> None:
+    export = _Export(
+        activities=[("dataset", "GLO", "product", "kg")],
+        flows=[("flow", "air", "unspecified", "kg")],
+        lcia=[("M", "C", "I", "kg")],
+        A=csr_matrix([[1.0]]),
+        B=csr_matrix([[1.0]]),
+        C=csr_matrix([[1.0]]),
+        cumulative_triples=[("M", "C", "I"), ("M", "C2", "I2")],
+        cumulative={("dataset", "GLO", "product"): np.array([1.0, 2.0])},
+    )
+    # the cumulative workbook names M > C2 > I2; the matrix export has no row to check it against
+    with pytest.raises(Invalid) as raised:
+        validate_module._matrix_export_scores(export, ["M > C > I", "M > C2 > I2"])
+    assert "M > C2 > I2" in str(raised.value)
+
+
 def _matrix_reference_report(
     matrix_score: float, matrix_tolerance: float
 ) -> validate_module._Report:

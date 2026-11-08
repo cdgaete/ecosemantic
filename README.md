@@ -21,7 +21,7 @@ uv tool install --python 3.12 ecosemantic
 uv tool install --python 3.12 "ecosemantic[mkl]"   # PARDISO, on Linux and Windows x86-64
 ```
 
-`--python 3.12` has uv use Python 3.12 or newer, downloading one when the machine holds only an older Python. `pip install ecosemantic` installs the six distributions with the ecoinvent dependencies into an environment of Python 3.12 or newer.
+`--python 3.12` has uv use Python 3.12 or newer, downloading one when the machine holds only an older Python. `pip install ecosemantic` installs the seven distributions with the ecoinvent dependencies into an environment of Python 3.12 or newer.
 
 ## Connect a chatbot, then restart it
 
@@ -51,6 +51,31 @@ ecosemantic setup ecoinvent 3.12
 ## A first model
 
 Ask the agent, in the chat: *"On ecoinvent-3.12-cutoff, model one bicycle frame of 2 kg of low-alloyed steel tube, with 8 % scrap as a parameter; calculate its climate change score and show the contribution by process."* The agent reads the guide on building a model, calls the tools, and every write lands in the product system's change log. The model lands on the page as it is built, and the page takes your requests, which the agent answers.
+
+## From any chat: the bridge
+
+`ecosemantic serve --bridge` serves the engine and connects it out to the EcoSemantic bridge, so the same tools answer from a chat on any machine while this one runs. The first start opens the bridge's sign-in in your browser and keeps the credential in your operating system's store; later starts reuse it and open nothing. Add `https://bridge.ecosemantic.com/mcp` as a custom connector in your chat, and sign in there with the same account.
+
+- `ecosemantic bridge sign-in --device` signs a machine in without a browser: the command prints a code and an address, and you enter the code from any other device.
+- `ecosemantic bridge sign-in --credential-file PATH` keeps the credential in that file, for a machine whose operating system has no credential store; `ecosemantic serve --bridge --credential-file PATH` reads the same file.
+- `ECOSEMANTIC_BRIDGE_TOKEN_FILE` names the engine token an unattended server reads instead of signing in, and `ECOSEMANTIC_BRIDGE_TOKEN` holds one directly.
+- `ecosemantic bridge status` says whether this engine is signed in, the address its page answers at and where the credential is kept, and renews nothing; on a machine with no credential store it says so and names the two sign-ins that need none. `ecosemantic bridge sign-out` revokes the sign-in, answers that nothing was revoked when this systems directory holds no credential, and refuses while an engine token gives this engine its sign-in.
+
+## On Windows without a terminal
+
+The installer carries the engine and a Python of its own, so Windows needs neither `uv` nor a terminal: `EcoSemantic-Engine-Setup-<version>.exe`, named `EcoSemantic-Engine-Setup-<version>-unsigned.exe` while it is unsigned. It installs for you alone into `%LOCALAPPDATA%\Programs\EcoSemantic Engine`, asks for no administrator rights, needs Windows 10 or later on x86-64, and gives you a Start menu shortcut and an entry that starts the tray at every login.
+
+It asks for the two folders the engine uses. Databases holds the background databases, which are large and can be installed again from their sources; Models holds your product systems with their versions and change logs, the runs they produce, the calls the agent records, and the nonces the engine proves a handover with. Both default under `%USERPROFILE%\EcoSemantic`, and each is held to what Windows reads: a databases folder of at most 82 characters and a models folder of at most 131, the longest path the engine writes beneath it included. The installer refuses a folder longer than that, one it cannot write in, and one at or under the program's own folder or the engine's own folder under `%LOCALAPPDATA%\EcoSemantic Engine`, which an uninstall removes. It copies nothing until both pass, and it makes both folders before it writes its settings.
+
+When it finishes it starts the tray, which opens the bridge's sign-in in your browser whenever Windows' credential store holds no sign-in for your models folder: on this first run, at a start with the bridge on, and on `Connect to the bridge`. The tray sits in the notification area and runs the engine with the PARDISO solver the payload carries. Its menu opens with what the engine is doing — `Connected as <handle>`, `Offline — reconnecting`, `Signed out`, `The bridge is off`, `Starting…`, `Stopped` or `Failed — see the logs` — and offers `Open my page`, `Copy the connector address`, `Disconnect from the bridge` or `Connect to the bridge`, `Sign out` or `Sign in…`, `Start at login`, `Start the engine` while it is stopped or failed, `Open the logs` and `Quit`. `Start at login` ticks itself from the `EcoSemantic Engine` value Windows runs at every login, and reads `Start at login (turned off in Windows settings)`, unticked and not choosable, when you turned it off in Windows' own settings.
+
+While the installer is unsigned, SmartScreen stops it with `Windows protected your PC`: choose More info, then Run anyway. With Smart App Control on, Windows 11 can refuse it outright; the installer runs once Smart App Control is off, or once it is signed.
+
+A later version installs over this one and keeps what you chose: the folder pages are skipped, `settings.json` stays byte for byte as it was, and `Start at login` stays as you left it. The installer refuses to move the two folders — uninstall first if they have to move — and, on a machine whose `settings.json` cannot be read, it names that file instead of asking you for the folders again.
+
+Uninstalling removes the program, its Start menu shortcut, the value that starts it at login and the engine's own folder under `%LOCALAPPDATA%\EcoSemantic Engine` with the settings and logs in it. Your two folders and your bridge sign-in stay, and the uninstaller says so:
+
+> Your two folders and your bridge sign-in are kept. Remove this engine from your account page at https://bridge.ecosemantic.com if you no longer use it.
 
 ## From Python
 
@@ -90,18 +115,19 @@ with es.open() as ws:
 
 ## What this repository holds
 
-Six distributions under one version, published together:
+Seven distributions under one version, published together:
 
 | Distribution | What it holds |
 | ------------ | ------------- |
 | `ecosemantic-engine` | `errors`, `model` and `engine`: the product-system vocabulary, its typed errors, and the exact computation with Monte Carlo |
+| `ecosemantic-relay` | the bridge tunnel: its messages and frames, the bridge's discovery document and the Ed25519 proof a bridged request carries |
 | `ecosemantic-core` | the ports and the types they carry, the pure computations, the portable package, the tables folder, the event bus, the drawing, and the backends that serve the ports from installed bundles and a folder of product systems |
 | `ecosemantic-mcp` | the MCP tools, the server that registers them, the run watcher, and the three guides |
 | `ecosemantic-view` | the page's API and the built page |
 | `ecosemantic-databases` | the ecoinvent builder with its release profiles, the USLCI and BAFU sources, the openLCA `.zolca` reader, and the `ecosemantic-databases` command |
-| `ecosemantic` | `cli`, `console`, `local`, `installs`, `runs`, `serve` and `workspace`: the `ecosemantic` command and `import ecosemantic as es` |
+| `ecosemantic` | `cli`, `console`, `local`, `installs`, `runs`, `serve`, `settings`, `telemetry`, `bridge` and `workspace`: the `ecosemantic` command and `import ecosemantic as es` |
 
-`pip install ecosemantic` installs all six. The `ecoinvent` extra stays on `ecosemantic-databases` for a person who installs the builder alone, as `ecosemantic-databases[ecoinvent]`.
+`pip install ecosemantic` installs all seven. The `ecoinvent` extra stays on `ecosemantic-databases` for a person who installs the builder alone, as `ecosemantic-databases[ecoinvent]`.
 
 ## Licence
 

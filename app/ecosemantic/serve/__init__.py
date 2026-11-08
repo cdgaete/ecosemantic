@@ -4,10 +4,8 @@ server over stdio beside the view, or over HTTP mounted on the view's listener."
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import dataclasses
 import errno
-import hmac
 import ipaddress
 import json
 import os
@@ -29,6 +27,8 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import BaseRoute, Route
 from starlette.types import ASGIApp
 
+from ecosemantic.bridge.relay import Relay
+from ecosemantic.bridge.start import BridgeStart, engine_version
 from ecosemantic.errors import Invalid, Unauthorised, Unavailable
 from ecosemantic.events import EventBus
 from ecosemantic.mcp.context import ServerContext
@@ -38,20 +38,29 @@ from ecosemantic.settings import (
     Transport,
     ViewSettings,
     bind,
+    browser_reachable,
     derived_port,
     settings_from,
     workspace_digest,
 )
-from ecosemantic.view.api import GATE_PARAMETER
+from ecosemantic.settings.handover import (
+    STOP_NONCE_FILE,
+    UNSPECIFIED,
+    YIELD_NONCE_FILE,
+    ask_to_stop,
+    ask_to_yield,
+    nonce_path,
+    proven,
+    reachable,
+)
+from ecosemantic.view.api import BRIDGE_EXTENSION, GATE_PARAMETER
 from ecosemantic.view.app import build_view
 from ecosemantic.view.handling import answering
 
-UNSPECIFIED = ("0.0.0.0", "::")
 SHUTDOWN_SECONDS = 5
 OPEN_WAIT_SECONDS = 4.0
 YIELD_SECONDS = 5
 SERVICE = "ecosemantic-view"
-YIELD_NONCE_FILE = "yield-nonce"
 MCP_PATH = "/mcp"
 
 __all__ = [
@@ -59,6 +68,7 @@ __all__ = [
     "OPEN_WAIT_SECONDS",
     "SERVICE",
     "SHUTDOWN_SECONDS",
+    "STOP_NONCE_FILE",
     "TRANSPORTS",
     "UNSPECIFIED",
     "YIELD_NONCE_FILE",
@@ -68,33 +78,31 @@ __all__ = [
     "ViewSettings",
     "announce",
     "announced_host",
+    "ask_to_stop",
     "bind",
     "bind_or_yield",
     "browser_reachable",
     "derived_port",
     "health_route",
     "listener_for",
+    "nonce_path",
     "open_in_browser",
     "open_unfollowed",
     "opens",
     "routed_address",
     "run",
     "settings_from",
+    "stop_route",
     "token_for",
     "workspace_digest",
     "yield_route",
 ]
 
 
-def _reachable(host: str) -> str:
-    """The address that reaches a listener on this machine: loopback when it binds every one."""
-    return host if host not in UNSPECIFIED else "127.0.0.1"
-
-
 def _holder(host: str, port: int) -> dict[str, object] | None:
     try:
         with urllib.request.urlopen(
-            f"http://{_reachable(host)}:{port}/health", timeout=2
+            f"http://{reachable(host)}:{port}/health", timeout=2
         ) as answered:
             body = json.loads(answered.read())
     except Exception:
@@ -119,7 +127,7 @@ def bind_or_yield(settings: ViewSettings, systems_dir: Path) -> socket.socket:
             f"port {settings.port} is held by a server of this workspace that does not yield it, "
             "as one serving HTTP does; stop that server or pass --view-port"
         )
-    _ask_to_yield(settings, systems_dir)
+    ask_to_yield(settings.host, settings.port, systems_dir)
     deadline = time.monotonic() + YIELD_SECONDS
     while time.monotonic() < deadline:
         try:
@@ -131,14 +139,31 @@ def bind_or_yield(settings: ViewSettings, systems_dir: Path) -> socket.socket:
     raise Invalid(f"the holder of port {settings.port} did not yield it")
 
 
-def health_route(workspace: str, yields: bool) -> Route:
-    """The one route a starting server reads to learn which directory the holder serves and
-    whether it yields the port."""
+def health_route(
+    workspace: str, yields: bool, bridge: Callable[[], Mapping[str, str]] | None = None
+) -> Route:
+    """The route a starting server and a tray read: which directory the holder serves, whether it
+    yields the port, and, for a bridged server, the tunnel's state and the addresses its owner
+    needs."""
 
     async def health(request: Request) -> Response:
-        return JSONResponse({"service": SERVICE, "workspace": workspace, "yields": yields})
+        answered: dict[str, object] = {
+            "service": SERVICE,
+            "workspace": workspace,
+            "yields": yields,
+            "bridge": {"state": "off"} if bridge is None else dict(bridge()),
+        }
+        return JSONResponse(answered)
 
     return Route("/health", health)
+
+
+async def _nonce_proven(request: Request, systems_dir: Path, nonce_file: str) -> None:
+    """Refuse a request that does not carry the nonce written in the directory, which proves the
+    caller can write there."""
+    sent = (await request.json()).get("nonce", "")
+    if not proven(sent, systems_dir, nonce_file):
+        raise Unauthorised("the nonce in the directory is required")
 
 
 def yield_route(systems_dir: Path, on_yield: Callable[[], None]) -> Route:
@@ -146,31 +171,23 @@ def yield_route(systems_dir: Path, on_yield: Callable[[], None]) -> Route:
 
     @answering
     async def yielded(request: Request) -> Response:
-        sent = (await request.json()).get("nonce", "")
-        try:
-            held = (systems_dir / YIELD_NONCE_FILE).read_text(encoding="utf-8").strip()
-        except FileNotFoundError:
-            held = ""
-        if not held or not hmac.compare_digest(sent, held):
-            raise Unauthorised("the nonce in the directory is required")
+        await _nonce_proven(request, systems_dir, YIELD_NONCE_FILE)
         on_yield()
         return JSONResponse({"yielded": True})
 
     return Route("/yield", yielded, methods=["POST"])
 
 
-def _ask_to_yield(settings: ViewSettings, systems_dir: Path) -> None:
-    nonce = secrets.token_urlsafe(24)
-    (systems_dir / YIELD_NONCE_FILE).write_text(nonce, encoding="utf-8")
-    asked = urllib.request.Request(
-        f"http://{_reachable(settings.host)}:{settings.port}/yield",
-        data=json.dumps({"nonce": nonce}).encode(),
-        headers={"content-type": "application/json"},
-        method="POST",
-    )
-    with contextlib.suppress(Exception):
-        urllib.request.urlopen(asked, timeout=2).close()
-    (systems_dir / YIELD_NONCE_FILE).unlink(missing_ok=True)
+def stop_route(systems_dir: Path, on_stop: Callable[[], None]) -> Route:
+    """The route a process that writes the systems directory calls to end an HTTP server."""
+
+    @answering
+    async def stopped(request: Request) -> Response:
+        await _nonce_proven(request, systems_dir, STOP_NONCE_FILE)
+        on_stop()
+        return JSONResponse({"stopped": True})
+
+    return Route("/stop", stopped, methods=["POST"])
 
 
 def token_for(systems_dir: Path, wanted: bool) -> str | None:
@@ -222,10 +239,16 @@ def announced_host(settings: ViewSettings, environ: Mapping[str, str]) -> str:
 
 
 def announce(
-    settings: ViewSettings, port: int, token: str | None, environ: Mapping[str, str]
+    settings: ViewSettings,
+    port: int,
+    token: str | None,
+    environ: Mapping[str, str],
+    bridged: str | None = None,
 ) -> str:
-    """The URL the person is given: the override, or the reached address and port, with the
-    token."""
+    """The URL the person is given: the address the bridge was reached by, which carries no token,
+    or the override, or the reached address and port, with the token."""
+    if bridged is not None:
+        return bridged.rstrip("/")
     if settings.url is not None:
         base = settings.url.rstrip("/")
     else:
@@ -253,22 +276,30 @@ def listener_for(
     systems_dir: Path,
     on_yield: Callable[[], None] | None = None,
     meter_provider: MeterProvider | None = None,
+    bridged_url: str | None = None,
+    bridged: Callable[[str, str], bool] | None = None,
+    bridge: Callable[[], Mapping[str, str]] | None = None,
+    on_stop: Callable[[], None] | None = None,
 ) -> Listener:
     """Bind, mint the token, announce, and build the server, counting on the meter provider
     handed, and the view on that URL, with the handover routes and, over HTTP, the MCP endpoint
-    mounted beside the view's routes."""
+    mounted beside the view's routes. A bridge names the announced address, reports its tunnel at
+    the page's health and verifies the proof a bridged request carries; a stop callback mounts the
+    route that ends the server."""
     sock = bind_or_yield(settings, systems_dir)
     token = token_for(systems_dir, settings.token)
-    url = announce(settings, sock.getsockname()[1], token, os.environ)
+    url = announce(settings, sock.getsockname()[1], token, os.environ, bridged=bridged_url)
     bound = dataclasses.replace(context, view_url=url)
     server = build_server(bound, meter_provider=meter_provider)
     routes: list[BaseRoute] = [
-        health_route(workspace_digest(systems_dir), yields=on_yield is not None)
+        health_route(workspace_digest(systems_dir), yields=on_yield is not None, bridge=bridge)
     ]
     if on_yield is not None:
         routes.append(yield_route(systems_dir, on_yield))
+    if on_stop is not None:
+        routes.append(stop_route(systems_dir, on_stop))
     if settings.transport != "http":
-        app = build_view(bound, server, token=token, routes=routes)
+        app = build_view(bound, server, token=token, routes=routes, bridged=bridged)
         return Listener(socket=sock, url=url, token=token, server=server, app=app)
     mounted = server.http_app(path=MCP_PATH)
     app = build_view(
@@ -278,16 +309,9 @@ def listener_for(
         routes=[*routes, Route(MCP_PATH, mounted)],
         gated=(MCP_PATH,),
         inner=mounted.lifespan,
+        bridged=bridged,
     )
     return Listener(socket=sock, url=url, token=token, server=server, app=app)
-
-
-def browser_reachable(environ: Mapping[str, str], platform: str) -> bool:
-    """Whether this machine can show a browser: Windows and macOS always, elsewhere only with a
-    display."""
-    if platform in ("win32", "darwin"):
-        return True
-    return "DISPLAY" in environ or "WAYLAND_DISPLAY" in environ
 
 
 def open_in_browser(url: str) -> None:
@@ -332,14 +356,39 @@ async def _stopped(task: asyncio.Task[None] | None) -> None:
         await asyncio.gather(task, return_exceptions=True)
 
 
+def _reported(line: str) -> None:
+    """One line the tunnel reports, written as it comes."""
+    print(line, file=sys.stderr, flush=True)
+
+
+async def _bridged(listener: Listener, web: uvicorn.Server, relay: Relay) -> None:
+    """Serve the listener and its tunnel together: a listener that stops stops the relay, and a
+    relay that stops — as a sign-out stops it — leaves the engine serving locally."""
+    relaying = asyncio.create_task(relay.run())
+    serving = asyncio.create_task(web.serve(sockets=[listener.socket]))
+    try:
+        done, _ = await asyncio.wait({relaying, serving}, return_when=asyncio.FIRST_COMPLETED)
+        if relaying in done:
+            relaying.result()
+            await serving
+        else:
+            serving.result()
+    finally:
+        web.should_exit = True
+        await _stopped(relaying)
+        await asyncio.wait({serving}, timeout=SHUTDOWN_SECONDS * 2)
+
+
 async def run(
     context: ServerContext,
     settings: ViewSettings,
     systems_dir: Path,
     meter_provider: MeterProvider | None = None,
+    bridge: BridgeStart | None = None,
 ) -> None:
     """Serve stdio alone, stdio beside the view, or the view with the MCP endpoint mounted,
-    counting tool calls on the meter provider handed."""
+    counting tool calls on the meter provider handed. A bridge announces the page address it
+    answers at, admits the requests its proofs name, and serves its tunnel beside the listener."""
     if not settings.enabled:
         await build_server(context, meter_provider=meter_provider).run_stdio_async(
             show_banner=False
@@ -347,8 +396,34 @@ async def run(
         return
     yielded = asyncio.Event()
     on_yield = None if settings.transport == "http" else yielded.set
+    web: uvicorn.Server
+    relay: Relay
+
+    def on_stop() -> None:
+        web.should_exit = True
+
+    bridge_report: Callable[[], Mapping[str, str]] | None = None
+    if bridge is not None:
+        start = bridge
+
+        def bridge_report() -> Mapping[str, str]:
+            return {
+                "state": relay.state(),
+                "handle": relay.handle(),
+                "page": start.page_url,
+                "connector": start.config.connector_url,
+            }
+
     listener = listener_for(
-        context, settings, systems_dir, on_yield=on_yield, meter_provider=meter_provider
+        context,
+        settings,
+        systems_dir,
+        on_yield=on_yield,
+        meter_provider=meter_provider,
+        bridged_url=None if bridge is None else bridge.page_url,
+        bridged=None if bridge is None else bridge.check,
+        bridge=bridge_report,
+        on_stop=on_stop if settings.transport == "http" else None,
     )
     print(f"view: {listener.url}", file=sys.stderr, flush=True)
     web = uvicorn.Server(
@@ -360,6 +435,22 @@ async def run(
             timeout_graceful_shutdown=SHUTDOWN_SECONDS,
         )
     )
+    if bridge is not None:
+        print(f"connector: {bridge.config.connector_url}", file=sys.stderr, flush=True)
+        relay = Relay(
+            app=listener.app,
+            session=bridge.session,
+            config=bridge.config,
+            engine=bridge.engine,
+            account=bridge.account,
+            handle=bridge.handle,
+            version=engine_version(),
+            check=bridge.check,
+            extension=BRIDGE_EXTENSION,
+            report=_reported,
+        )
+        await _bridged(listener, web, relay)
+        return
     if settings.transport == "http":
         await web.serve(sockets=[listener.socket])
         return

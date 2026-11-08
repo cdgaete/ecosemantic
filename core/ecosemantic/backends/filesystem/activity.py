@@ -25,6 +25,11 @@ ACTIVITY_DIR = "activity"
 SUFFIX = ".jsonl"
 
 
+def activity_file(root: Path, agent: str) -> Path:
+    """The file one agent's recorded calls are appended to, named for the agent the port checks."""
+    return root / ACTIVITY_DIR / f"{checked_agent(agent)}{SUFFIX}"
+
+
 class FilesystemActivity:
     """Recorded calls as one line each, appended to the file of the agent that made them.
 
@@ -44,7 +49,7 @@ class FilesystemActivity:
     def _append(self, call: Call) -> Call:
         self._folder().mkdir(parents=True, exist_ok=True)
         with self._lock(call.agent):
-            with (self._folder() / f"{call.agent}{SUFFIX}").open("a", encoding="utf-8") as handle:
+            with activity_file(self.root, call.agent).open("a", encoding="utf-8") as handle:
                 handle.write(call.model_dump_json() + "\n")
         return call
 
@@ -52,7 +57,7 @@ class FilesystemActivity:
         if not self._folder().is_dir():
             return []
         if agent is not None:
-            files = [self._folder() / f"{checked_agent(agent)}{SUFFIX}"]
+            files = [activity_file(self.root, agent)]
         else:
             files = sorted(self._folder().glob(f"*{SUFFIX}"))
         calls: list[Call] = []

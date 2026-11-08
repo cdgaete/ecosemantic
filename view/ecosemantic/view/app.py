@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hmac
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from importlib import resources
 from pathlib import Path
 from urllib.parse import parse_qsl
@@ -22,7 +22,7 @@ from ecosemantic.errors import NotFound, Unauthorised, Unavailable
 from ecosemantic.events import pump_installs, pump_runs, pump_storage
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.view.activity import routes as activity_routes
-from ecosemantic.view.api import GATE_PARAMETER
+from ecosemantic.view.api import BRIDGE_EXTENSION, GATE_PARAMETER
 from ecosemantic.view.api import routes as api_routes
 from ecosemantic.view.credentials import routes as credential_routes
 from ecosemantic.view.handling import answering, error_response
@@ -37,23 +37,57 @@ UNBUILT = (
 )
 
 
+def _proof(extension: object) -> str | None:
+    """The proof a scope's bridge extension carries, or None when it carries none."""
+    if not isinstance(extension, Mapping):
+        return None
+    proof = extension.get("proof")
+    return proof if isinstance(proof, str) else None
+
+
 class TokenGate:
     """Refuse a call under /api, or under a prefix the caller gates, whose token query parameter
-    is not the process's."""
+    is not the process's, and admit a call whose scope carries the bridge's proof on every path.
+    A process with no token to require gates nothing, so a server started with the bridge alone
+    serves its local page. Only the application itself can hand in a scope with that extension,
+    so a request over the network never reaches an application this way."""
 
-    def __init__(self, app: ASGIApp, token: str, gated: tuple[str, ...] = ()) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        token: str | None,
+        gated: tuple[str, ...] = (),
+        bridged: Callable[[str, str], bool] | None = None,
+    ) -> None:
         self.app = app
         self.token = token
         self.prefixes = ("/api", *gated)
+        self.bridged = bridged
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http" and scope["path"].startswith(self.prefixes):
-            query = dict(parse_qsl(scope.get("query_string", b"").decode()))
-            if not hmac.compare_digest(query.get(GATE_PARAMETER, ""), self.token):
-                refused = error_response(Unauthorised("the token in the link is required"))
-                await refused(scope, receive, send)
+        if scope["type"] == "http":
+            extensions = scope.get("extensions") or {}
+            if BRIDGE_EXTENSION in extensions:
+                proof = _proof(extensions[BRIDGE_EXTENSION])
+                if proof is None or self.bridged is None or not self.bridged(proof, scope["path"]):
+                    await self._refuse(scope, receive, send, "the bridge's proof is required")
+                    return
+            elif scope["path"].startswith(self.prefixes) and not self._local(scope):
+                await self._refuse(scope, receive, send, "the token in the link is required")
                 return
         await self.app(scope, receive, send)
+
+    def _local(self, scope: Scope) -> bool:
+        """Whether the request's query carries the process's token, compared byte for byte so a
+        query of any encoding is answered rather than breaking the gate."""
+        if self.token is None:
+            return True
+        query = dict(parse_qsl(scope.get("query_string", b"").decode()))
+        return hmac.compare_digest(query.get(GATE_PARAMETER, "").encode(), self.token.encode())
+
+    async def _refuse(self, scope: Scope, receive: Receive, send: Send, message: str) -> None:
+        """Answer the request with the 401 the message states."""
+        await error_response(Unauthorised(message))(scope, receive, send)
 
 
 def static_dir() -> Path:
@@ -136,9 +170,11 @@ def build_view(
     routes: Sequence[BaseRoute] = (),
     gated: tuple[str, ...] = (),
     inner: Lifespan[Starlette] | None = None,
+    bridged: Callable[[str, str], bool] | None = None,
 ) -> ASGIApp:
     """The page's API and the page. The caller's routes sit ahead of the page and its lifespan
-    runs inside the view's; the token gates /api and every prefix in gated."""
+    runs inside the view's; the token gates /api and every prefix in gated, and a request carrying
+    the bridge's proof in its scope is admitted on it."""
     served: list[BaseRoute] = [
         *api_routes(server, context),
         *activity_routes(server, context),
@@ -156,4 +192,4 @@ def build_view(
         *page_routes(static if static is not None else static_dir()),
     ]
     app = Starlette(routes=served, lifespan=pumping(context, inner))
-    return TokenGate(app, token, gated) if token else app
+    return TokenGate(app, token, gated, bridged) if token or bridged else app

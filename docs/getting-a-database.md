@@ -40,7 +40,7 @@ ecosemantic setup bafu --accept-terms
 
 ### ecoinvent, under your own licence
 
-`ecosemantic setup ecoinvent` downloads the release's own files with your ecoinvent account, builds the bundle in a temporary directory, validates it against ecoinvent's published results, and installs it as `ecoinvent-<version>-<system model>`. It offers ecoinvent 3.10, 3.10.1, 3.11 and 3.12, cutoff system model:
+`ecosemantic setup ecoinvent` downloads the release's own files with your ecoinvent account, builds the bundle in a temporary directory, validates it against ecoinvent's published results, and installs it as `ecoinvent-<version>-<system model>`. It offers ecoinvent 3.10, 3.10.1, 3.11, 3.12 and 3.13, cutoff system model:
 
 ```powershell
 $env:EI_USERNAME = "..."

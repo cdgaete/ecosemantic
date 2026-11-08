@@ -4,6 +4,7 @@ __pycache__/
 venv/
 *.egg-info/
 dist/
+.cache/
 build/
 node_modules/
 .pytest_cache/
@@ -22,3 +23,7 @@ graphify-out
 knowledge/
 .okf-cache.json
 **/ecosemantic/view/static/
+
+installer/windows/defines.iss
+
+/payload/
