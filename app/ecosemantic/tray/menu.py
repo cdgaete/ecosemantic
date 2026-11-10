@@ -7,13 +7,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal
 
-from ecosemantic.bridge.state import SIGNED_OUT_STATES
+from ecosemantic.settings.handover import SIGNED_OUT_STATES
 from ecosemantic.tray.engine import EngineState
 from ecosemantic.tray.home import APP
 
 Action = Literal[
     "open-page",
     "copy-connector",
+    "accounts",
     "connect",
     "disconnect",
     "sign-in",
@@ -104,6 +105,13 @@ def menu_for(state: EngineState, login: StartAtLogin) -> list[MenuItem]:
             "Copy the connector address",
             "copy-connector",
             enabled=state.connector is not None,
+        )
+    )
+    items.append(
+        MenuItem(
+            "Database accounts…",
+            "accounts",
+            enabled=state.kind == "running" and state.accounts is not None,
         )
     )
     if not state.pending:

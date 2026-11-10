@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import http.server
-import json
-import threading
 from pathlib import Path
 
 import pytest
 
 from ecosemantic.errors import Conflict, Unavailable
 from ecosemantic.settings import derived_port
+from ecosemantic.settings.handover import BridgeHealth
 from ecosemantic.tray.engine import (
     EARLY_SECONDS,
     LOG_BYTES,
@@ -16,20 +14,19 @@ from ecosemantic.tray.engine import (
     Engine,
     EngineState,
     engine_command,
-    read_health,
 )
 from ecosemantic.tray.home import Home, TraySettings
-from tests.tray.fakes import FakeLauncher, Health, Time
+from tests.tray.fakes import SCREEN, FakeLauncher, HealthReader, Time, health_of
 
 
 def running_engine(
-    tmp_path: Path, health: Health | None = None
-) -> tuple[Engine, FakeLauncher, Health, Time]:
+    tmp_path: Path, health: HealthReader | None = None
+) -> tuple[Engine, FakeLauncher, HealthReader, Time]:
     """An engine over this folder, its processes and health the test's, its clock the test's."""
     home = Home(tmp_path / "home")
     settings = TraySettings(databases=tmp_path / "databases", models=tmp_path / "models")
     launcher = FakeLauncher()
-    reader = health if health is not None else Health()
+    reader = health if health is not None else HealthReader()
     time = Time()
     engine = Engine(
         python=Path("/payload/python/python.exe"),
@@ -47,6 +44,7 @@ def running_engine(
 def test_the_engine_command_is_exact_with_and_without_the_bridge(tmp_path: Path) -> None:
     python = Path("/payload/python/python.exe")
     served = TraySettings(databases=tmp_path / "data", models=tmp_path / "models")
+    listener = ["--view-host", "127.0.0.1", "--view-port", str(derived_port(tmp_path / "models"))]
     assert engine_command(python, served) == [
         str(python),
         "-X",
@@ -56,6 +54,9 @@ def test_the_engine_command_is_exact_with_and_without_the_bridge(tmp_path: Path)
         "serve",
         "--transport",
         "http",
+        "--tray",
+        *listener,
+        "--no-token",
         "--bridge",
         "--data-dir",
         str(tmp_path / "data"),
@@ -74,6 +75,9 @@ def test_the_engine_command_is_exact_with_and_without_the_bridge(tmp_path: Path)
         "serve",
         "--transport",
         "http",
+        "--tray",
+        *listener,
+        "--no-token",
         "--data-dir",
         str(tmp_path / "data"),
         "--systems-dir",
@@ -83,22 +87,59 @@ def test_the_engine_command_is_exact_with_and_without_the_bridge(tmp_path: Path)
     ]
 
 
+def test_the_engine_command_names_its_listener(tmp_path: Path) -> None:
+    python = Path("/payload/python/python.exe")
+    models = tmp_path / "models"
+    for bridge in (True, False):
+        command = engine_command(
+            python, TraySettings(databases=tmp_path / "data", models=models, bridge=bridge)
+        )
+        assert command[command.index("--view-host") + 1] == "127.0.0.1"
+        assert command[command.index("--view-port") + 1] == str(derived_port(models))
+        assert "--no-token" in command
+
+
+def test_the_engine_command_names_the_tray_as_its_starter(tmp_path: Path) -> None:
+    python = Path("/payload/python/python.exe")
+    models = tmp_path / "models"
+    for bridge in (True, False):
+        command = engine_command(
+            python, TraySettings(databases=tmp_path / "data", models=models, bridge=bridge)
+        )
+        assert command[command.index("--transport") + 1 : command.index("--view-host")] == [
+            "http",
+            "--tray",
+        ]
+        assert command[command.index("--view-host") + 1] == "127.0.0.1"
+        assert command[command.index("--view-port") + 1] == str(derived_port(models))
+        assert "--no-token" in command
+
+
+def test_the_state_carries_the_accounts_screen_the_health_names(tmp_path: Path) -> None:
+    engine, launcher, health, time = running_engine(tmp_path)
+    models = tmp_path / "models"
+    engine.start()
+    health.document = health_of(models, BridgeHealth(state="off"))
+    assert engine.poll().accounts == SCREEN
+    health.document = health_of(models, BridgeHealth(state="off"), accounts=None)
+    assert engine.poll().accounts is None
+
+
 def test_the_state_follows_health(tmp_path: Path) -> None:
     engine, launcher, health, time = running_engine(tmp_path)
+    models = tmp_path / "models"
     assert engine.start() == EngineState(kind="starting", bridge="connecting", bridge_on=True)
     assert len(launcher.processes) == 1
     assert engine.poll() == EngineState(kind="starting", bridge="connecting", bridge_on=True)
-    health.document = {
-        "service": "ecosemantic-view",
-        "workspace": "abcd1234abcd1234",
-        "yields": False,
-        "bridge": {
-            "state": "connected",
-            "handle": "ana",
-            "page": "https://ana.bridge.example",
-            "connector": "https://bridge.example/mcp",
-        },
-    }
+    health.document = health_of(
+        models,
+        BridgeHealth(
+            state="connected",
+            handle="ana",
+            page="https://ana.bridge.example",
+            connector="https://bridge.example/mcp",
+        ),
+    )
     assert engine.poll() == EngineState(
         kind="running",
         bridge="connected",
@@ -106,13 +147,24 @@ def test_the_state_follows_health(tmp_path: Path) -> None:
         handle="ana",
         page="https://ana.bridge.example",
         connector="https://bridge.example/mcp",
+        accounts=SCREEN,
     )
-    health.document = {"bridge": {"state": "off"}}
-    assert engine.poll() == EngineState(kind="running", bridge="off", bridge_on=True)
+    health.document = health_of(models, BridgeHealth(state="off"))
+    assert engine.poll() == EngineState(
+        kind="running", bridge="off", bridge_on=True, accounts=SCREEN
+    )
     health.document = None
     assert engine.poll() == EngineState(kind="starting", bridge="connecting", bridge_on=True)
-    assert health.ports == [derived_port(tmp_path / "models")] * 4
+    assert health.ports == [derived_port(models)] * 4
     assert time.slept == []
+
+
+def test_a_health_of_another_folder_is_refused(tmp_path: Path) -> None:
+    engine, launcher, health, time = running_engine(tmp_path)
+    engine.start()
+    health.document = health_of(tmp_path / "other", BridgeHealth(state="off"))
+    with pytest.raises(Unavailable, match="another models folder"):
+        engine.poll()
 
 
 def test_stop_asks_the_engine_then_ends_it_after_ten_seconds(tmp_path: Path) -> None:
@@ -217,36 +269,6 @@ def test_an_engine_ended_from_outside_is_shown_stopped(tmp_path: Path) -> None:
     assert len(launcher.processes) == 1
 
 
-class Answering(http.server.BaseHTTPRequestHandler):
-    """A server that answers one health document on any GET."""
-
-    body = json.dumps({"bridge": {"state": "off"}}).encode()
-
-    def do_GET(self) -> None:
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(self.body)))
-        self.end_headers()
-        self.wfile.write(self.body)
-
-    def log_message(self, format: str, *args: object) -> None:
-        pass
-
-
-def test_health_is_read_on_this_machine_s_loopback() -> None:
-    server = http.server.HTTPServer(("127.0.0.1", 0), Answering)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    port = server.server_address[1]
-    try:
-        assert read_health(port) == {"bridge": {"state": "off"}}
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=5)
-    assert read_health(port) is None
-
-
 def test_stopping_an_engine_that_already_ended_asks_nothing(tmp_path: Path) -> None:
     engine, launcher, health, time = running_engine(tmp_path)
     engine.start()
@@ -272,61 +294,12 @@ def test_a_process_that_ignores_terminate_keeps_its_engine_and_refuses_a_start(
     assert len(launcher.processes) == 1
 
 
-def test_a_bridge_state_the_relay_does_not_know_is_reported(tmp_path: Path) -> None:
-    engine, launcher, health, time = running_engine(tmp_path)
-    engine.start()
-    health.document = {"bridge": {"state": "asleep"}}
-    with pytest.raises(Unavailable, match="asleep"):
-        engine.poll()
-
-
 def test_starting_an_engine_that_already_runs_is_refused(tmp_path: Path) -> None:
     engine, launcher, health, time = running_engine(tmp_path)
     engine.start()
     with pytest.raises(Conflict, match="already running"):
         engine.start()
     assert len(launcher.processes) == 1
-
-
-def test_a_health_that_names_no_bridge_state_is_refused(tmp_path: Path) -> None:
-    engine, launcher, health, time = running_engine(tmp_path)
-    engine.start()
-    health.document = {}
-    with pytest.raises(Unavailable, match="no bridge state"):
-        engine.poll()
-    health.document = {"bridge": {}}
-    with pytest.raises(Unavailable, match="no bridge state"):
-        engine.poll()
-
-
-class NotJson(http.server.BaseHTTPRequestHandler):
-    """A server that answers a body this tray cannot read as health."""
-
-    body = b"<html>the port belongs to another program</html>"
-
-    def do_GET(self) -> None:
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html")
-        self.send_header("Content-Length", str(len(self.body)))
-        self.end_headers()
-        self.wfile.write(self.body)
-
-    def log_message(self, format: str, *args: object) -> None:
-        pass
-
-
-def test_a_health_that_is_not_json_is_refused_with_what_answered() -> None:
-    server = http.server.HTTPServer(("127.0.0.1", 0), NotJson)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    port = server.server_address[1]
-    try:
-        with pytest.raises(Unavailable, match="not JSON"):
-            read_health(port)
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=5)
 
 
 def test_the_engine_is_asked_through_its_own_stopper(tmp_path: Path) -> None:

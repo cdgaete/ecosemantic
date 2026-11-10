@@ -1,20 +1,15 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { ApiError, api } from '@/api/client'
-import { usePostInstall, usePutCredential, useUploadDatabase } from '@/api/queries'
+import { useAccountEntry, usePostInstall, usePutCredential, useUploadDatabase } from '@/api/queries'
 import type { DatabaseSource, Install, InstallDraft } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { AccountAdvice, KEPT } from './AccountAdvice'
+import { AccountFields } from './AccountFields'
+import { entered, type AccountInput } from './account'
+import { Field } from './Field'
 
 const SELECT = 'h-8 w-full min-w-0 rounded-md border bg-background px-2 text-sm'
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="flex min-w-0 flex-col gap-1 text-xs">
-      <span className="text-muted-foreground">{label}</span>
-      {children}
-    </label>
-  )
-}
 
 function Refusal({ error }: { error: unknown }) {
   if (!(error instanceof ApiError)) return null
@@ -32,14 +27,15 @@ export function SourceForm({ source, terms }: { source: DatabaseSource; terms: I
   const [model, setModel] = useState(source.system_models[0] ?? '')
   const [name, setName] = useState('')
   const [file, setFile] = useState<File | null>(null)
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [token, setToken] = useState('')
+  const [account, setAccount] = useState<AccountInput>({ username: '', password: '', token: '' })
   const [accepted, setAccepted] = useState(false)
   const put = usePutCredential()
   const post = usePostInstall()
   const upload = useUploadDatabase()
-  const account = source.credential !== null && !source.held ? source.credential : null
+  const entry = useAccountEntry()
+  const here = entry.data?.here === true
+  const advice = entry.data !== undefined && !here ? entry.data : null
+  const kind = source.credential !== null && !source.held ? source.credential : null
   const quoted = terms?.terms ?? null
   const licence = terms === null ? null : api.licenceUrl(terms.id)
   const draft = (accept: boolean): Omit<InstallDraft, 'actor'> => ({
@@ -52,14 +48,14 @@ export function SourceForm({ source, terms }: { source: DatabaseSource; terms: I
     name: null,
     drop_unlinked: false,
   })
-  const entered = { username, password, token: token === '' ? undefined : token }
+  const blocked = kind !== null && !here
   const send = () => {
-    if (account === null) post.mutate(draft(accepted))
-    else put.mutate({ kind: account, account: entered }, { onSuccess: () => post.mutate(draft(accepted)) })
+    if (kind === null) post.mutate(draft(accepted))
+    else put.mutate({ kind, account: entered(account) }, { onSuccess: () => post.mutate(draft(accepted)) })
   }
   const add = () => {
-    if (account === null) return
-    put.mutate({ kind: account, account: entered })
+    if (kind === null) return
+    put.mutate({ kind, account: entered(account) })
   }
   const transfer = () => {
     if (file === null) return
@@ -112,20 +108,15 @@ export function SourceForm({ source, terms }: { source: DatabaseSource; terms: I
               </select>
             </Field>
           ) : null}
-          {account === null ? null : (
+          {kind === null ? null : advice === null ? (
             <>
-              <Field label="Username">
-                <Input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" />
-              </Field>
-              <Field label="Password">
-                <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="off" />
-              </Field>
-              {account === 'nexus' ? (
-                <Field label="Token">
-                  <Input value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" />
-                </Field>
-              ) : null}
+              <AccountFields kind={kind} value={account} onChange={setAccount} disabled={!here} />
+              {here ? <p className="text-muted-foreground">{KEPT}</p> : null}
             </>
+          ) : (
+            <AccountAdvice entry={advice}>
+              <AccountFields kind={kind} value={account} onChange={setAccount} disabled />
+            </AccountAdvice>
           )}
           {quoted === null || licence === null ? null : (
             <div className="flex flex-col gap-1.5 rounded-md border bg-background px-2 py-1.5">
@@ -139,18 +130,18 @@ export function SourceForm({ source, terms }: { source: DatabaseSource; terms: I
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            {account === null ? null : (
-              <Button size="sm" variant="outline" onClick={add}>
+            {kind === null ? null : (
+              <Button size="sm" variant="outline" disabled={blocked} onClick={add}>
                 Add credentials
               </Button>
             )}
-            <Button size="sm" disabled={quoted !== null && !accepted} onClick={send}>
+            <Button size="sm" disabled={blocked || (quoted !== null && !accepted)} onClick={send}>
               Install
             </Button>
           </div>
         </>
       )}
-      <Refusal error={put.error ?? post.error ?? upload.error} />
+      <Refusal error={entry.error ?? put.error ?? post.error ?? upload.error} />
     </div>
   )
 }

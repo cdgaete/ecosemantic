@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import os
 import signal
 import sys
@@ -17,9 +18,9 @@ from ecosemantic.bridge.credentials import store_for
 from ecosemantic.bridge.start import DEFAULT_BRIDGE_URL
 from ecosemantic.errors import Invalid, Unavailable
 from ecosemantic.settings import derived_port
-from ecosemantic.settings.handover import ask_to_stop
+from ecosemantic.settings.handover import LOOPBACK_ADDRESS, Health, ask_to_stop, read_health
 from ecosemantic.tray.app import REFUSALS, Platform, Tray
-from ecosemantic.tray.engine import Engine, EngineState, asked, read_health, rotate
+from ecosemantic.tray.engine import Engine, EngineState, asked, rotate
 from ecosemantic.tray.home import APP, Home, TraySettings, home_for, written
 from ecosemantic.tray.home import TRAY_LOG as LOG_FILE
 from ecosemantic.tray.icons import icon_image
@@ -38,6 +39,9 @@ LOCK_SECONDS = 0.1
 WINDOWS_INVALID_ARGUMENT = 87
 STILL_RUNNING = 3
 SETTINGS_UNREADABLE = 4
+HEALTH_ON_LOOPBACK: Callable[[int], Health | None] = functools.partial(
+    read_health, LOOPBACK_ADDRESS
+)
 
 
 class QuitRefused(Exception):
@@ -90,7 +94,7 @@ def quit_tray(
     home: Home,
     *,
     ask: Callable[[str, int, Path], bool] = ask_to_stop,
-    health: Callable[[int], Mapping[str, object] | None] = read_health,
+    health: Callable[[int], Health | None] = HEALTH_ON_LOOPBACK,
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> int:
@@ -149,7 +153,7 @@ def _settings(home: Home) -> TraySettings | None:
 def _engine_stopped(
     settings: TraySettings,
     ask: Callable[[str, int, Path], bool],
-    health: Callable[[int], Mapping[str, object] | None],
+    health: Callable[[int], Health | None],
     clock: Callable[[], float],
     sleep: Callable[[float], None],
 ) -> bool:
@@ -311,7 +315,7 @@ def _engine(home: Home, platform: Platform, settings: TraySettings, python: Path
         settings=settings,
         home=home,
         launcher=platform.launcher,
-        health=read_health,
+        health=HEALTH_ON_LOOPBACK,
         stopper=ask_to_stop,
         clock=time.monotonic,
         sleep=time.sleep,

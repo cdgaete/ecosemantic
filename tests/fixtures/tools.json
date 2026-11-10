@@ -10718,7 +10718,7 @@
       "open_world_hint": false,
       "read_only_hint": false
     },
-    "description": "Install a background database from a source, in a process of this server's own, and answer the install. Show the person the terms of a source that has them and pass accept_terms only on their word; the record names who accepted. An openlca install takes the zip the person holds as package, with name and version. A source whose account is not held is refused with what to set, and a credential is entered by the person on the page: never ask them for a password here. list_installs and get_install follow the install, cancel_install asks it to stop.",
+    "description": "Install a background database from a source, in a process of this server's own, and answer the install. Show the person the terms of a source that has them and pass accept_terms only on their word; the record names who accepted. An openlca install takes the zip the person holds as package, with name and version. A source whose account is not held is refused with where the person enters it, on the computer where the engine runs: never ask them for a password here. list_installs and get_install follow the install, cancel_install asks it to stop.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -12572,7 +12572,7 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "Every source a background database installs from, with the versions its profiles pin, the system models it holds, whether it has terms to accept, and whether this server holds the account its install needs. install_database posts one of them.",
+    "description": "Every source a background database installs from, with the versions its profiles pin, the system models it holds, whether it has terms to accept, and whether this server holds the account its install needs, and while an account is not held, where the person enters it. install_database posts one of them.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {},

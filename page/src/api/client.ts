@@ -1,4 +1,5 @@
 import type {
+  AccountEntry,
   AgentSummary,
   Answer,
   BackgroundProcess,
@@ -179,6 +180,7 @@ export const api = {
   },
   licenceUrl: (id: string) => withToken(`/api/installs/${id}/licence`),
   credentials: () => call<{ held: CredentialKind[] }>('/api/credentials'),
+  accountEntry: () => call<AccountEntry>('/api/credentials/entry'),
   putCredential: (kind: CredentialKind, account: Credential) => call<null>(`/api/credentials/${kind}`, { method: 'PUT', body: JSON.stringify(account) }),
   deleteCredential: (kind: CredentialKind) => call<null>(`/api/credentials/${kind}`, { method: 'DELETE' }),
   server: () => call<ServerInfo>('/api/server'),

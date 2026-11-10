@@ -1,7 +1,8 @@
+import { focusManager } from '@tanstack/react-query'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { Screens } from '@/App'
 import { api, ApiError } from '@/api/client'
-import type { Answer, DatabaseSource, Install } from '@/api/types'
+import type { AccountEntry, Answer, DatabaseSource, Install } from '@/api/types'
 import databases from './fixtures/databases.json'
 import installs from './fixtures/installs.json'
 import server from './fixtures/server.json'
@@ -10,6 +11,14 @@ import { renderAt } from './render'
 
 const listed = installs as unknown as Answer<Install[]>
 const offered = sources as unknown as Answer<DatabaseSource[]>
+
+const WHY =
+  'Database accounts are entered on the computer where EcoSemantic runs, so the password stays on that computer and never passes through the internet or a chat.'
+const TRAY =
+  'On the computer where EcoSemantic runs, click the EcoSemantic icon beside the clock in the taskbar (it may sit under the ^ arrow) and choose Database accounts…'
+const KEPT = 'Kept on this computer until EcoSemantic restarts.'
+const HERE: AccountEntry = { reach: 'here', here: true, why: null, steps: null, page: null }
+const BRIDGED: AccountEntry = { reach: 'bridge', here: false, why: WHY, steps: TRAY, page: null }
 
 vi.mock('@/api/client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/api/client')>()
@@ -25,6 +34,7 @@ vi.mock('@/api/client', async (importOriginal) => {
       postInstall: vi.fn(async () => ({ value: listed.value[0], hint: null, view_url: null })),
       cancelInstall: vi.fn(async () => ({ value: listed.value[0], hint: null, view_url: null })),
       putCredential: vi.fn(async () => undefined),
+      accountEntry: vi.fn(async () => HERE),
       uploadDatabase: vi.fn(async () => ({ value: listed.value[0], hint: null, view_url: null })),
     },
   }
@@ -35,7 +45,12 @@ beforeEach(() => {
   vi.mocked(api.sources).mockResolvedValue(offered)
   vi.mocked(api.installs).mockResolvedValue(listed)
   vi.mocked(api.postInstall).mockResolvedValue({ value: listed.value[0], hint: null, view_url: null })
+  vi.mocked(api.accountEntry).mockResolvedValue(HERE)
 })
+
+function unheld(name: string): Answer<DatabaseSource[]> {
+  return { ...offered, value: offered.value.map((source) => (source.name === name ? { ...source, held: false } : source)) }
+}
 
 async function pick(name: string) {
   fireEvent.click(await screen.findByRole('button', { name: new RegExp(name) }))
@@ -73,16 +88,74 @@ it("asks for an account only when the source's is not held", async () => {
 })
 
 async function openAnUnheldAccount(name: string, username: string, password: string) {
-  vi.mocked(api.sources).mockResolvedValue({
-    ...offered,
-    value: offered.value.map((source) => (source.name === name ? { ...source, held: false } : source)),
-  })
+  vi.mocked(api.sources).mockResolvedValue(unheld(name))
   vi.mocked(api.installs).mockResolvedValue({ ...listed, value: [] })
   renderAt('/databases', <Screens />)
   await pick(name)
   fireEvent.change(await screen.findByLabelText('Username'), { target: { value: username } })
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: password } })
 }
+
+it('disables the account form off this computer, with the steps in view', async () => {
+  vi.mocked(api.accountEntry).mockResolvedValue(BRIDGED)
+  vi.mocked(api.sources).mockResolvedValue(unheld('bafu'))
+  vi.mocked(api.installs).mockResolvedValue({ ...listed, value: [] })
+  renderAt('/databases', <Screens />)
+  await pick('bafu')
+  expect(await screen.findByLabelText('Username')).toBeDisabled()
+  expect(screen.getByLabelText('Password')).toBeDisabled()
+  expect(screen.getByLabelText('Token')).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Add credentials' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Install' })).toBeDisabled()
+  expect(screen.getByText(TRAY)).toBeInTheDocument()
+  const wrapper = screen.getByLabelText('Username').closest('[tabindex="0"]')
+  expect(wrapper).not.toBeNull()
+  ;(wrapper as HTMLElement).focus()
+  expect(await screen.findByRole('tooltip')).toHaveTextContent(WHY)
+  expect(api.putCredential).not.toHaveBeenCalled()
+  expect(api.postInstall).not.toHaveBeenCalled()
+})
+
+it('takes the account on this computer, saying how long it is kept', async () => {
+  vi.mocked(api.sources).mockResolvedValue(unheld('bafu'))
+  vi.mocked(api.installs).mockResolvedValue({ ...listed, value: [] })
+  vi.mocked(api.accountEntry).mockResolvedValue(HERE)
+  renderAt('/databases', <Screens />)
+  await pick('bafu')
+  expect(await screen.findByLabelText('Username')).toBeEnabled()
+  expect(screen.getByLabelText('Password')).toBeEnabled()
+  expect(screen.getByLabelText('Token')).toBeEnabled()
+  expect(screen.getByText(KEPT)).toBeInTheDocument()
+})
+
+it('installs a held source from any reach', async () => {
+  vi.mocked(api.accountEntry).mockResolvedValue(BRIDGED)
+  vi.mocked(api.installs).mockResolvedValue({ ...listed, value: [] })
+  renderAt('/databases', <Screens />)
+  const item = await screen.findByRole('button', { name: /bafu/ })
+  expect(within(item).getByText(/account saved/)).toBeInTheDocument()
+  await pick('bafu')
+  expect(await screen.findByRole('button', { name: 'Install' })).toBeEnabled()
+})
+
+it('names each source\'s account with the article its name takes', async () => {
+  vi.mocked(api.sources).mockResolvedValue(unheld('bafu'))
+  renderAt('/databases', <Screens />)
+  const bafu = await screen.findByRole('button', { name: /bafu/ })
+  expect(within(bafu).getByText(/a Nexus account/)).toBeInTheDocument()
+  const ecoinvent = screen.getByRole('button', { name: /^ecoinvent/ })
+  expect(within(ecoinvent).getByText(/an ecoinvent account/)).toBeInTheDocument()
+})
+
+it('reads the sources again when the window regains focus', async () => {
+  vi.mocked(api.sources).mockResolvedValue(unheld('bafu'))
+  renderAt('/databases', <Screens />)
+  const item = await screen.findByRole('button', { name: /bafu/ })
+  expect(within(item).queryByText(/account saved/)).not.toBeInTheDocument()
+  vi.mocked(api.sources).mockResolvedValue(offered)
+  focusManager.setFocused(true)
+  await waitFor(() => expect(within(item).getByText(/account saved/)).toBeInTheDocument())
+})
 
 it('adds credentials without installing', async () => {
   await openAnUnheldAccount('ecoinvent', 'carlos', 'a secret')

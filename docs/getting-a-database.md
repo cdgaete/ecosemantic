@@ -6,6 +6,8 @@ A product system sits on one installed background database. EcoSemantic installs
 
 The page's Databases editor (*Background databases* in its navigation) lists the installed databases and the sources one installs from, each saying what it needs. Pick a source, take a version, enter the account when the source asks for one, tick the box on the terms BAFU serves, and watch the install's steps; a refusal names its remedy. With no database installed, the page's welcome offers the same sources in place of the empty list of product systems. A database is served as soon as its install ends, by every server running on the data directory, with no restart.
 
+An account is entered on the computer where the engine runs, and the engine keeps it until it restarts. The page says so under the account fields, and disables them with the steps that do enter one where the page reached the engine from elsewhere. An engine the tray started takes its accounts through *Database accounts…* in the tray's menu, which opens the accounts screen on that computer; a bridged page cannot enter one, since the credential routes answer only a request from that computer.
+
 The page opens itself when a chatbot starts the server. The agent in the chat gives you its address (`view_link`). An install the page posts runs the same steps `ecosemantic setup` runs, in a process of the server's own, so the server and the chatbot can restart while it carries on.
 
 ## From the command line

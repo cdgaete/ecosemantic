@@ -4,23 +4,24 @@ cancelled."""
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 
 from fastmcp import FastMCP
 from pydantic import ValidationError
 
-from ecosemantic.compute.accounts import missing
-from ecosemantic.errors import Conflict, Invalid, Unavailable
+from ecosemantic.errors import Conflict, Invalid, NotFound, Unavailable
+from ecosemantic.mcp.accounts import account_advice
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import READ, WRITE
 from ecosemantic.mcp.envelopes import Answer, as_uuid, bound, boundary
 from ecosemantic.mcp.watcher import reap_install, watch_install
 from ecosemantic.ports.types import (
+    CredentialKind,
     DatabaseSource,
     Install,
     InstallDraft,
     InstallPatch,
     SourceName,
-    source_credential,
 )
 
 
@@ -42,13 +43,52 @@ def held_sources(context: ServerContext) -> list[DatabaseSource]:
     ]
 
 
+def _offered(context: ServerContext, source: SourceName) -> DatabaseSource:
+    """The source of this name among those this server installs from, saying whether the account
+    it needs is held."""
+    for found in held_sources(context):
+        if found.name == source:
+            return found
+    raise NotFound(
+        f"this server installs from no source {source!r}; list_sources names the ones it does"
+    )
+
+
+def _article(kind: CredentialKind) -> str:
+    """One account kind as a noun phrase, with the article its name takes."""
+    return f"{'an' if kind[0] in 'aeiou' else 'a'} {kind} account"
+
+
+def _joined(clauses: Sequence[str]) -> str:
+    """The clauses as one English list: commas between all but the last, and "and" before it."""
+    if len(clauses) == 1:
+        return clauses[0]
+    return f"{', '.join(clauses[:-1])} and {clauses[-1]}"
+
+
+def _needs(sources: Sequence[DatabaseSource]) -> str:
+    """The sentence naming every source whose account this server does not hold, with the kind of
+    account each needs; a source that needs no account is held, so it is never among them."""
+    clauses = [
+        f"{source.name} needs {_article(source.credential)}"
+        for source in sources
+        if source.credential is not None
+    ]
+    return f"{_joined(clauses)}, which this engine does not hold."
+
+
 async def list_sources(context: ServerContext) -> Answer[list[DatabaseSource]]:
     """Every source a database installs from, with the versions its profiles pin, what its
     install needs, and whether this server holds the account it needs. It never answers a
-    credential."""
-    return Answer[list[DatabaseSource]](
-        value=held_sources(context), view_url=databases_link(context)
+    credential, and it carries the advice for the accounts it does not hold."""
+    sources = held_sources(context)
+    unheld = [source for source in sources if not source.held]
+    hint = (
+        f"{_needs(unheld)} {account_advice(context.accounts, needed=unheld).said()}"
+        if unheld
+        else None
     )
+    return Answer[list[DatabaseSource]](value=sources, hint=hint, view_url=databases_link(context))
 
 
 async def install_database(
@@ -68,12 +108,12 @@ async def install_database(
     this server serves is refused before anything is downloaded unless replace is passed. An
     install cuts off the inputs no dataset provides, and its summary's cut_off names them: a
     release cuts off what its profile lists, an openlca package only with drop_unlinked."""
-    needed = source_credential(source)
-    account = context.credentials.get(needed) if needed is not None else None
-    if needed is not None and account is None:
+    needed = _offered(context, source)
+    account = context.credentials.get(needed.credential) if needed.credential is not None else None
+    if not needed.held:
         raise Unavailable(
             f"{source} installs from an account this server does not hold",
-            hint=f"{missing(needed)}: {context.page_at('/databases')}",
+            hint=account_advice(context.accounts, needed=[needed]).said(),
         )
     try:
         draft = InstallDraft(
@@ -145,7 +185,8 @@ def register(server: FastMCP, context: ServerContext) -> None:
         description=(
             "Every source a background database installs from, with the versions its profiles "
             "pin, the system models it holds, whether it has terms to accept, and whether this "
-            "server holds the account its install needs. install_database posts one of them."
+            "server holds the account its install needs, and while an account is not held, "
+            "where the person enters it. install_database posts one of them."
         ),
     )(boundary(bound(list_sources, context)))
     server.tool(
@@ -156,8 +197,8 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "answer the install. Show the person the terms of a source that has them and pass "
             "accept_terms only on their word; the record names who accepted. An openlca install "
             "takes the zip the person holds as package, with name and version. A source whose "
-            "account is not held is refused with what to set, and a credential is entered by the "
-            "person on the page: never ask them for a password here. list_installs and "
+            "account is not held is refused with where the person enters it, on the computer "
+            "where the engine runs: never ask them for a password here. list_installs and "
             "get_install follow the install, cancel_install asks it to stop."
         ),
     )(boundary(bound(install_database, context)))

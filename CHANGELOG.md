@@ -2,6 +2,14 @@
 
 Each release names what it adds, changes and removes, newest first.
 
+## 0.1.15
+
+- The accounts screen at `/accounts` enters an ecoinvent or Nexus account on the computer where the engine runs, and the tray's menu offers `Database accounts…`, which opens it there.
+- Where the page reaches the engine through the bridge or across the network, its account fields are disabled with the steps that do enter an account; an account posted from off the engine's computer is refused with the same advice, and the agent reads it where an install needs an account. An engine with no database leads the agent to the sources a database installs from.
+- `/health` answers one declared document, read in one place; the tray starts its engine on the port it polls, and a port another application holds is refused as that application's, with the remedy.
+- The bridge's tunnel resets a stream whose application fails, before or after its answer started, and the failure is logged.
+- A device sign-in polls on past a poll that fails until its code expires, then names the last failure; a page address the bridge answers is refused unless it is https or loopback, whichever way the engine starts.
+
 ## 0.1.14
 
 - The sign-in through the browser asks Logto for consent beside `offline_access`, which Logto requires before it issues the refresh token the engine keeps, where it answered `Logto's grant names no refresh_token`.

@@ -169,6 +169,11 @@ def _parser() -> argparse.ArgumentParser:
     serve.add_argument("--no-view", action="store_true", help="Serve with no page.")
     serve.add_argument("--no-open", action="store_true", help="Do not open the page in a browser.")
     serve.add_argument(
+        "--tray",
+        action="store_true",
+        help="Started by the tray: account advice names the tray's menu.",
+    )
+    serve.add_argument(
         "--bridge",
         action="store_true",
         default=None,
@@ -877,6 +882,7 @@ def main(argv: list[str] | None = None) -> int:
                 bridge=args.bridge,
                 bridge_url=args.bridge_url,
                 credential_file=args.credential_file,
+                tray=args.tray,
             )
             provider = begin(os.environ, args.data_dir, settings.transport, sys.stderr)
             with serving(provider):

@@ -29,7 +29,7 @@
 
 4. **Restart the chatbot.** It starts the server over standard input and output. No page follows the server's events, so the server opens the page itself.
 
-5. **Install a background database.** With none installed the page's welcome offers the sources a database installs from: USLCI, BAFU, ecoinvent, or an openLCA JSON-LD zip you hold. Pick one, enter an account or tick the terms when the source asks for either, and watch the install's steps. A person in a terminal takes the same step with `ecosemantic setup`, as [Getting a database](getting-a-database.md) says.
+5. **Install a background database.** With none installed the page's welcome offers the sources a database installs from: USLCI, BAFU, ecoinvent, or an openLCA JSON-LD zip you hold. Pick one, enter an account or tick the terms when the source asks for either, and watch the install's steps. A person in a terminal takes the same step with `ecosemantic setup`, as [Getting a database](getting-a-database.md) says. An account is entered on the computer where the engine runs, never in the chat, and the engine keeps it until it restarts. The engine the Windows installer starts takes one through *Database accounts…* in its tray's menu, which opens the accounts screen on that computer.
 
 6. **Ask for a model.** For example: *"On ecoinvent-3.12-cutoff, model one bicycle frame of 2 kg of low-alloyed steel tube, with 8 % scrap as a parameter; calculate its climate change score and show the contribution by process."* The agent reads the guide on building a model, calls the tools, and every write lands in the product system's change log. The model lands on the page as it is built.
 

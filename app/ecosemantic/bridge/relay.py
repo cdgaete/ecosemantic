@@ -4,6 +4,8 @@ engine's application in this process, and every response written back on the sam
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import logging
 from collections.abc import Awaitable, Callable
 from uuid import UUID
 
@@ -16,7 +18,6 @@ from websockets.exceptions import ConnectionClosed, InvalidStatus
 from ecosemantic.bridge.proofs import ProofCheck
 from ecosemantic.bridge.session import Session
 from ecosemantic.bridge.signin import SignedOut, secure
-from ecosemantic.bridge.state import BridgeState
 from ecosemantic.errors import Unauthorised, Unavailable
 from ecosemantic.relay.discovery import BridgeConfiguration
 from ecosemantic.relay.errors import RelayError
@@ -32,6 +33,9 @@ from ecosemantic.relay.messages import (
     encode,
 )
 from ecosemantic.relay.messages import Message as TunnelMessage
+from ecosemantic.settings.handover import BridgeState
+
+_LOGGER = logging.getLogger(__name__)
 
 BACKOFF_SECONDS = 1
 BACKOFF_CEILING_SECONDS = 60
@@ -102,7 +106,9 @@ class Relay:
     tunnel that drops, and a message that is no message of the protocol or a stream opened twice
     end the tunnel: every request in flight is told the client went, the reason is reported, and
     the tunnel is opened again, waiting longer after each attempt that fails before a welcome
-    arrives. An answer the tunnel cannot carry ends its own stream alone."""
+    arrives. An answer the tunnel cannot carry ends its own stream alone. An application that fails
+    while its answer is open ends its stream as failed and is logged with its traceback; the tunnel
+    serves on."""
 
     def __init__(
         self,
@@ -338,6 +344,8 @@ class _Stream:
         self._start = start
         self._body: asyncio.Queue[Chunk | None] = asyncio.Queue()
         self._task: asyncio.Task[None] | None = None
+        self._answer_ended = False
+        self._closed = False
 
     def begin(self) -> None:
         """Run the application on this stream."""
@@ -350,7 +358,8 @@ class _Stream:
 
     async def finish(self) -> None:
         """End the application: it is told the client disconnected, and its task is stopped even
-        when it does not answer that."""
+        when it does not answer that. A stream ended here answers no failure with a reset."""
+        self._closed = True
         self._body.put_nowait(None)
         task = self._task
         if task is None:
@@ -360,11 +369,23 @@ class _Stream:
         await asyncio.gather(task, return_exceptions=True)
 
     async def _serve(self) -> None:
-        """Run the application; the tunnel may be gone before its answer is written."""
+        """Run the application, ending this stream as failed and logging the failure when it raises
+        while its answer is open; the tunnel may be gone before the answer is written."""
         try:
             await self._relay.app(self._scope(), self._receive, self._send)
         except Unavailable:
             return
+        except Exception:
+            _LOGGER.exception("the application on the stream %d failed", self.identity)
+            await self._failed()
+
+    async def _failed(self) -> None:
+        """End this stream as failed, unless the bridge or the tunnel ended it or its answer did; a
+        tunnel gone by the write ends the reset quietly."""
+        if self._closed or self._answer_ended:
+            return
+        with contextlib.suppress(Unavailable):
+            await self._relay._write(encode(Reset(stream=self.identity, reason="failed")))
 
     def _ended(self, _: asyncio.Task[None]) -> None:
         """Forget this stream once its application has ended."""
@@ -426,8 +447,10 @@ class _Stream:
             return
         if message["type"] == "http.response.body":
             body = message.get("body", b"")
-            for chunk in chunks(self.identity, body, end=not message.get("more_body", False)):
+            ends = not message.get("more_body", False)
+            for chunk in chunks(self.identity, body, end=ends):
                 if chunk.data or chunk.end:
                     await self._relay._write(pack(chunk))
+            self._answer_ended = ends
             return
         raise RelayError(f"the tunnel carries no {message['type']}")

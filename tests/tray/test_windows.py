@@ -19,8 +19,9 @@ if sys.platform == "win32":
     import winreg
     from importlib.metadata import version
 
+    from ecosemantic.settings.handover import BridgeHealth
     from ecosemantic.tray import windows
-    from tests.tray.fakes import FakeLauncher, FakeStore
+    from tests.tray.fakes import FakeLauncher, FakeStore, health_of
 
     windows.kernel32.TerminateProcess.argtypes = (wintypes.HANDLE, wintypes.UINT)
     windows.kernel32.TerminateProcess.restype = wintypes.BOOL
@@ -269,9 +270,10 @@ def test_the_icon_lets_windows_end_the_session(tmp_path: Path) -> None:
     showing = windows.Showing(tray, platform, interval=0.02)
     stopped = showing.icon.title
     tray.engine.launcher = FakeLauncher()
-    tray.engine.health = lambda port: {
-        "bridge": {"state": "connected", "handle": "ana", "page": "", "connector": ""}
-    }
+    tray.engine.health = lambda port: health_of(
+        tmp_path / "models",
+        BridgeHealth(state="connected", handle="ana", page="", connector=""),
+    )
     tray.engine.start()
     showing.icon._message_handlers.update(windows.session_handlers(tray))
     running_icon = threading.Thread(target=showing.run, daemon=True)

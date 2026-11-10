@@ -17,7 +17,7 @@ import httpx2
 from ecosemantic.bridge.credentials import Credential, CredentialStore, engine_token, store_for
 from ecosemantic.bridge.proofs import ProofCheck
 from ecosemantic.bridge.session import EngineTokenSession, Session, TunnelSession
-from ecosemantic.bridge.signin import client, discover, provider, register, secure, sign_in
+from ecosemantic.bridge.signin import client, discover, provider, register, sign_in
 from ecosemantic.errors import Unauthorised, Unavailable
 from ecosemantic.relay.discovery import BridgeConfiguration, Registration
 from ecosemantic.settings import browser_reachable
@@ -160,7 +160,7 @@ async def _registered(
             f"the bridge registered the engine {registered.engine} for {registered.account!r}, "
             f"not {credential.engine} for {credential.account!r}"
         )
-    return await session.confirmed(registered.handle, secure(registered.page_url))
+    return await session.confirmed(registered.handle, registered.page_url)
 
 
 def _check(bridge_url: str, account: str, engine: UUID) -> ProofCheck:

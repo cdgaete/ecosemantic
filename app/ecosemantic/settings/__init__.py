@@ -47,6 +47,7 @@ class ViewSettings:
     token: bool = False
     open: bool = True
     bridge: bool = False
+    tray: bool = False
 
 
 def settings_from(
@@ -62,6 +63,7 @@ def settings_from(
     bridge: bool | None = None,
     bridge_url: str | None = None,
     credential_file: Path | None = None,
+    tray: bool = False,
 ) -> ViewSettings:
     """The settings: a flag wins over its variable, and a variable over the default. A bridge
     serves over HTTP and announces the address it is reached by, so --view-url is not named, and a
@@ -113,6 +115,7 @@ def settings_from(
         token=bool(named_token),
         open=True if named_open is None else named_open,
         bridge=resolved_bridge,
+        tray=tray,
     )
 
 

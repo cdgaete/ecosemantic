@@ -4,12 +4,15 @@ do, a launcher whose processes the test ends, and a health reader the test sets.
 from __future__ import annotations
 
 import time
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from ecosemantic.bridge.credentials import Credential
+from ecosemantic.settings import workspace_digest
+from ecosemantic.settings.handover import SERVICE, BridgeHealth, Health
 from ecosemantic.tray.menu import StartAtLogin
+
+SCREEN = "http://127.0.0.1:12266/accounts"
 
 
 @dataclass
@@ -88,15 +91,27 @@ class FakeStore:
 
 
 @dataclass
-class Health:
-    """The health reader: the document the engine answers, and the ports it was asked on."""
+class HealthReader:
+    """The health the engine answers, and the ports it was asked on."""
 
-    document: dict[str, object] | None = None
+    document: Health | None = None
     ports: list[int] = field(default_factory=list)
 
-    def __call__(self, port: int) -> Mapping[str, object] | None:
+    def __call__(self, port: int) -> Health | None:
         self.ports.append(port)
         return self.document
+
+
+def health_of(models: Path, bridge: BridgeHealth, accounts: str | None = SCREEN) -> Health:
+    """The health an engine serving this models folder answers, with this tunnel and the accounts
+    screen it serves; a test whose engine serves no screen names that address as none."""
+    return Health(
+        service=SERVICE,
+        workspace=workspace_digest(models),
+        yields=False,
+        bridge=bridge,
+        accounts=accounts,
+    )
 
 
 @dataclass

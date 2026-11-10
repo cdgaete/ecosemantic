@@ -1,5 +1,6 @@
-"""What a server another process may hand over to needs: the nonce a caller that can write a systems
-directory proves, the files it is written in, and the calls that post one to a route.
+"""The health an engine answers, and what a server another process may hand over to needs: the
+nonce a caller that can write a systems directory proves, the files it is written in, and the calls
+that post one to a route.
 
 Nothing here imports the server, the page or the tools, so a tray reads it without loading them.
 """
@@ -11,19 +12,86 @@ import http.client
 import json
 import os
 import secrets
+import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Literal
+
+from pydantic import BaseModel, ValidationError
+
+from ecosemantic.errors import Unavailable, field_error
 
 UNSPECIFIED = ("0.0.0.0", "::")
+LOOPBACK_ADDRESS = "127.0.0.1"
 YIELD_NONCE_FILE = "yield-nonce"
 STOP_NONCE_FILE = "stop-nonce"
 NONCE_BYTES = 24
 CALL_SECONDS = 2.0
+HEALTH_SECONDS = 2.0
+
+ServiceName = Literal["ecosemantic-view"]
+SERVICE: ServiceName = "ecosemantic-view"
+BridgeState = Literal["off", "connecting", "connected", "offline", "signed-out", "stopped"]
+SIGNED_OUT_STATES: tuple[BridgeState, ...] = ("signed-out", "stopped")
+
+
+class BridgeHealth(BaseModel):
+    """The tunnel's state, and the addresses its owner needs when it has them."""
+
+    state: BridgeState
+    handle: str | None = None
+    page: str | None = None
+    connector: str | None = None
+
+
+class Health(BaseModel):
+    """The document an engine answers at `/health`: which workspace it serves, whether it yields the
+    port, how its tunnel stands, and the accounts screen's address where it serves one."""
+
+    service: ServiceName
+    workspace: str
+    yields: bool
+    bridge: BridgeHealth
+    accounts: str | None = None
 
 
 def reachable(host: str) -> str:
     """The address that reaches a listener on this machine: loopback when it binds every one."""
-    return host if host not in UNSPECIFIED else "127.0.0.1"
+    return host if host not in UNSPECIFIED else LOOPBACK_ADDRESS
+
+
+def read_health(
+    host: str, port: int, timeout: float = HEALTH_SECONDS, hint: str | None = None
+) -> Health | None:
+    """The health the engine on this port of this machine answers, or None when nothing answers
+    there. What answers must be a health: another service's answer, an HTTP error, a body that is
+    not JSON or not a `Health`, and a listener that does not speak HTTP are each refused, with the
+    remedy the reader names as the refusal's hint."""
+    try:
+        with urllib.request.urlopen(
+            f"http://{reachable(host)}:{port}/health", timeout=timeout
+        ) as answer:
+            body = answer.read()
+    except urllib.error.HTTPError as error:
+        error.close()
+        raise _not_a_health(port, f"HTTP {error.code}", hint) from error
+    except OSError:
+        return None
+    except http.client.HTTPException as error:
+        raise _not_a_health(port, str(error), hint) from error
+    try:
+        return Health.model_validate_json(body)
+    except ValidationError as error:
+        raise _not_a_health(port, field_error(error), hint) from error
+
+
+def _not_a_health(port: int, detail: str, hint: str | None) -> Unavailable:
+    """The refusal of what a listener on this port answered instead of an engine's health."""
+    return Unavailable(
+        f"port {port} is held by another application, which answers what is not an EcoSemantic "
+        f"engine's health: {detail}",
+        hint=hint,
+    )
 
 
 def nonce_path(systems_dir: Path, nonce_file: str) -> Path:

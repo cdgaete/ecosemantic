@@ -12,7 +12,8 @@ import pytest
 from filelock import FileLock
 
 from ecosemantic.errors import Invalid, Unavailable
-from ecosemantic.settings import derived_port
+from ecosemantic.settings import derived_port, workspace_digest
+from ecosemantic.settings.handover import SERVICE, BridgeHealth, Health
 from ecosemantic.tray.__main__ import (
     _engine,
     _gone,
@@ -135,7 +136,12 @@ def test_an_engine_that_keeps_answering_health_stops_the_quit(
     home = a_home(tmp_path)
     settings = settings_for(tmp_path)
     settings.write(home.settings)
-    answered = {"bridge": {"state": "connected", "handle": "ana"}}
+    answered = Health(
+        service=SERVICE,
+        workspace=workspace_digest(settings.models),
+        yields=False,
+        bridge=BridgeHealth(state="connected", handle="ana"),
+    )
     time_ = Time()
     assert (
         quit_tray(
@@ -559,7 +565,7 @@ def test_quit_past_a_port_another_program_holds(
         server.server_close()
         thread.join(timeout=5)
     printed = capsys.readouterr().err
-    assert str(port) in printed and "not JSON" in printed
+    assert str(port) in printed and "not an EcoSemantic engine's health" in printed
 
 
 def test_a_rotation_the_os_refuses_is_the_first_line_this_run_writes(

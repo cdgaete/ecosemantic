@@ -235,6 +235,14 @@ export interface DatabaseSource {
   held: boolean
 }
 export interface Credential { username: string; password: string; token?: string }
+export type Reach = 'here' | 'bridge' | 'network'
+export interface AccountEntry {
+  reach: Reach
+  here: boolean
+  why: string | null
+  steps: string | null
+  page: string | null
+}
 export interface InstallProgress { step: string; count: number | null }
 export interface InstallTerms { licence: string; citation: string }
 export interface InstallDraft {

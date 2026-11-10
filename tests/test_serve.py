@@ -33,13 +33,14 @@ from ecosemantic.bridge.proofs import ProofCheck
 from ecosemantic.bridge.start import BridgeStart
 from ecosemantic.errors import Invalid, Unavailable
 from ecosemantic.events import EventBus
-from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.context import AccountStart, ServerContext
 from ecosemantic.mcp.server import ROSTER, build_server
 from ecosemantic.serve import (
     OPEN_WAIT_SECONDS,
     STOP_NONCE_FILE,
     Listener,
     ViewSettings,
+    account_start,
     announce,
     announced_host,
     ask_to_stop,
@@ -58,6 +59,7 @@ from ecosemantic.serve import (
     workspace_digest,
     yield_route,
 )
+from ecosemantic.settings.handover import SERVICE, BridgeHealth, Health
 from ecosemantic.view.app import build_view
 from ecosemantic.view.stream import RETRY_MILLISECONDS
 from tests.bridge.fake_bridge import (
@@ -76,6 +78,7 @@ from tests.bridge.test_relay import (
     Session,
     payload,
 )
+from tests.mcp.test_accounts import SCREEN
 
 NOWHERE = Path("/nonexistent-static")
 
@@ -224,6 +227,51 @@ def test_nothing_opens_over_http_with_no_open_with_the_page_off_or_without_a_dis
     assert opens(ViewSettings(), {}, "linux") is False
     assert opens(ViewSettings(), {}, "win32") is True
     assert opens(ViewSettings(), {}, "darwin") is True
+
+
+def test_the_tray_start_has_the_tray_and_the_screen() -> None:
+    assert account_start(ViewSettings(tray=True), 12266, None, None, {}, "linux") == AccountStart(
+        start="tray", screen=SCREEN
+    )
+
+
+def test_a_terminal_start_reads_whether_the_computer_shows_a_browser() -> None:
+    def started(environ: dict[str, str], platform: str) -> str:
+        return account_start(ViewSettings(), 12266, None, None, environ, platform).start
+
+    assert started({}, "win32") == "terminal"
+    assert started({"DISPLAY": ":0"}, "linux") == "terminal"
+    assert started({}, "linux") == "headless"
+
+
+def test_an_engine_with_a_token_has_no_screen() -> None:
+    entry = account_start(ViewSettings(), 12266, "t0k3n", None, {}, "win32")
+    assert entry.screen is None
+    assert all("t0k3n" not in str(value) for value in dataclasses.astuple(entry))
+
+
+@pytest.mark.parametrize(
+    ("host", "screen"),
+    [
+        ("127.0.0.1", "http://127.0.0.1:12266/accounts"),
+        ("localhost", "http://localhost:12266/accounts"),
+        ("::1", "http://[::1]:12266/accounts"),
+        ("0.0.0.0", "http://127.0.0.1:12266/accounts"),
+        # a browser on this computer reaches this bind from the LAN address, which is no loopback
+        ("192.0.2.10", None),
+    ],
+)
+def test_the_screen_is_the_address_a_loopback_browser_reaches(
+    host: str, screen: str | None
+) -> None:
+    settings = ViewSettings(host=host, token=False)
+    assert account_start(settings, 12266, None, None, {}, "win32").screen == screen
+
+
+def test_a_bridged_start_names_its_page() -> None:
+    page = "https://carlosgaete.bridge.ecosemantic.com"
+    entry = account_start(ViewSettings(), 12266, None, page, {}, "linux")
+    assert entry.page == page
 
 
 @pytest.mark.parametrize(
@@ -598,7 +646,14 @@ def serving_health(digest: str, yields: bool = False) -> Iterator[int]:
     probe.close()
 
     async def health(request: Request) -> Response:
-        return JSONResponse({"service": "ecosemantic-view", "workspace": digest, "yields": yields})
+        return JSONResponse(
+            {
+                "service": SERVICE,
+                "workspace": digest,
+                "yields": yields,
+                "bridge": {"state": "off"},
+            }
+        )
 
     async def yielded(request: Request) -> Response:
         if yields:
@@ -627,6 +682,44 @@ def test_a_port_held_by_another_application_is_invalid(tmp_path: Path) -> None:
     with pytest.raises(Invalid, match="another application"):
         bind_or_yield(settings, tmp_path)
     held.close()
+
+
+@contextlib.contextmanager
+def serving_answer(status: int, body: bytes) -> Iterator[int]:
+    """A holder of a port that answers every request with this status and body."""
+
+    async def answer(request: Request) -> Response:
+        return Response(body, status_code=status, media_type="application/json")
+
+    probe = bind("127.0.0.1", 0)
+    port = probe.getsockname()[1]
+    probe.close()
+    app = Starlette(routes=[Route("/health", answer)])
+    server = uvicorn.Server(
+        uvicorn.Config(app, host="127.0.0.1", port=port, log_config=None, access_log=False)
+    )
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        time.sleep(0.05)
+    try:
+        yield port
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5)
+
+
+@pytest.mark.parametrize(
+    ("status", "body"), [(200, b'{"service": "other"}'), (404, b'{"detail": "Not Found"}')]
+)
+def test_a_port_another_service_answers_on_is_refused_with_the_port_remedy(
+    tmp_path: Path, status: int, body: bytes
+) -> None:
+    with serving_answer(status, body) as port:
+        settings = ViewSettings(host="127.0.0.1", port=port)
+        with pytest.raises(Unavailable, match=f"port {port} is held by another application") as e:
+            bind_or_yield(settings, tmp_path)
+    assert e.value.hint == "pass --view-port"
 
 
 def test_a_port_held_for_another_workspace_is_invalid(tmp_path: Path) -> None:
@@ -768,12 +861,12 @@ async def test_a_relay_that_returns_at_once_leaves_the_listener_answering_locall
 
 
 def test_health_names_a_bridged_server_s_state_and_off_otherwise(context: ServerContext) -> None:
-    bridged = {
-        "state": "connected",
-        "handle": HANDLE,
-        "page": f"https://{HANDLE}.bridge.test",
-        "connector": f"{ISSUER}/mcp",
-    }
+    bridged = BridgeHealth(
+        state="connected",
+        handle=HANDLE,
+        page=f"https://{HANDLE}.bridge.test",
+        connector=f"{ISSUER}/mcp",
+    )
     off = build_view(
         context,
         build_server(context),
@@ -781,7 +874,9 @@ def test_health_names_a_bridged_server_s_state_and_off_otherwise(context: Server
         routes=[health_route("abcd1234abcd1234", yields=False)],
     )
     with TestClient(off) as client:
-        assert client.get("/health").json()["bridge"] == {"state": "off"}
+        assert client.get("/health").json()["bridge"] == BridgeHealth(state="off").model_dump(
+            mode="json"
+        )
     named = build_view(
         context,
         build_server(context),
@@ -789,7 +884,49 @@ def test_health_names_a_bridged_server_s_state_and_off_otherwise(context: Server
         routes=[health_route("abcd1234abcd1234", yields=False, bridge=lambda: bridged)],
     )
     with TestClient(named) as client:
-        assert client.get("/health").json()["bridge"] == bridged
+        assert client.get("/health").json()["bridge"] == bridged.model_dump(mode="json")
+
+
+def test_the_health_is_the_declared_document(context: ServerContext) -> None:
+    app = build_view(
+        context,
+        build_server(context),
+        static=NOWHERE,
+        routes=[health_route("abcd1234abcd1234", yields=True)],
+    )
+    with TestClient(app) as client:
+        answered = Health.model_validate(client.get("/health").json())
+    assert answered == Health(
+        service=SERVICE,
+        workspace="abcd1234abcd1234",
+        yields=True,
+        bridge=BridgeHealth(state="off"),
+    )
+
+
+def test_the_health_names_the_accounts_screen(context: ServerContext) -> None:
+    named = build_view(
+        context,
+        build_server(context),
+        static=NOWHERE,
+        routes=[health_route("abcd1234abcd1234", yields=False, accounts=SCREEN)],
+    )
+    with TestClient(named) as client:
+        answered = client.get("/health").json()
+    assert answered["accounts"] == SCREEN
+    assert Health.model_validate(answered).accounts == SCREEN
+    unnamed = build_view(
+        context,
+        build_server(context),
+        static=NOWHERE,
+        routes=[health_route("abcd1234abcd1234", yields=False)],
+    )
+    with TestClient(unnamed) as client:
+        bare = client.get("/health").json()
+    assert bare["accounts"] is None
+    assert Health.model_validate(bare).accounts is None
+    older = {key: value for key, value in bare.items() if key != "accounts"}
+    assert Health.model_validate(older).accounts is None
 
 
 def test_stop_without_the_nonce_is_refused_and_the_server_serves_on(
@@ -946,7 +1083,8 @@ def test_health_names_the_workspace_and_needs_no_token(context: ServerContext) -
             "service": "ecosemantic-view",
             "workspace": "abcd1234abcd1234",
             "yields": True,
-            "bridge": {"state": "off"},
+            "bridge": {"state": "off", "handle": None, "page": None, "connector": None},
+            "accounts": None,
         }
         # the gate still covers the API
         refused = client.get("/api/product-systems")

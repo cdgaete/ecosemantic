@@ -13,8 +13,10 @@ from pydantic import JsonValue, ValidationError
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
+from starlette.types import Scope
 
 from ecosemantic.errors import Invalid
+from ecosemantic.mcp.accounts import Reach
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.envelopes import Answer, Listing, as_uuid, envelope_of
 from ecosemantic.mcp.recording import STARTED, VIEW
@@ -32,6 +34,17 @@ BRIDGE_EXTENSION = "ecosemantic.bridge"
 GATE_PARAMETER = "token"
 IMPACT_TOOL = "calculate_impact"
 STARTED_PARAMETER = "started"
+LOOPBACK_PEERS = frozenset({"127.0.0.1", "::1"})
+
+
+def reach(scope: Scope) -> Reach:
+    """How a request reached the engine: through the bridge when its scope carries the bridge's
+    extension, on this computer from a loopback peer, and across the network otherwise."""
+    if BRIDGE_EXTENSION in (scope.get("extensions") or {}):
+        return "bridge"
+    client = scope.get("client")
+    peer = "" if client is None else client[0]
+    return "here" if peer in LOOPBACK_PEERS else "network"
 
 
 async def structured(

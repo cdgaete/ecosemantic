@@ -11,6 +11,7 @@ from ecosemantic.tray.menu import (
     menu_for,
     title,
 )
+from tests.tray.fakes import SCREEN
 
 PAGE = "https://ana.bridge.example"
 CONNECTOR = "https://bridge.example/mcp"
@@ -25,10 +26,11 @@ def state(
     handle: str | None = None,
     addresses: bool = True,
     pending: bool = False,
+    accounts: str | None = SCREEN,
 ) -> EngineState:
     """An engine state of this kind and bridge, with the person's setting, whether this folder holds
-    a credential, whether a bridge command runs, and, when the test wants them, the addresses a
-    bridged health carries."""
+    a credential, whether a bridge command runs, the addresses a bridged health carries when the
+    test wants them, and the accounts screen its health names."""
     return EngineState(
         kind=kind,
         bridge=bridge,
@@ -38,6 +40,7 @@ def state(
         handle=handle,
         page=PAGE if addresses else None,
         connector=CONNECTOR if addresses else None,
+        accounts=accounts,
     )
 
 
@@ -48,6 +51,7 @@ CASES = {
             MenuItem("Starting…"),
             MenuItem("Open my page", "open-page", enabled=False),
             MenuItem("Copy the connector address", "copy-connector", enabled=False),
+            MenuItem("Database accounts…", "accounts", enabled=False),
             MenuItem("Disconnect from the bridge", "disconnect"),
             MenuItem("Sign out", "sign-out"),
             MenuItem("Start at login", "start-at-login", checked=False),
@@ -61,6 +65,7 @@ CASES = {
             MenuItem("Starting…"),
             MenuItem("Open my page", "open-page", enabled=False),
             MenuItem("Copy the connector address", "copy-connector", enabled=False),
+            MenuItem("Database accounts…", "accounts", enabled=False),
             MenuItem("Connect to the bridge", "connect"),
             MenuItem("Sign in…", "sign-in"),
             MenuItem("Start at login", "start-at-login", checked=False),
@@ -74,6 +79,7 @@ CASES = {
             MenuItem("Connected as ana"),
             MenuItem("Open my page", "open-page"),
             MenuItem("Copy the connector address", "copy-connector"),
+            MenuItem("Database accounts…", "accounts"),
             MenuItem("Disconnect from the bridge", "disconnect"),
             MenuItem("Sign out", "sign-out"),
             MenuItem("Start at login", "start-at-login", checked=False),
@@ -87,6 +93,7 @@ CASES = {
             MenuItem("Offline — reconnecting"),
             MenuItem("Open my page", "open-page", enabled=False),
             MenuItem("Copy the connector address", "copy-connector"),
+            MenuItem("Database accounts…", "accounts"),
             MenuItem("Disconnect from the bridge", "disconnect"),
             MenuItem("Sign out", "sign-out"),
             MenuItem("Start at login", "start-at-login", checked=False),
@@ -100,6 +107,7 @@ CASES = {
             MenuItem("Offline — reconnecting"),
             MenuItem("Open my page", "open-page", enabled=False),
             MenuItem("Copy the connector address", "copy-connector"),
+            MenuItem("Database accounts…", "accounts"),
             MenuItem("Disconnect from the bridge", "disconnect"),
             MenuItem("Sign out", "sign-out"),
             MenuItem("Start at login", "start-at-login", checked=False),
@@ -113,6 +121,7 @@ CASES = {
             MenuItem("Signed out"),
             MenuItem("Open my page", "open-page", enabled=False),
             MenuItem("Copy the connector address", "copy-connector"),
+            MenuItem("Database accounts…", "accounts"),
             MenuItem("Disconnect from the bridge", "disconnect"),
             MenuItem("Sign in…", "sign-in"),
             MenuItem("Start at login", "start-at-login", checked=False),
@@ -126,6 +135,7 @@ CASES = {
             MenuItem("Signed out"),
             MenuItem("Open my page", "open-page", enabled=False),
             MenuItem("Copy the connector address", "copy-connector"),
+            MenuItem("Database accounts…", "accounts"),
             MenuItem("Disconnect from the bridge", "disconnect"),
             MenuItem("Sign in…", "sign-in"),
             MenuItem("Start at login", "start-at-login", checked=False),
@@ -139,6 +149,7 @@ CASES = {
             MenuItem("The bridge is off"),
             MenuItem("Open my page", "open-page", enabled=False),
             MenuItem("Copy the connector address", "copy-connector", enabled=False),
+            MenuItem("Database accounts…", "accounts"),
             MenuItem("Connect to the bridge", "connect"),
             MenuItem("Sign in…", "sign-in"),
             MenuItem("Start at login", "start-at-login", checked=False),
@@ -152,6 +163,7 @@ CASES = {
             MenuItem("The bridge is off"),
             MenuItem("Open my page", "open-page", enabled=False),
             MenuItem("Copy the connector address", "copy-connector", enabled=False),
+            MenuItem("Database accounts…", "accounts"),
             MenuItem("Connect to the bridge", "connect"),
             MenuItem("Sign out", "sign-out"),
             MenuItem("Start at login", "start-at-login", checked=False),
@@ -165,6 +177,7 @@ CASES = {
             MenuItem("Stopped"),
             MenuItem("Open my page", "open-page", enabled=False),
             MenuItem("Copy the connector address", "copy-connector", enabled=False),
+            MenuItem("Database accounts…", "accounts", enabled=False),
             MenuItem("Connect to the bridge", "connect"),
             MenuItem("Sign in…", "sign-in"),
             MenuItem("Start at login", "start-at-login", checked=False),
@@ -179,6 +192,7 @@ CASES = {
             MenuItem("Stopped"),
             MenuItem("Open my page", "open-page", enabled=False),
             MenuItem("Copy the connector address", "copy-connector", enabled=False),
+            MenuItem("Database accounts…", "accounts", enabled=False),
             MenuItem("Disconnect from the bridge", "disconnect"),
             MenuItem("Sign out", "sign-out"),
             MenuItem("Start at login", "start-at-login", checked=False),
@@ -193,6 +207,7 @@ CASES = {
             MenuItem("Failed — see the logs"),
             MenuItem("Open my page", "open-page", enabled=False),
             MenuItem("Copy the connector address", "copy-connector", enabled=False),
+            MenuItem("Database accounts…", "accounts", enabled=False),
             MenuItem("Connect to the bridge", "connect"),
             MenuItem("Sign in…", "sign-in"),
             MenuItem("Start at login", "start-at-login", checked=False),
@@ -207,6 +222,7 @@ CASES = {
             MenuItem("The bridge is off"),
             MenuItem("Open my page", "open-page", enabled=False),
             MenuItem("Copy the connector address", "copy-connector", enabled=False),
+            MenuItem("Database accounts…", "accounts"),
             MenuItem("Start at login", "start-at-login", checked=False),
             MenuItem("Open the logs", "open-logs"),
             MenuItem("Quit", "quit"),
@@ -218,6 +234,7 @@ CASES = {
             MenuItem("Stopped"),
             MenuItem("Open my page", "open-page", enabled=False),
             MenuItem("Copy the connector address", "copy-connector", enabled=False),
+            MenuItem("Database accounts…", "accounts", enabled=False),
             MenuItem("Start at login", "start-at-login", checked=False),
             MenuItem("Open the logs", "open-logs"),
             MenuItem("Quit", "quit"),
@@ -229,6 +246,7 @@ CASES = {
             MenuItem("Failed — see the logs"),
             MenuItem("Open my page", "open-page", enabled=False),
             MenuItem("Copy the connector address", "copy-connector", enabled=False),
+            MenuItem("Database accounts…", "accounts", enabled=False),
             MenuItem("Disconnect from the bridge", "disconnect"),
             MenuItem("Sign out", "sign-out"),
             MenuItem("Start at login", "start-at-login", checked=False),
@@ -278,12 +296,41 @@ def test_a_bridge_that_is_off_offers_what_the_credential_store_holds(
     ] == [offered]
 
 
+@pytest.mark.parametrize(
+    ("kind", "bridge"),
+    [
+        ("running", "connected"),
+        ("running", "off"),
+        ("running", "signed-out"),
+        ("starting", "connecting"),
+        ("stopped", "off"),
+        ("failed", "off"),
+    ],
+)
+def test_database_accounts_follows_the_connector_and_needs_a_running_engine(
+    kind: str, bridge: str
+) -> None:
+    given = state(kind, bridge)
+    items = menu_for(given, StartAtLogin(enabled=False))
+    connector = next(number for number, item in enumerate(items) if item.action == "copy-connector")
+    assert items[connector + 1] == MenuItem(
+        "Database accounts…", "accounts", enabled=kind == "running"
+    )
+
+
+def test_a_health_without_accounts_disables_the_item() -> None:
+    given = state("running", "off", accounts=None)
+    items = menu_for(given, StartAtLogin(enabled=False))
+    connector = next(number for number, item in enumerate(items) if item.action == "copy-connector")
+    assert items[connector + 1] == MenuItem("Database accounts…", "accounts", enabled=False)
+
+
 def test_start_at_login_shows_windows_own_switch() -> None:
     given, _ = CASES["connected"]
     plain = menu_for(given, StartAtLogin(enabled=True))
-    assert plain[5] == MenuItem("Start at login", "start-at-login", checked=True)
+    assert plain[6] == MenuItem("Start at login", "start-at-login", checked=True)
     turned_off = menu_for(given, StartAtLogin(enabled=True, turned_off_by_windows=True))
-    assert turned_off[5] == MenuItem(
+    assert turned_off[6] == MenuItem(
         "Start at login (turned off in Windows settings)",
         "start-at-login",
         checked=False,

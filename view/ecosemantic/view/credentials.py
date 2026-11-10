@@ -11,23 +11,23 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from ecosemantic.errors import Invalid, Unauthorised
+from ecosemantic.mcp.accounts import account_advice, entry_for
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.ports.types import Account, CredentialKind
-from ecosemantic.view.api import json_object
+from ecosemantic.view.api import json_object, reach
 from ecosemantic.view.handling import answering
 
-LOOPBACK_PEERS = frozenset({"127.0.0.1", "::1"})
-HINT = "run ecosemantic setup, or reach the page through an SSH tunnel"
 KIND = TypeAdapter(CredentialKind)
 KINDS: tuple[str, ...] = get_args(CredentialKind)
 
 
-def _peer(request: Request) -> None:
-    """Unauthorised unless the request comes from this machine."""
-    client = request.client
-    peer = "" if client is None else client.host
-    if peer not in LOOPBACK_PEERS:
-        raise Unauthorised("a credential is entered only from this machine", hint=HINT)
+def _peer(request: Request, context: ServerContext) -> None:
+    """Unauthorised unless the request reached the engine on its own computer, saying how the page
+    reached the engine and what enters the account there."""
+    reached = reach(request.scope)
+    if reached != "here":
+        advice = account_advice(context.accounts, reached)
+        raise Unauthorised(advice.why, hint=advice.steps)
 
 
 def _kind(name: str) -> CredentialKind:
@@ -41,16 +41,22 @@ def _kind(name: str) -> CredentialKind:
 
 
 def routes(context: ServerContext) -> list[Route]:
-    """The kinds held, one kind entered and one cleared, from this machine only."""
+    """The kinds held, how a request reached the engine, one kind entered and one cleared, from
+    this machine only."""
 
     @answering
     async def held(request: Request) -> Response:
-        _peer(request)
+        _peer(request, context)
         return JSONResponse({"held": sorted(context.credentials)})
 
     @answering
+    async def entry(request: Request) -> Response:
+        answer = entry_for(context.accounts, reach(request.scope))
+        return JSONResponse(answer.model_dump(mode="json"))
+
+    @answering
     async def entered(request: Request) -> Response:
-        _peer(request)
+        _peer(request, context)
         kind = _kind(request.path_params["kind"])
         body = await json_object(request)
         try:
@@ -70,12 +76,13 @@ def routes(context: ServerContext) -> list[Route]:
 
     @answering
     async def cleared(request: Request) -> Response:
-        _peer(request)
+        _peer(request, context)
         context.credentials.pop(_kind(request.path_params["kind"]), None)
         return Response(status_code=204)
 
     return [
         Route("/api/credentials", held),
+        Route("/api/credentials/entry", entry),
         Route("/api/credentials/{kind}", entered, methods=["PUT"]),
         Route("/api/credentials/{kind}", cleared, methods=["DELETE"]),
     ]

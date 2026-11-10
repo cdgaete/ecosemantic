@@ -7,14 +7,12 @@ import asyncio
 import dataclasses
 import errno
 import ipaddress
-import json
 import os
 import secrets
 import socket
 import subprocess
 import sys
 import time
-import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,9 +29,11 @@ from ecosemantic.bridge.relay import Relay
 from ecosemantic.bridge.start import BridgeStart, engine_version
 from ecosemantic.errors import Invalid, Unauthorised, Unavailable
 from ecosemantic.events import EventBus
-from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.accounts import ACCOUNTS_PATH
+from ecosemantic.mcp.context import AccountStart, ServerContext, Start
 from ecosemantic.mcp.server import build_server
 from ecosemantic.settings import (
+    LOOPBACK,
     TRANSPORTS,
     Transport,
     ViewSettings,
@@ -44,14 +44,18 @@ from ecosemantic.settings import (
     workspace_digest,
 )
 from ecosemantic.settings.handover import (
+    SERVICE,
     STOP_NONCE_FILE,
     UNSPECIFIED,
     YIELD_NONCE_FILE,
+    BridgeHealth,
+    Health,
     ask_to_stop,
     ask_to_yield,
     nonce_path,
     proven,
     reachable,
+    read_health,
 )
 from ecosemantic.view.api import BRIDGE_EXTENSION, GATE_PARAMETER
 from ecosemantic.view.app import build_view
@@ -60,13 +64,11 @@ from ecosemantic.view.handling import answering
 SHUTDOWN_SECONDS = 5
 OPEN_WAIT_SECONDS = 4.0
 YIELD_SECONDS = 5
-SERVICE = "ecosemantic-view"
 MCP_PATH = "/mcp"
 
 __all__ = [
     "MCP_PATH",
     "OPEN_WAIT_SECONDS",
-    "SERVICE",
     "SHUTDOWN_SECONDS",
     "STOP_NONCE_FILE",
     "TRANSPORTS",
@@ -76,6 +78,7 @@ __all__ = [
     "Listener",
     "Transport",
     "ViewSettings",
+    "account_start",
     "announce",
     "announced_host",
     "ask_to_stop",
@@ -99,17 +102,6 @@ __all__ = [
 ]
 
 
-def _holder(host: str, port: int) -> dict[str, object] | None:
-    try:
-        with urllib.request.urlopen(
-            f"http://{reachable(host)}:{port}/health", timeout=2
-        ) as answered:
-            body = json.loads(answered.read())
-    except Exception:
-        return None
-    return body if body.get("service") == SERVICE else None
-
-
 def bind_or_yield(settings: ViewSettings, systems_dir: Path) -> socket.socket:
     """The listening socket, taking the derived port from a holder of this same workspace."""
     try:
@@ -117,12 +109,12 @@ def bind_or_yield(settings: ViewSettings, systems_dir: Path) -> socket.socket:
     except OSError as error:
         if error.errno != errno.EADDRINUSE:
             raise
-    holding = _holder(settings.host, settings.port)
+    holding = read_health(settings.host, settings.port, hint="pass --view-port")
     if holding is None:
         raise Invalid(f"port {settings.port} is held by another application; pass --view-port")
-    if holding.get("workspace") != workspace_digest(systems_dir):
+    if holding.workspace != workspace_digest(systems_dir):
         raise Invalid(f"port {settings.port} is held for another workspace; pass --view-port")
-    if holding.get("yields") is not True:
+    if not holding.yields:
         raise Invalid(
             f"port {settings.port} is held by a server of this workspace that does not yield it, "
             "as one serving HTTP does; stop that server or pass --view-port"
@@ -140,20 +132,24 @@ def bind_or_yield(settings: ViewSettings, systems_dir: Path) -> socket.socket:
 
 
 def health_route(
-    workspace: str, yields: bool, bridge: Callable[[], Mapping[str, str]] | None = None
+    workspace: str,
+    yields: bool,
+    bridge: Callable[[], BridgeHealth] | None = None,
+    accounts: str | None = None,
 ) -> Route:
     """The route a starting server and a tray read: which directory the holder serves, whether it
-    yields the port, and, for a bridged server, the tunnel's state and the addresses its owner
-    needs."""
+    yields the port, for a bridged server the tunnel's state and the addresses its owner needs, and
+    the accounts screen's address where the engine serves one."""
 
     async def health(request: Request) -> Response:
-        answered: dict[str, object] = {
-            "service": SERVICE,
-            "workspace": workspace,
-            "yields": yields,
-            "bridge": {"state": "off"} if bridge is None else dict(bridge()),
-        }
-        return JSONResponse(answered)
+        answered = Health(
+            service=SERVICE,
+            workspace=workspace,
+            yields=yields,
+            bridge=BridgeHealth(state="off") if bridge is None else bridge(),
+            accounts=accounts,
+        )
+        return JSONResponse(answered.model_dump(mode="json"))
 
     return Route("/health", health)
 
@@ -252,10 +248,7 @@ def announce(
     if settings.url is not None:
         base = settings.url.rstrip("/")
     else:
-        host = announced_host(settings, environ)
-        if ":" in host:
-            host = f"[{host}]"
-        base = f"http://{host}:{port}"
+        base = f"http://{_url_host(announced_host(settings, environ))}:{port}"
     return f"{base}?{GATE_PARAMETER}={token}" if token else base
 
 
@@ -270,6 +263,40 @@ class Listener:
     app: ASGIApp
 
 
+def account_start(
+    settings: ViewSettings,
+    port: int,
+    token: str | None,
+    bridged_url: str | None,
+    environ: Mapping[str, str],
+    platform: str,
+) -> AccountStart:
+    """How this engine was started, the accounts screen its listener serves at the port bound, and
+    the bridge page's address where it is bridged. An engine carrying a token names no screen,
+    since the page's calls need the token no advice carries, and neither does one bound to an
+    address that is neither loopback nor every address, which a browser on its computer reaches
+    from no loopback peer."""
+    start: Start
+    if settings.tray:
+        start = "tray"
+    elif browser_reachable(environ, platform):
+        start = "terminal"
+    else:
+        start = "headless"
+    looped = settings.host in LOOPBACK or settings.host in UNSPECIFIED
+    screen = (
+        f"http://{_url_host(reachable(settings.host))}:{port}{ACCOUNTS_PATH}"
+        if token is None and looped
+        else None
+    )
+    return AccountStart(start=start, screen=screen, page=bridged_url)
+
+
+def _url_host(host: str) -> str:
+    """A host as a URL names it: an IPv6 address in brackets."""
+    return f"[{host}]" if ":" in host else host
+
+
 def listener_for(
     context: ServerContext,
     settings: ViewSettings,
@@ -278,7 +305,7 @@ def listener_for(
     meter_provider: MeterProvider | None = None,
     bridged_url: str | None = None,
     bridged: Callable[[str, str], bool] | None = None,
-    bridge: Callable[[], Mapping[str, str]] | None = None,
+    bridge: Callable[[], BridgeHealth] | None = None,
     on_stop: Callable[[], None] | None = None,
 ) -> Listener:
     """Bind, mint the token, announce, and build the server, counting on the meter provider
@@ -289,10 +316,18 @@ def listener_for(
     sock = bind_or_yield(settings, systems_dir)
     token = token_for(systems_dir, settings.token)
     url = announce(settings, sock.getsockname()[1], token, os.environ, bridged=bridged_url)
-    bound = dataclasses.replace(context, view_url=url)
+    start = account_start(
+        settings, sock.getsockname()[1], token, bridged_url, os.environ, sys.platform
+    )
+    bound = dataclasses.replace(context, view_url=url, accounts=start)
     server = build_server(bound, meter_provider=meter_provider)
     routes: list[BaseRoute] = [
-        health_route(workspace_digest(systems_dir), yields=on_yield is not None, bridge=bridge)
+        health_route(
+            workspace_digest(systems_dir),
+            yields=on_yield is not None,
+            bridge=bridge,
+            accounts=start.screen,
+        )
     ]
     if on_yield is not None:
         routes.append(yield_route(systems_dir, on_yield))
@@ -402,17 +437,17 @@ async def run(
     def on_stop() -> None:
         web.should_exit = True
 
-    bridge_report: Callable[[], Mapping[str, str]] | None = None
+    bridge_report: Callable[[], BridgeHealth] | None = None
     if bridge is not None:
         start = bridge
 
-        def bridge_report() -> Mapping[str, str]:
-            return {
-                "state": relay.state(),
-                "handle": relay.handle(),
-                "page": start.page_url,
-                "connector": start.config.connector_url,
-            }
+        def bridge_report() -> BridgeHealth:
+            return BridgeHealth(
+                state=relay.state(),
+                handle=relay.handle(),
+                page=start.page_url,
+                connector=start.config.connector_url,
+            )
 
     listener = listener_for(
         context,

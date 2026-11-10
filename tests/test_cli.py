@@ -5,6 +5,8 @@ import csv
 import io
 import json
 import os
+import re
+import shlex
 import subprocess
 import sys
 import uuid
@@ -24,10 +26,12 @@ from ecosemantic.cli.clients import SERVER
 from ecosemantic.compute.edits import add_scenario
 from ecosemantic.databases.bafu import profile as bafu_profile
 from ecosemantic.databases.bafu import setup as bafu_setup
+from ecosemantic.databases.ecoinvent.profile import profiled
 from ecosemantic.databases.uslci import profile as uslci_profile
 from ecosemantic.databases.uslci import setup as uslci_setup
+from ecosemantic.mcp.accounts import account_advice
 from ecosemantic.mcp.calculation import calculate_inventory, contribution_analysis
-from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.context import AccountStart, ServerContext, Start
 from ecosemantic.model.canonical import content_hash
 from ecosemantic.model.entities import (
     Case,
@@ -53,6 +57,7 @@ from tests.databases.uslci_fixture import EXPECTED as USLCI_EXPECTED
 from tests.dict_resolver import DictResolver
 from tests.engine_fixture import served_build
 from tests.fixture_data import CODES, FIXTURE_DB, GWP
+from tests.mcp.test_accounts import SCREEN, source
 from tests.openlca_fixture import METHOD, NAME, build_package
 from tests.openlca_fixture import PROCESSES as OPENLCA_PROCESSES
 from tests.package.conftest import AGENT
@@ -397,6 +402,23 @@ def test_setup_summaries_share_their_keys(
     assert openlca["set_apart"] == [] and uslci["set_apart"] == []
 
 
+def test_every_command_the_advice_names_parses() -> None:
+    version = profiled()[0][0]
+    starts: tuple[Start, ...] = ("terminal", "headless")
+    for start in starts:
+        for needed in (source("bafu", "nexus"), source("ecoinvent", "ecoinvent")):
+            advice = account_advice(AccountStart(start=start, screen=SCREEN), needed=[needed])
+            named = [
+                span
+                for span in re.findall(r"`([^`]+)`", advice.steps)
+                if span.startswith("ecosemantic setup")
+            ]
+            assert named
+            for span in named:
+                argv = shlex.split(span.replace("<version>", version))[1:]
+                assert _parser().parse_args(argv).command == "setup"
+
+
 def test_setup_uslci_installs_the_newest_profile_and_prints_one_document(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -704,6 +726,29 @@ def test_serve_no_open_turns_the_browser_off(
     )
     assert code == 0
     assert calls == [ViewSettings(port=derived_port(tmp_path), open=False)]
+
+
+def test_serve_takes_tray(
+    bundle_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ecosemantic import cli as cli_module
+    from ecosemantic.serve import ViewSettings, derived_port
+
+    calls: list[object] = []
+
+    async def fake_run(
+        context: object, settings: object, systems_dir: object, meter_provider: object = None
+    ) -> None:
+        calls.append(settings)
+
+    monkeypatch.setattr(cli_module, "run", fake_run)
+    named = ["serve", "--data-dir", str(bundle_dir), "--systems-dir", str(tmp_path)]
+    assert main([*named, "--tray"]) == 0
+    assert main(named) == 0
+    assert calls == [
+        ViewSettings(port=derived_port(tmp_path), tray=True),
+        ViewSettings(port=derived_port(tmp_path)),
+    ]
 
 
 def test_serve_runs_the_stdio_server_off_the_network(

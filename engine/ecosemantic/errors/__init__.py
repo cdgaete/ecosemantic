@@ -25,8 +25,10 @@ class Invalid(EcoSemanticError):
 
 
 def error_line(location: tuple[int | str, ...], message: str) -> str:
-    """One validation error as `field: message`, the field its location joined by dots."""
-    return f"{'.'.join(str(part) for part in location)}: {message}"
+    """One validation error as `field: message`, the field its location joined by dots; an error at
+    the input itself is its message alone."""
+    field = ".".join(str(part) for part in location)
+    return f"{field}: {message}" if field else message
 
 
 def field_error(error: ValidationError) -> str:

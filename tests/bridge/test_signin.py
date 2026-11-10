@@ -24,6 +24,7 @@ from cryptography.hazmat.primitives import serialization
 
 from ecosemantic.bridge.credentials import Credential, store_for
 from ecosemantic.bridge.signin import (
+    TIMEOUT,
     SignedOut,
     browser_sign_in,
     client,
@@ -44,6 +45,7 @@ from tests.bridge.fake_logto import (
     BROWSER_CLIENT_ID,
     CODE,
     DEVICE_CLIENT_ID,
+    DEVICE_CODE,
     DEVICE_PATH,
     EDDSA_KEY,
     HANDLE,
@@ -391,6 +393,115 @@ async def test_a_device_sign_in_that_will_not_be_granted_is_unauthorised() -> No
             with pytest.raises(Unauthorised) as refused:
                 await device_sign_in(http, config, oidc, Shown(), sleep=slept)
         assert state in str(refused.value)
+
+
+async def test_a_device_sign_in_polls_on_past_a_failed_poll() -> None:
+    logto = FakeLogto()
+    logto.device_states = deque(["authorization_pending", "granted"])
+    sleeps: list[float] = []
+    failed: list[bool] = []
+
+    async def slept(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    async def answer(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == TOKEN_PATH and not failed:
+            failed.append(True)
+            return httpx2.Response(503)
+        return await logto.answer(request)
+
+    async with httpx2.AsyncClient(transport=httpx2.MockTransport(answer)) as http:
+        config = await discover(http, BRIDGE)
+        oidc = await provider(http, config.issuer)
+        tokens = await device_sign_in(http, config, oidc, Shown(), sleep=slept)
+    assert failed == [True]
+    assert sleeps == [5, 5, 5]
+    assert tokens.account == ACCOUNT
+    assert tokens.refresh_token in logto.live_refresh
+
+
+async def test_a_device_sign_in_gives_up_when_its_code_expires() -> None:
+    logto = FakeLogto()
+    logto.overrides[DEVICE_PATH] = {
+        "device_code": DEVICE_CODE,
+        "user_code": USER_CODE,
+        "verification_uri": VERIFICATION_URI,
+        "verification_uri_complete": f"{VERIFICATION_URI}?user_code={USER_CODE}",
+        "expires_in": 100,
+    }
+    logto.failures = {TOKEN_PATH}
+    slept_for = [0.0]
+    sleeps: list[float] = []
+
+    async def slept(seconds: float) -> None:
+        sleeps.append(seconds)
+        slept_for[0] += seconds
+
+    def clock() -> float:
+        """A clock each poll carries 30 seconds further than the sleeps, as a request may."""
+        return slept_for[0] + TIMEOUT * len(logto.forms.get(TOKEN_PATH, []))
+
+    async with httpx2.AsyncClient(transport=logto.transport) as http:
+        config = await discover(http, BRIDGE)
+        oidc = await provider(http, config.issuer)
+        with pytest.raises(Unavailable) as refused:
+            await device_sign_in(http, config, oidc, Shown(), sleep=slept, clock=clock)
+    assert sleeps == [5, 5, 5]
+    assert len(logto.forms[TOKEN_PATH]) == 3
+    assert "100" in str(refused.value)
+    assert "503" in str(refused.value)
+
+
+async def test_a_device_authorization_answer_without_an_expiry_is_refused() -> None:
+    logto = FakeLogto()
+    logto.overrides[DEVICE_PATH] = {
+        "device_code": DEVICE_CODE,
+        "user_code": USER_CODE,
+        "verification_uri": VERIFICATION_URI,
+        "verification_uri_complete": f"{VERIFICATION_URI}?user_code={USER_CODE}",
+    }
+    shown = Shown()
+
+    async def slept(seconds: float) -> None:
+        return None
+
+    async with httpx2.AsyncClient(transport=logto.transport) as http:
+        config = await discover(http, BRIDGE)
+        oidc = await provider(http, config.issuer)
+        with pytest.raises(Unavailable) as refused:
+            await device_sign_in(http, config, oidc, shown, sleep=slept)
+    assert "expires_in" in str(refused.value)
+    assert shown.codes == []
+    assert logto.forms.get(TOKEN_PATH) is None
+
+
+async def test_a_transport_error_with_no_message_is_named_by_its_class() -> None:
+    logto = FakeLogto()
+    logto.overrides[DEVICE_PATH] = {
+        "device_code": DEVICE_CODE,
+        "user_code": USER_CODE,
+        "verification_uri": VERIFICATION_URI,
+        "verification_uri_complete": f"{VERIFICATION_URI}?user_code={USER_CODE}",
+        "expires_in": 10,
+    }
+    slept_for = [0.0]
+
+    async def slept(seconds: float) -> None:
+        slept_for[0] += seconds
+
+    async def answer(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == TOKEN_PATH:
+            raise httpx2.ReadTimeout("")
+        return await logto.answer(request)
+
+    async with httpx2.AsyncClient(transport=httpx2.MockTransport(answer)) as http:
+        config = await discover(http, BRIDGE)
+        oidc = await provider(http, config.issuer)
+        with pytest.raises(Unavailable) as refused:
+            await device_sign_in(
+                http, config, oidc, Shown(), sleep=slept, clock=lambda: slept_for[0]
+            )
+    assert "ReadTimeout" in str(refused.value)
 
 
 async def test_a_device_sign_in_registers_the_engine_and_stores_it(tmp_path: Path) -> None:

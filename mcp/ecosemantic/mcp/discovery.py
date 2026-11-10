@@ -33,6 +33,11 @@ VocabularyKind = Literal[
     "units", "locations", "compartments", "impact_methods", "impact_categories"
 ]
 
+NO_DATABASE = (
+    "No background database is installed; list_sources names the sources one installs from and "
+    "what each needs, and install_database installs one."
+)
+
 
 class Term(BaseModel):
     """One entry of a database's vocabulary."""
@@ -42,7 +47,10 @@ class Term(BaseModel):
 
 
 async def list_databases(context: ServerContext) -> Answer[list[Database]]:
-    return Answer[list[Database]](value=await context.inventory.list_databases())
+    """The background databases this server serves, with the hint that leads an engine serving
+    none to the sources it installs one from."""
+    databases = await context.inventory.list_databases()
+    return Answer[list[Database]](value=databases, hint=None if databases else NO_DATABASE)
 
 
 async def search_processes(

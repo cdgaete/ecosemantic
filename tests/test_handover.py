@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import http.server
+import json
 import os
 import socket
 import threading
@@ -10,19 +11,35 @@ from pathlib import Path
 
 import pytest
 
-from ecosemantic.settings.handover import STOP_NONCE_FILE, asked_with_nonce
+from ecosemantic.errors import Unavailable
+from ecosemantic.settings.handover import (
+    LOOPBACK_ADDRESS,
+    SERVICE,
+    STOP_NONCE_FILE,
+    BridgeHealth,
+    Health,
+    asked_with_nonce,
+    read_health,
+)
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    """A handover route answering with the body its server names, recording what the systems
-    directory held and the mode of each file in it while it answered."""
+    """A route answering with the body its server names; a POST records what the systems directory
+    held and the mode of each file in it while it answered."""
+
+    def do_GET(self) -> None:
+        self._answered()
 
     def do_POST(self) -> None:
         self.rfile.read(int(self.headers["Content-Length"]))
         server = self.server
         server.seen.append(sorted(path.name for path in server.folder.iterdir()))
         server.modes.extend(path.stat().st_mode & 0o777 for path in server.folder.iterdir())
-        self.send_response(200)
+        self._answered()
+
+    def _answered(self) -> None:
+        server = self.server
+        self.send_response(server.status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(server.body)))
         self.end_headers()
@@ -36,15 +53,17 @@ class Server(http.server.HTTPServer):
     """A handover route on a port of its own, answering with this body."""
 
     body = b""
+    status = 200
     folder = Path()
     seen: list[list[str]] = []
     modes: list[int] = []
 
 
 @contextmanager
-def served(folder: Path, body: bytes) -> Iterator[str]:
-    """The URL of a handover route on this machine answering with this body."""
+def served(folder: Path, body: bytes, status: int = 200) -> Iterator[int]:
+    """The port of a route on this machine answering with this body and status."""
     Server.body = body
+    Server.status = status
     Server.folder = folder
     Server.seen = []
     Server.modes = []
@@ -52,7 +71,7 @@ def served(folder: Path, body: bytes) -> Iterator[str]:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        yield f"http://127.0.0.1:{server.server_address[1]}/stop"
+        yield server.server_address[1]
     finally:
         server.shutdown()
         server.server_close()
@@ -60,11 +79,12 @@ def served(folder: Path, body: bytes) -> Iterator[str]:
 
 
 @contextmanager
-def garbage() -> Iterator[str]:
-    """The URL of a listener that reads the request and answers what no HTTP client can parse."""
+def garbage() -> Iterator[int]:
+    """The port of a listener that reads the request and answers what no HTTP client can parse."""
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
     listener.listen(1)
+    port = listener.getsockname()[1]
 
     def answering() -> None:
         connection, _ = listener.accept()
@@ -75,27 +95,32 @@ def garbage() -> Iterator[str]:
     thread = threading.Thread(target=answering, daemon=True)
     thread.start()
     try:
-        yield f"http://127.0.0.1:{listener.getsockname()[1]}/stop"
+        yield port
     finally:
         listener.close()
         thread.join(timeout=5)
 
 
+def stopped_at(port: int) -> str:
+    """The stop route on this port of this machine."""
+    return f"http://127.0.0.1:{port}/stop"
+
+
 def test_a_listener_that_does_not_speak_http_is_no_answer(tmp_path: Path) -> None:
-    with garbage() as url:
-        assert asked_with_nonce(tmp_path, STOP_NONCE_FILE, url) is None
+    with garbage() as port:
+        assert asked_with_nonce(tmp_path, STOP_NONCE_FILE, stopped_at(port)) is None
     assert list(tmp_path.iterdir()) == []
 
 
 def test_an_answer_that_is_not_json_is_no_answer(tmp_path: Path) -> None:
-    with served(tmp_path, b"<html>another program</html>") as url:
-        assert asked_with_nonce(tmp_path, STOP_NONCE_FILE, url) is None
+    with served(tmp_path, b"<html>another program</html>") as port:
+        assert asked_with_nonce(tmp_path, STOP_NONCE_FILE, stopped_at(port)) is None
     assert list(tmp_path.iterdir()) == []
 
 
 def test_an_answer_that_is_not_an_object_is_no_answer(tmp_path: Path) -> None:
-    with served(tmp_path, b'["stopped"]') as url:
-        assert asked_with_nonce(tmp_path, STOP_NONCE_FILE, url) is None
+    with served(tmp_path, b'["stopped"]') as port:
+        assert asked_with_nonce(tmp_path, STOP_NONCE_FILE, stopped_at(port)) is None
     assert list(tmp_path.iterdir()) == []
 
 
@@ -123,8 +148,8 @@ def test_the_nonce_reaches_the_route_from_a_private_temporary_file(
         replacing(source, target)
 
     monkeypatch.setattr("ecosemantic.settings.handover.os.replace", recording)
-    with served(tmp_path, b'{"stopped": true}') as url:
-        assert asked_with_nonce(tmp_path, STOP_NONCE_FILE, url) == {"stopped": True}
+    with served(tmp_path, b'{"stopped": true}') as port:
+        assert asked_with_nonce(tmp_path, STOP_NONCE_FILE, stopped_at(port)) == {"stopped": True}
     assert Server.seen == [[STOP_NONCE_FILE]]
     assert Server.modes == [0o600]
     assert len(staged) == 1
@@ -133,3 +158,79 @@ def test_the_nonce_reaches_the_route_from_a_private_temporary_file(
     assert written.name.startswith(f".{STOP_NONCE_FILE}.")
     assert mode == 0o600
     assert list(tmp_path.iterdir()) == []
+
+
+ENGINE = {
+    "service": "ecosemantic-view",
+    "workspace": "abcd1234abcd1234",
+    "yields": True,
+    "bridge": {
+        "state": "connected",
+        "handle": "ana",
+        "page": "https://ana.bridge.example",
+        "connector": "https://bridge.example/mcp",
+    },
+}
+
+
+def test_read_health_answers_an_engines_health(tmp_path: Path) -> None:
+    with served(tmp_path, json.dumps(ENGINE).encode()) as port:
+        assert read_health(LOOPBACK_ADDRESS, port) == Health(
+            service=SERVICE,
+            workspace="abcd1234abcd1234",
+            yields=True,
+            bridge=BridgeHealth(
+                state="connected",
+                handle="ana",
+                page="https://ana.bridge.example",
+                connector="https://bridge.example/mcp",
+            ),
+        )
+
+
+def test_read_health_is_none_where_nothing_answers() -> None:
+    listener = socket.socket()
+    listener.bind((LOOPBACK_ADDRESS, 0))
+    port = listener.getsockname()[1]
+    listener.close()
+    assert read_health(LOOPBACK_ADDRESS, port) is None
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        b'{"service": "other"}',
+        b"not json",
+        b'{"service": "ecosemantic-view"}',
+        # a health naming a tunnel state the relay does not have
+        json.dumps({**ENGINE, "bridge": {"state": "asleep"}}).encode(),
+    ],
+)
+def test_a_foreign_answer_is_not_a_health(tmp_path: Path, answer: bytes) -> None:
+    with served(tmp_path, answer) as port:
+        with pytest.raises(Unavailable, match=f"port {port} is held by another application"):
+            read_health(LOOPBACK_ADDRESS, port)
+
+
+def test_a_listener_that_does_not_speak_http_is_no_health() -> None:
+    with garbage() as port:
+        with pytest.raises(Unavailable, match=f"port {port} is held by another application"):
+            read_health(LOOPBACK_ADDRESS, port)
+
+
+@pytest.mark.parametrize("status", [404, 500])
+def test_an_http_error_is_not_a_health(tmp_path: Path, status: int) -> None:
+    with served(tmp_path, b"not here", status=status) as port:
+        with pytest.raises(Unavailable, match=f"port {port} is held by another application") as e:
+            read_health(LOOPBACK_ADDRESS, port)
+    assert str(status) in str(e.value)
+
+
+def test_a_refusal_carries_the_remedy_its_reader_names(tmp_path: Path) -> None:
+    with served(tmp_path, b'{"service": "other"}') as port:
+        with pytest.raises(Unavailable) as named:
+            read_health(LOOPBACK_ADDRESS, port, hint="pass --view-port")
+        with pytest.raises(Unavailable) as bare:
+            read_health(LOOPBACK_ADDRESS, port)
+    assert named.value.hint == "pass --view-port"
+    assert bare.value.hint is None

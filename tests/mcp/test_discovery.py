@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.exceptions import ToolError
 
+from ecosemantic.local import build_context
 from ecosemantic.mcp import discovery
 from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.discovery import NO_DATABASE
 from ecosemantic.mcp.server import build_server
 from tests.fixture_data import CODES, FIXTURE_DB, FLOW_IDS
 
@@ -36,6 +39,26 @@ async def test_list_databases(server: FastMCP) -> None:
     async with Client(server) as client:
         out = (await client.call_tool("list_databases", {})).structured_content
         assert FIXTURE_DB in [d["name"] for d in out["value"]]
+        assert out["hint"] is None
+
+
+async def test_list_databases_on_an_empty_engine_points_to_the_sources(
+    tmp_path: Path,
+) -> None:
+    data = tmp_path / "data"
+    data.mkdir()
+    systems = tmp_path / "systems"
+    systems.mkdir()
+    empty = build_context(data, systems)
+    try:
+        built = build_server()
+        discovery.register(built, empty)
+        async with Client(built) as client:
+            out = (await client.call_tool("list_databases", {})).structured_content
+    finally:
+        empty.close()
+    assert out["value"] == []
+    assert out["hint"] == NO_DATABASE
 
 
 async def test_search_processes_pages_and_hints(server: FastMCP) -> None:

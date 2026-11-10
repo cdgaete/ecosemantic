@@ -9,6 +9,7 @@ import base64
 import hashlib
 import secrets
 import ssl
+import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -212,9 +213,10 @@ async def device_sign_in(
     oidc: OpenIdProvider,
     show: Callable[[str, str], None],
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    clock: Callable[[], float] = time.monotonic,
 ) -> Tokens:
     """The tokens a device sign-in grants: the code the person is shown, then the poll the device
-    flow runs until the provider grants them."""
+    flow runs until the provider grants them or the code's lifetime ends."""
     held = _document(
         await _reached(
             http.post(
@@ -231,9 +233,11 @@ async def device_sign_in(
     )
     where = "Logto's device authorization"
     device_code = _named(held, "device_code", where)
+    expires_in = _positive(held, "expires_in", where)
     show(_named(held, "user_code", where), _named(held, "verification_uri_complete", where))
     interval = held.get("interval")
     waits = DEFAULT_INTERVAL if not isinstance(interval, int) else float(interval)
+    deadline = clock() + expires_in
     while True:
         await sleep(waits)
         try:
@@ -254,6 +258,13 @@ async def device_sign_in(
                 waits += SLOW_DOWN_STEP
                 continue
             raise Unauthorised(_refusal_message(refusal, "the device sign-in")) from refusal
+        except Unavailable as unreachable:
+            if clock() >= deadline:
+                raise Unavailable(
+                    f"the device sign-in's code expired {expires_in} seconds after it was issued; "
+                    f"the last poll failed: {unreachable}"
+                ) from unreachable
+            continue
         return await _signed_in(http, config, oidc, body, config.device_client_id)
 
 
@@ -263,7 +274,8 @@ async def register(
     access_token: str,
     registration: Registration,
 ) -> Registered:
-    """The engine as the bridge registers it: its id, its account, its handle and its page."""
+    """The engine as the bridge registers it: its id, its account, its handle and its page, the page
+    refused unless its address is https or loopback."""
     where = secure(config.registration_url)
     answered = await _reached(
         http.post(
@@ -273,9 +285,10 @@ async def register(
         ),
         f"the bridge at {where}",
     )
-    return Registered.model_validate(
+    registered = Registered.model_validate(
         _document(answered, f"the bridge at {where}", unauthorised=UNAUTHORISED_STATUSES)
     )
+    return registered.model_copy(update={"page_url": secure(registered.page_url)})
 
 
 async def refresh(
@@ -358,7 +371,7 @@ async def sign_in(
         engine=registered.engine,
         account=registered.account,
         handle=registered.handle,
-        page_url=secure(registered.page_url),
+        page_url=registered.page_url,
         refresh_token=tokens.refresh_token,
     )
     store.save(credential)
@@ -604,11 +617,12 @@ async def _grant_body(
 
 async def _reached(send: Awaitable[httpx2.Response], what: str) -> httpx2.Response:
     """The answer to a request, a failure to reach the address at all refused as unavailable, naming
-    what was being reached and what failed."""
+    what was being reached and what failed, or the failure's class where it names nothing."""
     try:
         return await send
     except httpx2.HTTPError as failure:
-        raise Unavailable(f"{what} could not be reached: {failure}") from failure
+        said = str(failure) or type(failure).__name__
+        raise Unavailable(f"{what} could not be reached: {said}") from failure
 
 
 def _refusal_message(refusal: _Refused, what: str) -> str:
@@ -660,4 +674,12 @@ def _named(document: object, name: str, where: str) -> str:
     held = document.get(name) if isinstance(document, Mapping) else None
     if not isinstance(held, str) or not held:
         raise Unavailable(f"{where} names no {name}")
+    return held
+
+
+def _positive(document: object, name: str, where: str) -> int:
+    """The positive integer a document holds under `name`, refused when it holds none."""
+    held = document.get(name) if isinstance(document, Mapping) else None
+    if not isinstance(held, int) or isinstance(held, bool) or held <= 0:
+        raise Unavailable(f"{where} names no positive {name}")
     return held

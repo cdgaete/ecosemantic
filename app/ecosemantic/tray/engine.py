@@ -3,16 +3,14 @@ when it ends."""
 
 from __future__ import annotations
 
-import json
-import urllib.request
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Protocol, cast, get_args
+from typing import Literal, Protocol
 
-from ecosemantic.bridge.state import BridgeState
 from ecosemantic.errors import Conflict, Unavailable
-from ecosemantic.settings import derived_port
+from ecosemantic.settings import derived_port, workspace_digest
+from ecosemantic.settings.handover import LOOPBACK_ADDRESS, BridgeState, Health
 from ecosemantic.tray.home import Home, TraySettings
 
 LOG_FILE = "engine.log"
@@ -24,8 +22,6 @@ POLL_SECONDS = 0.25
 EARLY_SECONDS = 30.0
 RESTART_SECONDS = 10.0
 RESTARTS = 3
-HEALTH_SECONDS = 2.0
-BRIDGE_STATES = get_args(BridgeState)
 
 EngineKind = Literal["starting", "running", "stopped", "failed"]
 
@@ -59,12 +55,13 @@ class EngineState:
     handle: str | None = None
     page: str | None = None
     connector: str | None = None
+    accounts: str | None = None
 
 
 def asked(settings: TraySettings, stopper: Callable[[str, int, Path], bool]) -> bool:
     """Ask the engine these settings name to stop, through the stopper given, on the port `serve`
     derives for its models folder."""
-    return stopper("127.0.0.1", derived_port(settings.models), settings.models)
+    return stopper(LOOPBACK_ADDRESS, derived_port(settings.models), settings.models)
 
 
 def core_command(python: Path, *arguments: str) -> list[str]:
@@ -74,9 +71,21 @@ def core_command(python: Path, *arguments: str) -> list[str]:
 
 
 def engine_command(python: Path, settings: TraySettings) -> list[str]:
-    """The command the tray runs the engine with: the page over HTTP, the bridge unless the person
-    turned it off, the two folders it was given, and the solver the payload carries."""
-    command = core_command(python, "serve", "--transport", "http")
+    """The command the tray runs the engine with: the page over HTTP on the address and port the
+    tray polls with no token, the tray named as its starter, the bridge unless the person turned it
+    off, the two folders it was given, and the solver the payload carries."""
+    command = core_command(
+        python,
+        "serve",
+        "--transport",
+        "http",
+        "--tray",
+        "--view-host",
+        LOOPBACK_ADDRESS,
+        "--view-port",
+        str(derived_port(settings.models)),
+        "--no-token",
+    )
     if settings.bridge:
         command.append("--bridge")
     return [
@@ -88,26 +97,6 @@ def engine_command(python: Path, settings: TraySettings) -> list[str]:
         "--solver",
         "pardiso",
     ]
-
-
-def read_health(port: int, timeout: float = HEALTH_SECONDS) -> Mapping[str, Any] | None:
-    """What the engine's health answers on this machine's loopback, or None when it answers
-    nothing. A body that is not a JSON object is refused with what answered, as a health the tray
-    cannot read is no health of its engine."""
-    try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=timeout) as answer:
-            body = answer.read()
-    except OSError:
-        return None
-    try:
-        answered = json.loads(body)
-    except ValueError as error:
-        raise Unavailable(
-            f"the health on port {port} answered what is not JSON: {body[:200]!r}"
-        ) from error
-    if not isinstance(answered, dict):
-        raise Unavailable(f"the health on port {port} answered {answered!r}, not an object")
-    return answered
 
 
 def rotate(log: Path, *, keep: int = KEPT_LOGS, limit: int = LOG_BYTES) -> None:
@@ -135,7 +124,7 @@ class Engine:
         settings: TraySettings,
         home: Home,
         launcher: Launcher,
-        health: Callable[[int], Mapping[str, Any] | None],
+        health: Callable[[int], Health | None],
         stopper: Callable[[str, int, Path], bool],
         clock: Callable[[], float],
         sleep: Callable[[float], None],
@@ -277,24 +266,19 @@ class Engine:
         )
 
     def _serving(self) -> EngineState:
-        """What a live engine's health says, and starting while it answers nothing; a health that
-        names no bridge state is refused, as one that names a state the relay does not have is."""
-        answered = self.health(self.port)
-        if answered is None:
+        """What a live engine's health says, and starting while it answers nothing; a health of
+        another models folder is refused, since this port is the one this folder derives."""
+        health = self.health(self.port)
+        if health is None:
             return self._starting()
-        bridge = answered.get("bridge")
-        if not isinstance(bridge, Mapping) or "state" not in bridge:
-            raise Unavailable(
-                "the engine's health names no bridge state, and a tray reads one from every answer"
-            )
-        state = bridge["state"]
-        if state not in BRIDGE_STATES:
-            raise Unavailable(f"the engine reports {state!r} as its bridge state")
+        if health.workspace != workspace_digest(self.settings.models):
+            raise Unavailable(f"port {self.port} serves another models folder")
         return EngineState(
             kind="running",
-            bridge=cast(BridgeState, state),
+            bridge=health.bridge.state,
             bridge_on=self.settings.bridge,
-            handle=bridge.get("handle"),
-            page=bridge.get("page"),
-            connector=bridge.get("connector"),
+            handle=health.bridge.handle,
+            page=health.bridge.page,
+            connector=health.bridge.connector,
+            accounts=health.accounts,
         )

@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { AccountsScreen } from '@/accounts/AccountsScreen'
 import { rememberToken } from '@/api/client'
 import { useHeldStream } from '@/api/stream'
 import { BackgroundEditor } from '@/editors/background/BackgroundEditor'
@@ -12,6 +13,7 @@ import { ResultsEditor } from '@/editors/results/ResultsEditor'
 import { SimulationEditor } from '@/editors/simulation/SimulationEditor'
 import { SystemEditor, VersionEditor } from '@/editors/system/SystemEditor'
 import { Welcome } from '@/editors/Welcome'
+import { paths } from '@/lib/paths'
 import { RequestDialog } from '@/requests/RequestDialog'
 import { Toaster } from 'sonner'
 import { Window } from '@/window/Window'
@@ -32,6 +34,7 @@ export function Screens() {
     <TooltipProvider>
       <TokenKeeper />
       <Routes>
+        <Route path={paths.accounts()} element={<AccountsScreen />} />
         <Route element={<Window />}>
           <Route index element={<Welcome />} />
           <Route path="systems/:id/versions/:hash/*" element={<VersionEditor />} />

@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import Protocol, assert_never
 
 from ecosemantic.bridge.credentials import CredentialStore
-from ecosemantic.bridge.state import SIGNED_OUT_STATES
 from ecosemantic.errors import Conflict, Invalid, Unavailable
+from ecosemantic.settings.handover import SIGNED_OUT_STATES
 from ecosemantic.tray.engine import (
     LOG_FILE,
     Engine,
@@ -114,6 +114,8 @@ class Tray:
                 self.platform.open_url(_known(state.page, what="page"))
             elif action == "copy-connector":
                 self.platform.copy(_known(state.connector, what="connector address"))
+            elif action == "accounts":
+                self.platform.open_url(_known(state.accounts, what="accounts screen"))
             elif action == "connect":
                 self._connect()
             elif action == "disconnect":

@@ -22,7 +22,7 @@ from ecosemantic.errors import NotFound, Unauthorised, Unavailable
 from ecosemantic.events import pump_installs, pump_runs, pump_storage
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.view.activity import routes as activity_routes
-from ecosemantic.view.api import BRIDGE_EXTENSION, GATE_PARAMETER
+from ecosemantic.view.api import BRIDGE_EXTENSION, GATE_PARAMETER, reach
 from ecosemantic.view.api import routes as api_routes
 from ecosemantic.view.credentials import routes as credential_routes
 from ecosemantic.view.handling import answering, error_response
@@ -66,8 +66,8 @@ class TokenGate:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http":
-            extensions = scope.get("extensions") or {}
-            if BRIDGE_EXTENSION in extensions:
+            if reach(scope) == "bridge":
+                extensions = scope.get("extensions") or {}
                 proof = _proof(extensions[BRIDGE_EXTENSION])
                 if proof is None or self.bridged is None or not self.bridged(proof, scope["path"]):
                     await self._refuse(scope, receive, send, "the bridge's proof is required")

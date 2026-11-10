@@ -12,9 +12,11 @@ from fastmcp import Client
 from fastmcp.exceptions import ToolError
 from pydantic import SecretStr
 
-from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.accounts import account_advice
+from ecosemantic.mcp.context import AccountStart, ServerContext, Start
 from ecosemantic.mcp.server import build_server
 from ecosemantic.ports.types import Account, DatabaseSource, InstallPatch
+from tests.mcp.test_accounts import SCREEN, TRAY, source
 from tests.memory_installs import MemoryInstaller, MemoryInstalls
 
 VIEW = "http://127.0.0.1:8000/?token=abc"
@@ -115,19 +117,59 @@ async def test_the_started_process_receives_the_held_account(held: Held) -> None
     assert handed[uuid.UUID(second["id"])] is None
 
 
-async def test_a_source_whose_account_is_not_held_is_refused_naming_the_page(held: Held) -> None:
+async def test_list_sources_hints_the_advice_for_accounts_not_held(held: Held) -> None:
+    over, _installs, _launcher = held
+    entry = AccountStart(start="tray", screen=SCREEN)
+    without = dataclasses.replace(over, credentials={}, accounts=entry)
+    held_every = dataclasses.replace(without, credentials={"nexus": ACCOUNT, "ecoinvent": ACCOUNT})
+    only_bafu = dataclasses.replace(without, credentials={"ecoinvent": ACCOUNT})
+    async with Client(build_server(without)) as client:
+        unheld = (await client.call_tool("list_sources", {})).structured_content
+    async with Client(build_server(held_every)) as client:
+        every = (await client.call_tool("list_sources", {})).structured_content
+    async with Client(build_server(only_bafu)) as client:
+        one = (await client.call_tool("list_sources", {})).structured_content
+    hint = unheld["hint"]
+    assert "bafu" in hint and "ecoinvent" in hint
+    assert TRAY in hint
+    assert one["hint"].startswith("bafu needs a nexus account, which this engine does not hold.")
+    assert "ecoinvent needs" not in one["hint"]
+    assert every["hint"] is None
+
+
+@pytest.mark.parametrize(
+    ("start", "screen"),
+    [("tray", None), ("terminal", SCREEN), ("headless", None)],
+)
+async def test_install_database_refuses_with_the_advice_of_the_start(
+    held: Held, start: Start, screen: str | None
+) -> None:
     over, _installs, launcher = held
-    without = dataclasses.replace(over, credentials={})
+    entry = AccountStart(start=start, screen=screen)
+    without = dataclasses.replace(over, credentials={}, accounts=entry)
     async with Client(build_server(without)) as client:
         with pytest.raises(ToolError) as caught:
             await client.call_tool("install_database", {"source": "bafu"})
     refused = json.loads(str(caught.value))
     assert refused["error"] == "unavailable"
-    assert refused["details"]["hint"] == (
-        "set NEXUS_USERNAME and NEXUS_PASSWORD, or enter the account on the page's Databases "
-        f"editor: {PAGE}"
-    )
+    hint = refused["details"]["hint"]
+    assert hint == account_advice(entry, needed=[source("bafu", "nexus")]).said()
+    assert "/databases" not in hint
     assert launcher.started == []
+
+
+async def test_a_source_this_server_does_not_offer_is_not_found_naming_list_sources(
+    held: Held,
+) -> None:
+    over, _installs, _launcher = held
+    offered = [found for found in sources() if found.name != "bafu"]
+    narrowed = dataclasses.replace(over, installer=MemoryInstaller(offered))
+    async with Client(build_server(narrowed)) as client:
+        with pytest.raises(ToolError) as caught:
+            await client.call_tool("install_database", {"source": "bafu"})
+    refused = json.loads(str(caught.value))
+    assert refused["error"] == "not_found"
+    assert "bafu" in refused["message"] and "list_sources" in refused["message"]
 
 
 async def test_a_second_install_while_one_is_open_is_a_conflict_naming_it(held: Held) -> None:

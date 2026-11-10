@@ -9,6 +9,7 @@ import uuid
 from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 from urllib.parse import urlencode
 
 from ecosemantic.events import EventBus
@@ -26,9 +27,21 @@ from ecosemantic.ports.types import Account, CredentialKind
 
 AGENT = Actor(kind="agent", id="mcp")
 
+Start = Literal["tray", "terminal", "headless"]
+
 
 def _nothing() -> None:
     return None
+
+
+@dataclass(frozen=True)
+class AccountStart:
+    """How the engine was started, the loopback address of the accounts screen it serves, and the
+    bridge page's address when it is bridged."""
+
+    start: Start = "headless"
+    screen: str | None = None
+    page: str | None = None
 
 
 def page_under(view_url: str, path: str, params: Sequence[tuple[str, str]] = ()) -> str:
@@ -59,6 +72,7 @@ class ServerContext:
     data_dir: Path
     uploads_dir: Path
     credentials: dict[CredentialKind, Account] = field(default_factory=dict)
+    accounts: AccountStart = field(default_factory=AccountStart)
     client: dict[str, str] = field(default_factory=dict)
     release: Callable[[], None] = _nothing
     locks: dict[uuid.UUID, asyncio.Lock] = field(default_factory=dict)

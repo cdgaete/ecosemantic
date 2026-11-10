@@ -7,6 +7,7 @@ import asyncio
 import contextlib
 import dataclasses
 import json
+import logging
 import os
 import socket
 import uuid
@@ -33,7 +34,7 @@ from ecosemantic.events import Event
 from ecosemantic.local import build_context
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.relay.frames import CHUNK_BYTES
-from ecosemantic.relay.messages import PROTOCOL, Welcome
+from ecosemantic.relay.messages import PROTOCOL, Reset, Welcome
 from ecosemantic.relay.proof import public_jwk
 from ecosemantic.serve import Listener, ViewSettings, listener_for
 from ecosemantic.view.api import BRIDGE_EXTENSION
@@ -52,6 +53,7 @@ from tests.bridge.fake_logto import TOKEN_PATH, FakeLogto
 ENGINE = uuid.uuid4()
 OTHER_ENGINE = uuid.uuid4()
 VERSION = "0.1.12"
+RELAY_LOGGER = "ecosemantic.bridge.relay"
 SIGNED_OUT = "bridge: signed out; run `ecosemantic bridge sign-in`"
 OTHER_ENGINE_LINE = "bridge: the bridge answers for another engine; this server's bridge stops"
 OTHER_ACCOUNT_LINE = "bridge: the bridge answers for another account; this server's bridge stops"
@@ -570,6 +572,180 @@ async def test_an_answer_the_tunnel_went_before_is_not_sent(
         await running.bridge.drop()
         await reported(running.lines, f"bridge: connected as {HANDLE}", 2)
     assert running.bridge.stream(1).status is None
+
+
+def logged(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    """The records this engine's relay logged."""
+    return [record for record in caplog.records if record.name == RELAY_LOGGER]
+
+
+async def test_an_application_failing_before_its_answer_resets_its_stream(
+    context: ServerContext, systems_dir: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.ERROR, logger=RELAY_LOGGER)
+
+    async def failing(scope: Scope, receive: Receive, send: Send) -> None:
+        await receive()
+        if scope["path"] == "/api/product-systems/broken":
+            raise RuntimeError("the application broke")
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"answered"})
+
+    async with relaying(context, systems_dir, app=failing) as running:
+        await running.bridge.welcomed()
+        await running.bridge.start(1, "/api/product-systems/broken")
+        failed = await running.bridge.finished(1)
+        await running.bridge.start(3, "/api/product-systems")
+        held = await running.bridge.finished(3)
+    assert failed.status is None
+    assert failed.reset == Reset(stream=1, reason="failed")
+    assert held.status == 200
+    assert held.body == b"answered"
+    records = logged(caplog)
+    assert len(records) == 1
+    assert records[0].levelno == logging.ERROR
+    assert records[0].exc_info is not None
+    assert "1" in records[0].getMessage()
+
+
+async def test_an_application_failing_mid_answer_resets_its_stream(
+    context: ServerContext, systems_dir: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.ERROR, logger=RELAY_LOGGER)
+
+    async def failing(scope: Scope, receive: Receive, send: Send) -> None:
+        await receive()
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"half", "more_body": True})
+        raise RuntimeError("the application broke")
+
+    async with relaying(context, systems_dir, app=failing) as running:
+        await running.bridge.welcomed()
+        await running.bridge.start(1, "/api/product-systems")
+        failed = await running.bridge.finished(1)
+    assert failed.status == 200
+    assert failed.chunks == [b"half"]
+    assert failed.reset == Reset(stream=1, reason="failed")
+    records = logged(caplog)
+    assert len(records) == 1
+    assert records[0].exc_info is not None
+
+
+async def test_an_application_failing_after_its_answer_ended_sends_no_reset(
+    context: ServerContext, systems_dir: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.ERROR, logger=RELAY_LOGGER)
+
+    async def failing(scope: Scope, receive: Receive, send: Send) -> None:
+        await receive()
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"answered"})
+        raise RuntimeError("the application broke")
+
+    async with relaying(context, systems_dir, app=failing) as running:
+        await running.bridge.welcomed()
+        before = set(asyncio.all_tasks())
+        await running.bridge.start(1, "/api/product-systems")
+        held = await running.bridge.finished(1)
+        await settled(before)
+    assert held.status == 200
+    assert held.body == b"answered"
+    assert held.reset is None
+    records = logged(caplog)
+    assert len(records) == 1
+    assert records[0].exc_info is not None
+
+
+async def test_a_message_the_tunnel_cannot_carry_resets_its_stream_as_failed(
+    context: ServerContext, systems_dir: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.ERROR, logger=RELAY_LOGGER)
+
+    async def trailers(scope: Scope, receive: Receive, send: Send) -> None:
+        await receive()
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        if scope["path"] == "/api/product-systems/trailers":
+            await send({"type": "http.response.trailers", "trailers": []})
+            return
+        await send({"type": "http.response.body", "body": b"answered"})
+
+    async with relaying(context, systems_dir, app=trailers) as running:
+        await running.bridge.welcomed()
+        await running.bridge.start(1, "/api/product-systems/trailers")
+        failed = await running.bridge.finished(1)
+        await running.bridge.start(3, "/api/product-systems")
+        held = await running.bridge.finished(3)
+    assert failed.status == 200
+    assert failed.reset == Reset(stream=1, reason="failed")
+    assert held.status == 200
+    assert held.body == b"answered"
+    records = logged(caplog)
+    assert len(records) == 1
+    assert records[0].exc_info is not None
+
+
+async def test_a_failure_after_the_tunnel_dropped_sends_no_reset(
+    context: ServerContext, systems_dir: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.ERROR, logger=RELAY_LOGGER)
+    entered = asyncio.Event()
+
+    async def failing(scope: Scope, receive: Receive, send: Send) -> None:
+        entered.set()
+        while (await receive())["type"] != "http.disconnect":
+            pass
+        raise RuntimeError("the application broke")
+
+    async with relaying(context, systems_dir, app=failing) as running:
+        await running.bridge.welcomed()
+        await running.bridge.start(1, "/api/product-systems")
+        await asyncio.wait_for(entered.wait(), 5)
+        await running.bridge.drop()
+        await reported(running.lines, f"bridge: connected as {HANDLE}", 2)
+    assert running.bridge.stream(1).reset is None
+    records = logged(caplog)
+    assert len(records) == 1
+    assert records[0].exc_info is not None
+
+
+async def test_an_application_failing_after_the_bridge_reset_sends_no_reset(
+    context: ServerContext, systems_dir: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.ERROR, logger=RELAY_LOGGER)
+    entered = asyncio.Event()
+
+    async def leaving(scope: Scope, receive: Receive, send: Send) -> None:
+        entered.set()
+        while (await receive())["type"] != "http.disconnect":
+            pass
+        raise RuntimeError("the application broke")
+
+    async def answering(scope: Scope, receive: Receive, send: Send) -> None:
+        await receive()
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"answered"})
+
+    async def both(scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["path"] == "/api/product-systems/leaving":
+            await leaving(scope, receive, send)
+            return
+        await answering(scope, receive, send)
+
+    async with relaying(context, systems_dir, app=both) as running:
+        await running.bridge.welcomed()
+        before = set(asyncio.all_tasks())
+        await running.bridge.start(1, "/api/product-systems/leaving")
+        await asyncio.wait_for(entered.wait(), 5)
+        await running.bridge.reset(1)
+        await settled(before)
+        await running.bridge.start(3, "/api/product-systems")
+        held = await running.bridge.finished(3)
+    assert running.bridge.stream(1).reset is None
+    assert held.status == 200
+    assert held.body == b"answered"
+    records = logged(caplog)
+    assert len(records) == 1
+    assert records[0].exc_info is not None
 
 
 async def test_a_token_request_that_cannot_reach_the_bridge_is_reported_and_retried(

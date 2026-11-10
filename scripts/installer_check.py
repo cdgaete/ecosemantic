@@ -32,8 +32,8 @@ from functools import cache
 from pathlib import Path
 
 from ecosemantic.settings import derived_port
-from ecosemantic.settings.handover import ask_to_stop
-from ecosemantic.tray.engine import LOG_FILE, engine_command, read_health
+from ecosemantic.settings.handover import LOOPBACK_ADDRESS, ask_to_stop, read_health
+from ecosemantic.tray.engine import LOG_FILE, engine_command
 from ecosemantic.tray.home import APP, TRAY_ARGUMENTS, Home, TraySettings, login_command
 
 if sys.platform == "win32":
@@ -47,7 +47,6 @@ TASKKILL = r"C:\Windows\System32\taskkill.exe"
 QUIET = {"ECOSEMANTIC_TELEMETRY": "off"}
 SILENT = ("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART")
 TRAY = tuple(TRAY_ARGUMENTS.split())
-LOOPBACK = "127.0.0.1"
 FOLDER = "EcoSemantic José Muñoz"
 LIMIT = 259
 OVERLONG = 200
@@ -430,10 +429,10 @@ def engine_answers(where: Installed, settings: TraySettings, log: Path) -> None:
         answered = wait_for(
             f"the engine's /health on port {port}",
             HEALTH_SECONDS,
-            lambda: read_health(port) is not None,
+            lambda: read_health(LOOPBACK_ADDRESS, port) is not None,
         )
         print(f"the engine answered /health on port {port} after {answered:.1f} s")
-        if not ask_to_stop(LOOPBACK, port, settings.models):
+        if not ask_to_stop(LOOPBACK_ADDRESS, port, settings.models):
             raise Unmet(f"the engine on port {port} refused the nonce its systems folder proves")
         stopped = wait_for(
             f"the engine {engine.pid} to end", SETTLE_SECONDS, lambda: engine.poll() is not None
@@ -465,7 +464,7 @@ def tray_answers(
     answered = wait_for(
         f"the tray's engine on port {port}",
         TRAY_SECONDS,
-        lambda: read_health(port) is not None,
+        lambda: read_health(LOOPBACK_ADDRESS, port) is not None,
     )
     print(
         f"the tray built its icon and started an engine that answered /health on port {port} "

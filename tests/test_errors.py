@@ -73,6 +73,12 @@ def test_an_error_line_joins_its_location_with_dots_before_its_message() -> None
     )
 
 
+def test_an_error_line_at_the_input_itself_is_its_message_alone() -> None:
+    assert error_line((), "Invalid JSON: expected ident at line 1 column 2") == (
+        "Invalid JSON: expected ident at line 1 column 2"
+    )
+
+
 def test_a_validation_error_renders_its_first_field_and_message() -> None:
     class Inner(BaseModel):
         count: int

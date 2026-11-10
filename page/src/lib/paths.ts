@@ -19,6 +19,7 @@ export const paths = {
   background: (database: string, ref: string) => `/databases/${database}/processes/${ref}`,
   search: (database: string, kind: string) => `/databases/${database}/search/${kind}`,
   databases: () => '/databases',
+  accounts: () => '/accounts',
 }
 
 export function isActivityPath(pathname: string, id: string): boolean {

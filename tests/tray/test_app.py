@@ -6,7 +6,7 @@ import sys
 import threading
 import time
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -15,25 +15,27 @@ from filelock import FileLock
 from ecosemantic.bridge.credentials import Credential
 from ecosemantic.bridge.start import DEFAULT_BRIDGE_URL
 from ecosemantic.errors import Conflict, Invalid, Unavailable
+from ecosemantic.settings.handover import BridgeHealth, Health
 from ecosemantic.tray.__main__ import quit_tray
 from ecosemantic.tray.app import SIGNED_OUT_NOTICE, Tray, dispatched
 from ecosemantic.tray.engine import RESTART_SECONDS, RESTARTS, Engine, engine_command
 from ecosemantic.tray.home import APP, Home, TraySettings, home_for
 from ecosemantic.tray.menu import StartAtLogin, menu_for
-from tests.tray.fakes import FakeLauncher, FakePlatform, FakeStore, Health, Time
+from tests.tray.fakes import (
+    SCREEN,
+    FakeLauncher,
+    FakePlatform,
+    FakeStore,
+    HealthReader,
+    Time,
+    health_of,
+)
 
 PAGE = "https://ana.bridge.example"
 CONNECTOR = "https://bridge.example/mcp"
 ENGINE_LOG = str(Path("logs") / "engine.log")
 BRIDGE_LOG = str(Path("logs") / "bridge.log")
-CONNECTED = {
-    "bridge": {
-        "state": "connected",
-        "handle": "ana",
-        "page": PAGE,
-        "connector": CONNECTOR,
-    }
-}
+CONNECTED = BridgeHealth(state="connected", handle="ana", page=PAGE, connector=CONNECTOR)
 HOLD = """
 import os, time
 from filelock import FileLock
@@ -54,11 +56,12 @@ def a_tray(
     tmp_path: Path,
     *,
     bridge: bool = True,
-    health_document: dict[str, object] | None = None,
+    health_document: BridgeHealth | None = None,
+    accounts: str | None = SCREEN,
     launcher: FakeLauncher | None = None,
-    health: Callable[[int], Mapping[str, object] | None] | None = None,
+    health: Callable[[int], Health | None] | None = None,
     store: FakeStore | None = None,
-) -> tuple[Tray, FakePlatform, Engine, Home, Health, Time]:
+) -> tuple[Tray, FakePlatform, Engine, Home, HealthReader, Time]:
     """A tray over this folder, its machine, its engine and its credential store the test's."""
     home = Home(tmp_path / "home")
     home.root.mkdir(parents=True)
@@ -68,7 +71,15 @@ def a_tray(
     settings.write(home.settings)
     launcher = launcher if launcher is not None else FakeLauncher()
     platform = FakePlatform(launcher=launcher)
-    reader = health if health is not None else Health(document=health_document)
+    reader = (
+        health
+        if health is not None
+        else HealthReader(
+            document=None
+            if health_document is None
+            else health_of(models, health_document, accounts=accounts)
+        )
+    )
     clock = Time()
     engine = Engine(
         python=python,
@@ -131,6 +142,14 @@ def test_open_page_and_copy_connector_use_the_engine_s_addresses(tmp_path: Path)
     tray.act("copy-connector")
     assert platform.urls == [PAGE]
     assert platform.copied == [CONNECTOR]
+
+
+def test_database_accounts_opens_the_screen(tmp_path: Path) -> None:
+    tray, platform, engine, home, health, time = a_tray(tmp_path, health_document=CONNECTED)
+    engine.start()
+    tray.state()
+    tray.act("accounts")
+    assert platform.urls == [SCREEN]
 
 
 def test_sign_in_runs_the_command_turns_the_bridge_on_and_restarts(tmp_path: Path) -> None:
@@ -249,7 +268,7 @@ def test_a_start_with_the_bridge_on_and_no_credential_serves_this_machine_while_
 ) -> None:
     tray, platform, engine, home, health, time = a_tray(
         tmp_path,
-        health_document={"bridge": {"state": "off"}},
+        health_document=BridgeHealth(state="off"),
         launcher=FakeLauncher(ends_bridge=False),
     )
     tray.start()
@@ -276,7 +295,7 @@ def test_the_sign_in_a_start_runs_that_fails_keeps_the_engine_without_the_bridge
 ) -> None:
     tray, platform, engine, home, health, time = a_tray(
         tmp_path,
-        health_document={"bridge": {"state": "off"}},
+        health_document=BridgeHealth(state="off"),
         launcher=FakeLauncher(ends_bridge=False),
     )
     tray.start()
@@ -298,7 +317,7 @@ def test_a_sign_in_that_finishes_while_the_bridge_is_on_restarts_the_engine(
 ) -> None:
     tray, platform, engine, home, health, time = a_tray(
         tmp_path,
-        health_document={"bridge": {"state": "signed-out"}},
+        health_document=BridgeHealth(state="signed-out"),
         launcher=FakeLauncher(ends_bridge=False),
     )
     engine.start()
@@ -324,7 +343,7 @@ def test_a_sign_in_that_finishes_while_the_relay_is_stopped_restarts_the_engine(
 ) -> None:
     tray, platform, engine, home, health, time = a_tray(
         tmp_path,
-        health_document={"bridge": {"state": "stopped"}},
+        health_document=BridgeHealth(state="stopped"),
         launcher=FakeLauncher(ends_bridge=False),
     )
     engine.start()
@@ -344,7 +363,7 @@ def test_a_sign_in_that_fails_while_the_bridge_is_on_leaves_the_engine_alone(
 ) -> None:
     tray, platform, engine, home, health, time = a_tray(
         tmp_path,
-        health_document={"bridge": {"state": "signed-out"}},
+        health_document=BridgeHealth(state="signed-out"),
         launcher=FakeLauncher(ends_bridge=False),
     )
     engine.start()
@@ -505,7 +524,7 @@ def test_a_second_tray_exits_and_quit_ends_the_first(tmp_path: Path) -> None:
 
 def test_signed_out_and_failed_notify_once(tmp_path: Path) -> None:
     tray, platform, engine, home, health, time = a_tray(
-        tmp_path / "signed-out", health_document={"bridge": {"state": "signed-out"}}
+        tmp_path / "signed-out", health_document=BridgeHealth(state="signed-out")
     )
     engine.start()
     for _ in range(3):
@@ -526,7 +545,7 @@ def test_signed_out_and_failed_notify_once(tmp_path: Path) -> None:
 
 def test_a_page_the_health_does_not_name_is_refused(tmp_path: Path) -> None:
     tray, platform, engine, home, health, time = a_tray(
-        tmp_path, health_document={"bridge": {"state": "off"}}
+        tmp_path, health_document=BridgeHealth(state="off")
     )
     engine.start()
     with pytest.raises(Invalid, match="names no page"):
@@ -624,7 +643,7 @@ def test_a_poll_after_quit_acts_on_nothing(tmp_path: Path) -> None:
 
 
 def test_quit_and_open_the_logs_work_while_health_is_refused(tmp_path: Path) -> None:
-    def refused(port: int) -> Mapping[str, object] | None:
+    def refused(port: int) -> Health | None:
         raise Unavailable(f"the engine's health answered what is not JSON: {b'<html>'!r}")
 
     tray, platform, engine, home, health, time = a_tray(tmp_path, health=refused)
@@ -645,7 +664,7 @@ def test_a_refused_health_is_written_once_for_each_reason(tmp_path: Path) -> Non
     reasons_line = "the health answered what is not JSON: b'<html>'"
     reasons = [reasons_line]
 
-    def refused(port: int) -> Mapping[str, object] | None:
+    def refused(port: int) -> Health | None:
         raise Unavailable(reasons[0])
 
     tray, platform, engine, home, health, time = a_tray(tmp_path, health=refused)
@@ -667,7 +686,7 @@ def test_a_refused_health_is_written_once_for_each_reason(tmp_path: Path) -> Non
 def test_a_process_ending_under_a_refused_health_retries_to_failed_once(
     tmp_path: Path,
 ) -> None:
-    def refused(port: int) -> Mapping[str, object] | None:
+    def refused(port: int) -> Health | None:
         raise Unavailable("the health answered what is not JSON: b'<html>'")
 
     tray, platform, engine, home, health, time = a_tray(tmp_path, health=refused)
@@ -680,7 +699,7 @@ def test_a_process_ending_under_a_refused_health_retries_to_failed_once(
     platform.launcher.processes[-1].ended(1)
     state = tray.state()
     assert state.kind == "failed"
-    assert menu_for(state, StartAtLogin(enabled=False))[6].text == "Start the engine"
+    assert menu_for(state, StartAtLogin(enabled=False))[7].text == "Start the engine"
     tray.state()
     assert platform.notices == [(APP, f"The engine failed; see {ENGINE_LOG}")]
 
@@ -781,7 +800,7 @@ def test_a_bridge_command_shows_as_pending_and_the_menu_offers_no_bridge_action(
     ] == ["Connect to the bridge", "Sign in…"]
 
 
-def refused_health(port: int) -> Mapping[str, object] | None:
+def refused_health(port: int) -> Health | None:
     """A health this tray refuses, as a port another program holds answers."""
     raise Unavailable("the health on port 1 answered what is not JSON: b'<html>'")
 

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import get_args
 
 from ecosemantic.events import EventKind
+from ecosemantic.mcp.accounts import ACCOUNTS_PATH, Reach
 from ecosemantic.mcp.discovery import VocabularyKind
 from ecosemantic.model.entities import ActorKind, ExchangeType, Scope, UncertaintyType
 from ecosemantic.model.refs import Scheme
@@ -32,6 +33,7 @@ from ecosemantic.troubles import TroubleKind
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 TYPES = REPOSITORY / "page" / "src" / "api" / "types.ts"
+PATHS = REPOSITORY / "page" / "src" / "lib" / "paths.ts"
 
 VOCABULARIES: dict[str, object] = {
     "Scheme": Scheme,
@@ -60,6 +62,7 @@ VOCABULARIES: dict[str, object] = {
     "ChangeOp": ChangeOp,
     "SummaryKind": SummaryKind,
     "CallOutcome": CallOutcome,
+    "Reach": Reach,
 }
 
 STRING_UNION = r"'[^']*'(?:\s*\|\s*'[^']*')+"
@@ -119,3 +122,7 @@ def test_a_double_quoted_literal_is_found() -> None:
 def test_a_nullable_or_commented_union_is_read() -> None:
     source = "export type A = 'x' | 'y' | null\nexport type B = 'p' | 'q' // note\n"
     assert page_vocabularies(source) == {"A": {"x", "y"}, "B": {"p", "q"}}
+
+
+def test_the_accounts_screen_path_is_the_one_python_names() -> None:
+    assert f"accounts: () => '{ACCOUNTS_PATH}'" in PATHS.read_text(encoding="utf-8")

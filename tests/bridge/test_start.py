@@ -14,7 +14,7 @@ from ecosemantic.bridge.credentials import Credential, store_for
 from ecosemantic.bridge.session import EngineTokenSession, TunnelSession
 from ecosemantic.bridge.signin import SignedOut
 from ecosemantic.bridge.start import bridge_start, engine_name, engine_version
-from ecosemantic.errors import Unauthorised, Unavailable
+from ecosemantic.errors import Invalid, Unauthorised, Unavailable
 from tests.bridge.fake_bridge import FakeBridge
 from tests.bridge.fake_logto import (
     ACCOUNT,
@@ -82,6 +82,58 @@ async def test_an_engine_token_start_registers_and_never_signs_in(
     bridge = FakeBridge(started.engine)
     started.check.welcome(bridge.welcome())
     assert started.check(bridge.proof("/api/product-systems"), "/api/product-systems") is True
+
+
+async def test_a_token_start_keeps_a_secure_page_address(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    logto = FakeLogto()
+    logto.access_tokens[ENGINE_BEARER] = ACCOUNT
+    logto.register_as = {"page_url": "http://evil.example/"}
+    http = httpx2.AsyncClient(transport=logto.transport)
+    monkeypatch.setattr("ecosemantic.bridge.start.client", lambda: http)
+    try:
+        with pytest.raises(Invalid) as refused:
+            await bridge_start(
+                f"{BRIDGE}/",
+                tmp_path,
+                None,
+                {"ECOSEMANTIC_BRIDGE_TOKEN": ENGINE_BEARER},
+                False,
+                opening,
+                showing,
+            )
+    finally:
+        await http.aclose()
+    assert "http://evil.example/" in str(refused.value)
+
+
+async def test_a_credential_start_keeps_a_secure_page_address(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    logto = FakeLogto()
+    logto.register_as = {"page_url": "http://evil.example/"}
+    credential_file = tmp_path / "credential.json"
+    store_for(BRIDGE, tmp_path, credential_file).save(
+        Credential(
+            bridge_url=BRIDGE,
+            client_id=BROWSER_CLIENT_ID,
+            engine=uuid4(),
+            account=ACCOUNT,
+            handle=HANDLE,
+            page_url=PAGE_URL,
+            refresh_token="rt-kept",
+        )
+    )
+    logto.live_refresh.add("rt-kept")
+    http = httpx2.AsyncClient(transport=logto.transport)
+    monkeypatch.setattr("ecosemantic.bridge.start.client", lambda: http)
+    try:
+        with pytest.raises(Invalid) as refused:
+            await bridge_start(BRIDGE, tmp_path, credential_file, {}, False, opening, showing)
+    finally:
+        await http.aclose()
+    assert "http://evil.example/" in str(refused.value)
 
 
 async def test_a_start_without_a_credential_off_a_terminal_names_sign_in(

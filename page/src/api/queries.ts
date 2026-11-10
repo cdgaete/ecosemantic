@@ -32,6 +32,7 @@ export const keys = {
   sources: ['sources'] as const,
   installs: ['installs'] as const,
   credentials: ['credentials'] as const,
+  accountEntry: ['account-entry'] as const,
   server: ['server'] as const,
 }
 
@@ -77,9 +78,13 @@ export const useInventory = (id: string, hash: string, body: InventoryArguments,
   useQuery({ queryKey: keys.inventory(id, hash, body), queryFn: () => api.inventory(id, body), enabled, ...forever })
 export const useRuns = (id: string, enabled = true) => useQuery({ queryKey: keys.runs(id), queryFn: () => api.runs(id), enabled, ...forever })
 export const useRun = (runId: string) => useQuery({ queryKey: keys.run(runId), queryFn: () => api.run(runId), ...forever })
-export const useSources = () => useQuery({ queryKey: keys.sources, queryFn: api.sources, ...forever })
+export const useSources = () =>
+  useQuery({ queryKey: keys.sources, queryFn: api.sources, ...forever, refetchOnWindowFocus: 'always' })
 export const useInstalls = () => useQuery({ queryKey: keys.installs, queryFn: api.installs, ...forever })
-export const useCredentials = () => useQuery({ queryKey: keys.credentials, queryFn: api.credentials, ...forever })
+export const useCredentials = (enabled = true) =>
+  useQuery({ queryKey: keys.credentials, queryFn: api.credentials, enabled, ...forever, refetchOnWindowFocus: 'always' })
+export const useAccountEntry = () =>
+  useQuery({ queryKey: keys.accountEntry, queryFn: api.accountEntry, ...forever, refetchOnWindowFocus: 'always' })
 export const useServer = () => useQuery({ queryKey: keys.server, queryFn: api.server, ...forever })
 
 export const useLayout = (id: string, variant: string | null) =>
@@ -188,6 +193,17 @@ export function usePutCredential() {
   const client = useQueryClient()
   return useMutation({
     mutationFn: ({ kind, account }: { kind: CredentialKind; account: Credential }) => api.putCredential(kind, account),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.credentials })
+      void client.invalidateQueries({ queryKey: keys.sources })
+    },
+  })
+}
+
+export function useDeleteCredential() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (kind: CredentialKind) => api.deleteCredential(kind),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.credentials })
       void client.invalidateQueries({ queryKey: keys.sources })
