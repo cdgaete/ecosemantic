@@ -75,14 +75,12 @@ def test_the_probe_writes_nothing_beside_the_zolca() -> None:
 def test_a_unit_the_core_lacks_stops_the_probe_naming_every_lacking_symbol(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    known = units.by_symbol
+    known = units.knows
 
-    def without_kilogram_and_kilowatt_hour(symbol: str) -> units.Unit:
-        if symbol in {"kg", "kWh"}:
-            raise NotSupported(f"unit symbol {symbol!r} is not one the core knows")
-        return known(symbol)
+    def without_kilogram_and_kilowatt_hour(symbol: str) -> bool:
+        return symbol not in {"kg", "kWh"} and known(symbol)
 
-    monkeypatch.setattr(units, "by_symbol", without_kilogram_and_kilowatt_hour)
+    monkeypatch.setattr(units, "knows", without_kilogram_and_kilowatt_hour)
     with pytest.raises(NotSupported) as raised:
         probe(ZOLCA)
 

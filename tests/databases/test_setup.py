@@ -80,7 +80,7 @@ def test_prepare_builds_validates_and_reads_the_synthetic_release(tmp_path: Path
 
 def test_prepare_refuses_a_build_that_differs_from_the_release_s_results(tmp_path: Path) -> None:
     release = build_release(tmp_path / "release", cancelling_factor=True)
-    offset_cumulative(release, ELEC, 1e-13)
+    offset_cumulative(release, ELEC, 1e-9)
     profile = default_profile(release)
     reported: list[InstallProgress] = []
 

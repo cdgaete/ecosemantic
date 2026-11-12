@@ -17,6 +17,7 @@ from keyring.errors import KeyringError, PasswordDeleteError
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from ecosemantic.errors import Invalid, Unavailable, field_error
+from ecosemantic.files import replace
 from ecosemantic.settings import workspace_digest
 
 SERVICE = "ecosemantic-bridge"
@@ -42,6 +43,26 @@ class Credential(BaseModel):
     handle: str
     page_url: str
     refresh_token: str
+
+
+class BridgeStatus(BaseModel):
+    """Whether this engine is signed in to the bridge: where its sign-in is kept, and the handle,
+    page address and engine a credential names."""
+
+    model_config = ConfigDict(frozen=True)
+
+    signed_in: bool
+    where: str | None = None
+    hint: str | None = None
+    handle: str | None = None
+    page: str | None = None
+    engine: str | None = None
+
+    def printed(self) -> dict[str, object]:
+        """The document `bridge status` prints: every field it names a value for, and the place a
+        credential is kept named as none on a machine that has no store."""
+        held = self.model_dump()
+        return {name: value for name, value in held.items() if name == "where" or value is not None}
 
 
 class CredentialStore(Protocol):
@@ -122,6 +143,33 @@ def _token_file(path: Path) -> str:
     return held
 
 
+def status(
+    environ: Mapping[str, str],
+    systems_dir: Path,
+    bridge_url: str,
+    credential_file: Path | None,
+) -> BridgeStatus:
+    """Whether this engine is signed in to the bridge, from the engine token's variables first and
+    otherwise the store at `bridge_url` and `credential_file`: the handle, the page address and the
+    engine it serves, and where the credential is kept; a machine with no credential store names
+    that and the ways that need none."""
+    if engine_token(environ) is not None:
+        return BridgeStatus(signed_in=True, where=token_variable(environ))
+    if credential_file is None and not has_credential_store():
+        return BridgeStatus(signed_in=False, hint=NO_STORE_HINT)
+    store = store_for(bridge_url, systems_dir, credential_file)
+    credential = store.load()
+    if credential is None:
+        return BridgeStatus(signed_in=False, where=store.where)
+    return BridgeStatus(
+        signed_in=True,
+        where=store.where,
+        handle=credential.handle,
+        page=credential.page_url,
+        engine=str(credential.engine),
+    )
+
+
 class KeyringStore:
     """The credential in the operating system's store, under the service name and the key."""
 
@@ -190,7 +238,7 @@ class FileStore:
             handle = os.open(staged, os.O_CREAT | os.O_EXCL | os.O_WRONLY, OWNER_ONLY)
             with os.fdopen(handle, "w", encoding="utf-8") as opened:
                 opened.write(credential.model_dump_json())
-            os.replace(staged, self.path)
+            replace(staged, self.path)
         except OSError as error:
             with contextlib.suppress(OSError):
                 staged.unlink(missing_ok=True)

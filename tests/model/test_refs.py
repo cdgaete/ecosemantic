@@ -77,4 +77,6 @@ def test_refs_are_frozen_and_hashable() -> None:
 def test_a_slug_keeps_letters_and_digits_and_joins_the_rest_with_the_separator() -> None:
     assert slug("Battery pack (NMC)", "-") == "battery-pack-nmc"
     assert slug("Battery pack (NMC)", "_") == "battery_pack_nmc"
+    assert slug("ecoinvent-3.12-cutoff-native", "-") == "ecoinvent-3-12-cutoff-native"
+    assert slug("  USLCI (2025) ", "-") == "uslci-2025"
     assert slug("  --  ", "-") == ""

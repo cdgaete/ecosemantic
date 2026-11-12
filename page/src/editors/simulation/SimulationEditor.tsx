@@ -4,6 +4,7 @@ import { useSystemStream } from '@/api/stream'
 import type { MonteCarloResult, ProductSystem, Run, Scope, Stopped } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { backwardsTreatmentNote, categoryLabel, creditLoopNote, formatAmount, shortHash, formatAgo } from '@/lib/format'
+import { movedSince } from '@/lib/hashes'
 import { paths, useGo } from '@/lib/paths'
 import { AppLink } from '@/lib/router'
 import { RequestAction } from '@/requests/RequestAction'
@@ -68,7 +69,7 @@ export function SimulationEditor() {
   if (answer.error) return <p className="p-4 text-destructive">{answer.error.message}</p>
   if (!answer.data) return <p className="p-4 text-muted-foreground">Loading…</p>
   const run = answer.data.value
-  const moved = system !== undefined && system.hash !== null && system.hash !== run.at_hash
+  const moved = movedSince(run.at_hash, system?.hash)
   const action = <RequestAction systemId={id} entity="product_system" entityId={id} />
   const worst = run.progress.worst_rel_se === null ? '–' : formatAmount(run.progress.worst_rel_se)
   const note = run.result ? atAmount(run.result.normals_at_amount) : null

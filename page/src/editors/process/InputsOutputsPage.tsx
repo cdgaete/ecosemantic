@@ -1,17 +1,17 @@
 import { useQueries } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { api } from '@/api/client'
-import { forever, keys } from '@/api/queries'
+import { forever, keys, useLayout } from '@/api/queries'
 import type { Exchange, Process, ProductSystem } from '@/api/types'
 import { useFlowSides, type FlowSide } from '@/api/useFlowSides'
 import { paths } from '@/lib/paths'
+import { rowsOf } from '@/lib/placement'
 import { describeUncertainty } from '@/lib/uncertainty'
 import { RequestAction } from '@/requests/RequestAction'
 import { DataTable, type Column } from '@/window/DataTable'
 import { EditorHeader } from '@/window/EditorHeader'
 import { Section } from '@/window/Section'
 import { amountColumn, elementaryProvider, flowColumn, providerColumn, providerLink, unitColumn } from '../exchangeColumns'
-import { splitExchanges } from './exchanges'
 
 interface ProviderInfo {
   name: string
@@ -37,7 +37,8 @@ function provider(exchange: Exchange, systemId: string, system: ProductSystem, f
 }
 
 export function InputsOutputsPage({ systemId, system, process }: { systemId: string; system: ProductSystem; process: Process }) {
-  const { sides, flows, errors: flowErrors } = useFlowSides(process.exchanges)
+  const { flows, errors: flowErrors } = useFlowSides(process.exchanges)
+  const layout = useLayout(systemId, null)
   const background = process.exchanges.filter((e) => e.input?.kind === 'background')
   const backgrounds = useQueries({
     queries: background.map((e) => {
@@ -53,7 +54,6 @@ export function InputsOutputsPage({ systemId, system, process }: { systemId: str
     if (q.error) providerErrors.push(`${background[i].name}: ${q.error.message}`)
   })
   const errors = [...flowErrors, ...providerErrors]
-  const split = splitExchanges(process, sides)
   const columns: Column<Exchange>[] = [
     flowColumn((e) => e.name, (e) => (e.type === 'elementary' ? 'elementary' : e.input?.kind === 'foreground' ? 'process' : 'product')),
     amountColumn((e) => e.amount),
@@ -67,19 +67,21 @@ export function InputsOutputsPage({ systemId, system, process }: { systemId: str
   const key = (s: string) => `process:${systemId}:${process.code}:${s}`
   const action = <RequestAction systemId={systemId} entity="process" entityId={process.code} />
   const rowClass = (e: Exchange) => (e.type === 'production' ? 'font-semibold' : '')
+  if (layout.error) return <p className="px-4 text-destructive">{layout.error.message}</p>
+  if (layout.isPending) return <p role="status" className="px-4 text-muted-foreground">Reading where the arrangement places the rows of {process.name}…</p>
+  const placement = layout.data?.value.cards.find((card) => card.code === process.code)
+  if (placement === undefined) return <p className="px-4 text-muted-foreground">The arrangement places no card for {process.name}, so it has no rows to list.</p>
+  const rows = rowsOf(process, placement)
   return (
     <>
       <EditorHeader icon="process" page="Inputs/Outputs" entity={process.name} />
       {errors.length > 0 ? <p className="px-4 text-destructive">{errors.join('; ')}</p> : null}
       <Section title="Inputs" sectionKey={key('inputs')} actions={action}>
-        <DataTable columns={columns} rows={split.inputs} rowKey={(e) => e.id} rowClassName={rowClass} empty="No input." />
+        <DataTable columns={columns} rows={rows.inputs} rowKey={(e) => e.id} rowClassName={rowClass} empty="No input." />
       </Section>
       <Section title="Outputs" sectionKey={key('outputs')} actions={action}>
-        <DataTable columns={columns} rows={split.outputs} rowKey={(e) => e.id} rowClassName={rowClass} />
+        <DataTable columns={columns} rows={rows.outputs} rowKey={(e) => e.id} rowClassName={rowClass} />
       </Section>
-      {split.unresolved.length > 0 && flowErrors.length === 0 ? (
-        <p className="px-4 text-xs text-muted-foreground">Resolving {split.unresolved.length} elementary flow{split.unresolved.length === 1 ? '' : 's'}…</p>
-      ) : null}
     </>
   )
 }

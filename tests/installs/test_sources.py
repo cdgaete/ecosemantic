@@ -17,7 +17,8 @@ from ecosemantic.databases.ecoinvent.setup import Prepared
 from ecosemantic.databases.ecoinvent.validate import Validation
 from ecosemantic.errors import Unavailable
 from ecosemantic.installs import sources
-from ecosemantic.installs.sources import install_source
+from ecosemantic.installs.sources import database_of, install_source
+from ecosemantic.installs.supervisor import LocalInstaller
 from ecosemantic.package.background import read_background
 from ecosemantic.ports.types import (
     Account,
@@ -51,6 +52,27 @@ def _openlca(tmp_path: Path) -> InstallDraft:
     )
 
 
+def test_database_of_answers_the_name_the_installer_answers(tmp_path: Path) -> None:
+    drafts = [
+        InstallDraft(
+            source="openlca",
+            actor=AGENT,
+            version="1",
+            system_model="unit process",
+            package="fixture.zip",
+            name=NAME,
+        ),
+        InstallDraft(source="uslci", actor=AGENT),
+        InstallDraft(source="bafu", actor=AGENT),
+        InstallDraft(source="ecoinvent", actor=AGENT, version="3.12", system_model="cutoff"),
+    ]
+    installer = LocalInstaller(tmp_path / "data")
+
+    assert [database_of(draft) for draft in drafts] == [
+        installer.database(draft) for draft in drafts
+    ]
+
+
 def test_install_source_installs_the_fixture_package_and_answers_its_summary(
     tmp_path: Path,
 ) -> None:
@@ -77,7 +99,7 @@ def test_install_source_reports_installing_last(tmp_path: Path) -> None:
     assert [progress.step for progress in steps][-1] == "installing"
 
 
-def test_a_source_that_needs_an_account_without_one_is_refused_naming_the_variables_and_the_page(
+def test_a_source_needing_an_account_is_refused_naming_the_terminal_and_the_variables(
     tmp_path: Path,
 ) -> None:
     draft = InstallDraft(source="ecoinvent", actor=AGENT, version="3.12", system_model="cutoff")
@@ -88,7 +110,8 @@ def test_a_source_that_needs_an_account_without_one_is_refused_naming_the_variab
     assert str(raised.value) == "ecoinvent needs an account"
     assert raised.value.hint == missing("ecoinvent")
     assert "EI_USERNAME and EI_PASSWORD" in (raised.value.hint or "")
-    assert "Databases editor" in (raised.value.hint or "")
+    assert "in a terminal" in (raised.value.hint or "")
+    assert "Databases editor" not in (raised.value.hint or "")
     assert not (tmp_path / "data").exists()
 
 

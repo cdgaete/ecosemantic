@@ -7,9 +7,8 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict
 
-from ecosemantic.compute.overrides import apply_case, case_pin
+from ecosemantic.compute.overrides import apply_case, pin_under
 from ecosemantic.compute.parameters import materialize
-from ecosemantic.model.canonical import base_pin
 from ecosemantic.model.entities import Process, ProductSystem
 
 NAMESPACE = uuid.UUID("3f8a1c52-9d4e-4b7a-8e61-0c2d5b9f7a14")
@@ -63,14 +62,10 @@ def _numbers(process: Process) -> Process:
 
 def render(system: ProductSystem, case: str | None) -> Rendered:
     """The system with the case's values set and every formula resolved, as numbers only."""
-    if case is None:
-        resolved, pin = materialize(system), base_pin(system)
-    else:
-        chosen = system.case(case)
-        resolved, pin = apply_case(system, chosen), case_pin(system, chosen)
+    resolved = materialize(system) if case is None else apply_case(system, system.case(case))
     return Rendered(
         product_system_id=system.id,
         case=case_label(case),
-        pin=pin,
+        pin=pin_under(system, case),
         processes=[_numbers(p) for p in resolved.processes],
     )

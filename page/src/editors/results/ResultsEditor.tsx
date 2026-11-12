@@ -1,6 +1,7 @@
 import { Route, Routes, useLocation } from 'react-router-dom'
 import { useSystemStream } from '@/api/stream'
 import { backwardsTreatmentNote, creditLoopNote, shortHash } from '@/lib/format'
+import { movedSince } from '@/lib/hashes'
 import { paths, useGo } from '@/lib/paths'
 import { PageTabs } from '@/window/PageTabs'
 import { useEditorTab } from '@/window/useEditorTab'
@@ -49,11 +50,12 @@ function ResultPages({ result }: { result: Result }) {
       ]
     : []
   const recordedOn = result.call?.at_hash ?? null
+  const currentOn = result.system?.hash ?? null
   return (
     <div className="flex h-full flex-col">
-      {recordedOn !== null && result.system && recordedOn !== result.system.hash ? (
+      {movedSince(recordedOn, currentOn) ? (
         <div className="border-b border-warning bg-warning/10 px-4 py-1 text-xs text-warning">
-          {`Recorded on ${shortHash(recordedOn)}; computed here on the current model, ${shortHash(result.system.hash)}.`}
+          {`Recorded on ${shortHash(recordedOn)}; computed here on the current model, ${shortHash(currentOn)}.`}
         </div>
       ) : null}
       {result.stale ? (

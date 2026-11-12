@@ -8,7 +8,7 @@ from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.model.entities import Method
 from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef
 from ecosemantic.ports.search import Phrase, phrases
-from ecosemantic.ports.types import ElementaryFlowHit, FlowType, Page, ProcessHit, offset_cursor
+from ecosemantic.ports.types import ElementaryFlowHit, FlowType, Page, ProcessHit, page_start
 
 WEIGHTS: dict[Kind, list[float]] = {
     "process": [5.0, 3.0],
@@ -124,7 +124,7 @@ class NativeSearch:
         limit: int = 20,
         cursor: str | None = None,
     ) -> Page[ProcessHit]:
-        offset = offset_cursor(cursor)
+        offset = page_start(cursor, limit)
         rows, more = await self._rows(
             database,
             "process",
@@ -158,7 +158,7 @@ class NativeSearch:
         limit: int = 20,
         cursor: str | None = None,
     ) -> Page[ElementaryFlowHit]:
-        offset = offset_cursor(cursor)
+        offset = page_start(cursor, limit)
         elementary_flows = self.store.elementary_flows_of(database)
         rows, more = await self._rows(
             database,
@@ -192,7 +192,7 @@ class NativeSearch:
     async def methods(
         self, database: str, query: str, limit: int = 20, cursor: str | None = None
     ) -> Page[Method]:
-        offset = offset_cursor(cursor)
+        offset = page_start(cursor, limit)
         rows, more = await self._rows(
             database, "method", query, "entity.key, entity.unit", {}, limit, offset
         )

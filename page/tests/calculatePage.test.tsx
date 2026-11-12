@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { App, Screens } from '@/App'
 import { api, ApiError } from '@/api/client'
-import type { SystemRead } from '@/api/types'
+import type { Answer, MonteCarloConfig, SystemRead } from '@/api/types'
 import { useUi } from '@/store/ui'
 import databases from './fixtures/databases.json'
 import run from './fixtures/run.json'
@@ -11,6 +11,7 @@ import validation from './fixtures/validation.json'
 import families from './fixtures/vocabulary_impact_methods.json'
 import calculations from './fixtures/calculations.json'
 import impact from './fixtures/impact.json'
+import monteCarlo from './fixtures/monte_carlo.json'
 import { renderAt } from './render'
 
 vi.mock('@/api/client', async (importOriginal) => {
@@ -26,6 +27,7 @@ vi.mock('@/api/client', async (importOriginal) => {
       vocabulary: vi.fn(async () => families),
       searchMethods: vi.fn(async () => ({ items: [], has_more: false, next_cursor: null, hint: null, view_url: null })),
       startRun: vi.fn(async () => run),
+      monteCarlo: vi.fn(async () => defaults),
       run: vi.fn(async () => run),
       calculations: vi.fn(async () => ({ value: [] })),
       impact: vi.fn(async () => impact),
@@ -36,6 +38,7 @@ vi.mock('@/api/client', async (importOriginal) => {
 
 const id = system.value.id
 const family = families.value[0].value
+const defaults = monteCarlo as unknown as Answer<MonteCarloConfig>
 
 beforeEach(() => vi.clearAllMocks())
 
@@ -59,7 +62,7 @@ it('offers the variants for an impact result and the stop rule for a simulation'
   expect(screen.queryByLabelText('n_max')).not.toBeInTheDocument()
   fireEvent.click(screen.getByLabelText('Monte Carlo simulation'))
   expect(screen.queryByText('Variants')).not.toBeInTheDocument()
-  expect(screen.getByLabelText('n_max')).toBeInTheDocument()
+  expect(await screen.findByLabelText('n_max')).toBeInTheDocument()
   expect(screen.getByLabelText('Uncertainty in')).toBeInTheDocument()
 })
 
@@ -74,6 +77,27 @@ it('starts a simulation with the stop rule and the scope, and opens its editor',
     }),
   )
   await waitFor(() => expect(screen.getByText(`Monte Carlo Simulation – ${system.value.name}`)).toBeInTheDocument())
+})
+
+it('starts the simulation form from the defaults the server answers', async () => {
+  vi.mocked(api.monteCarlo).mockResolvedValueOnce({ value: { n_min: 5, n_max: 40, rel_se_target: 0.01, seed: 7, scope: 'biosphere_only', n: null }, hint: null, view_url: null })
+  renderAt(`/systems/${id}/results/setup`, <Screens />)
+  await waitFor(() => expect(screen.getByLabelText('Monte Carlo simulation')).toBeInTheDocument())
+  fireEvent.click(screen.getByLabelText('Monte Carlo simulation'))
+  await waitFor(() => expect(screen.getByLabelText('Family').querySelectorAll('option').length).toBeGreaterThan(1))
+  fireEvent.change(screen.getByLabelText('Family'), { target: { value: family } })
+  expect(await screen.findByLabelText('n_min')).toHaveValue(5)
+  expect(screen.getByLabelText('n_max')).toHaveValue(40)
+  expect(screen.getByLabelText('rel_se_target')).toHaveValue(0.01)
+  expect(screen.getByLabelText('seed')).toHaveValue(7)
+  expect(screen.getByLabelText('Uncertainty in')).toHaveValue('biosphere_only')
+  fireEvent.click(screen.getByRole('button', { name: 'Calculate' }))
+  await waitFor(() =>
+    expect(api.startRun).toHaveBeenCalledWith(id, {
+      impact_method: family,
+      monte_carlo: { n_min: 5, n_max: 40, rel_se_target: 0.01, seed: 7, scope: 'biosphere_only' },
+    }),
+  )
 })
 
 it('keeps a refusal in the dialog with a link to the simulation that holds the slot', async () => {

@@ -132,9 +132,27 @@ async def test_list_sources_hints_the_advice_for_accounts_not_held(held: Held) -
     hint = unheld["hint"]
     assert "bafu" in hint and "ecoinvent" in hint
     assert TRAY in hint
-    assert one["hint"].startswith("bafu needs a nexus account, which this engine does not hold.")
+    assert one["hint"].startswith("bafu needs a Nexus account, which this engine does not hold.")
     assert "ecoinvent needs" not in one["hint"]
     assert every["hint"] is None
+
+
+async def test_a_source_names_its_account_as_the_page_shows_it(held: Held) -> None:
+    over, _installs, _launcher = held
+    without = dataclasses.replace(
+        over, credentials={}, accounts=AccountStart(start="tray", screen=SCREEN)
+    )
+    async with Client(build_server(without)) as client:
+        answered = (await client.call_tool("list_sources", {})).structured_content
+    listed = {source["name"]: source for source in answered["value"]}
+    assert listed["bafu"]["account"] == {"name": "Nexus", "phrase": "a Nexus account"}
+    assert listed["ecoinvent"]["account"] == {
+        "name": "ecoinvent",
+        "phrase": "an ecoinvent account",
+    }
+    assert listed["openlca"]["account"] is None and listed["uslci"]["account"] is None
+    assert "bafu needs a Nexus account" in answered["hint"]
+    assert "ecoinvent needs an ecoinvent account" in answered["hint"]
 
 
 @pytest.mark.parametrize(

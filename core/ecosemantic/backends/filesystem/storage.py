@@ -11,6 +11,7 @@ from pathlib import Path
 
 from filelock import FileLock
 
+from ecosemantic.backends.filesystem.records import record_of
 from ecosemantic.backends.filesystem.watching import touched
 from ecosemantic.compute.links import pinned, pins
 from ecosemantic.errors import Conflict
@@ -25,7 +26,7 @@ from ecosemantic.package.package import (
     zip_package,
 )
 from ecosemantic.package.requests import next_request, read_requests, resolve, write_requests
-from ecosemantic.package.sidecar import LAYOUT_FILE, SIDECAR_DIR, read_sidecar
+from ecosemantic.package.sidecar import SIDECAR_DIR, read_layout, read_sidecar, write_layout
 from ecosemantic.ports.resolver import Resolver
 from ecosemantic.ports.storage import no_product_system
 from ecosemantic.ports.types import (
@@ -104,15 +105,11 @@ class FilesystemStorage:
 
     def _layout(self, product_system_id: uuid.UUID) -> Layout:
         with self._lock(str(product_system_id)):
-            stored = self._dir(product_system_id) / SIDECAR_DIR / LAYOUT_FILE
-            if not stored.is_file():
-                return Layout()
-            return Layout.model_validate_json(stored.read_bytes())
+            return read_layout(self._dir(product_system_id))
 
     def _put_layout(self, product_system_id: uuid.UUID, layout: Layout) -> Layout:
         with self._lock(str(product_system_id)):
-            stored = self._dir(product_system_id) / SIDECAR_DIR / LAYOUT_FILE
-            stored.write_bytes(layout.model_dump_json(indent=1).encode("utf-8"))
+            write_layout(self._dir(product_system_id), layout)
             return layout
 
     def _requests(self, product_system_id: uuid.UUID) -> list[Request]:
@@ -153,14 +150,7 @@ class FilesystemStorage:
     def _owner(self, path: Path) -> uuid.UUID | None:
         """The product system a written path belongs to, or none for a path that names no
         system: the lock files, the token, the activity directory."""
-        try:
-            first = path.resolve().relative_to(self.root.resolve()).parts[0]
-        except (ValueError, IndexError):
-            return None
-        try:
-            return uuid.UUID(first)
-        except ValueError:
-            return None
+        return record_of(path, self.root)
 
     async def _watch(
         self, batches: AsyncIterator[set[Path]], queue: asyncio.Queue[StoreChange]

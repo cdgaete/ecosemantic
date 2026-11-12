@@ -138,13 +138,16 @@ it('installs a held source from any reach', async () => {
   expect(await screen.findByRole('button', { name: 'Install' })).toBeEnabled()
 })
 
-it('names each source\'s account with the article its name takes', async () => {
-  vi.mocked(api.sources).mockResolvedValue(unheld('bafu'))
+it("names each source's account with the phrase the server answers", async () => {
+  vi.mocked(api.sources).mockResolvedValue({
+    ...offered,
+    value: offered.value.map((source) => (source.account === null ? source : { ...source, account: { ...source.account, phrase: `${source.account.phrase}, as answered` } })),
+  })
   renderAt('/databases', <Screens />)
   const bafu = await screen.findByRole('button', { name: /bafu/ })
-  expect(within(bafu).getByText(/a Nexus account/)).toBeInTheDocument()
+  expect(within(bafu).getByText(/a Nexus account, as answered/)).toBeInTheDocument()
   const ecoinvent = screen.getByRole('button', { name: /^ecoinvent/ })
-  expect(within(ecoinvent).getByText(/an ecoinvent account/)).toBeInTheDocument()
+  expect(within(ecoinvent).getByText(/an ecoinvent account, as answered/)).toBeInTheDocument()
 })
 
 it('reads the sources again when the window regains focus', async () => {

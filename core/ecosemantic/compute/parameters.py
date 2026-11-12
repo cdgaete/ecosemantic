@@ -118,8 +118,7 @@ def evaluate(
 
 def _failure(formula: str, owner: str, errors: list[ExceptionHolder], known: set[str]) -> str:
     if errors[0].exc is NameError:
-        names = {n.id for n in ast.walk(ast.parse(formula, mode="eval")) if isinstance(n, ast.Name)}
-        missing = sorted(names - known)
+        missing = sorted(_reads(formula, owner) - known)
         return (
             f"formula {formula!r} {owner} names parameters {missing} that do not exist; set "
             "them before the formula"

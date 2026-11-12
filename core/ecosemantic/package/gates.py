@@ -50,7 +50,7 @@ async def gate(
                 )
             names = [c.name for c in target.cases]
             if (render and ref.case is None and names) or (
-                ref.case is not None and ref.case not in names
+                ref.case is not None and not target.carries_case(ref.case)
             ):
                 raise NotFound(
                     f"{system.name} links {target.name} under case {ref.case!r}; "

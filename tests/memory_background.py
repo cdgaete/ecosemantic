@@ -19,7 +19,7 @@ from ecosemantic.ports.types import (
     Page,
     ProcessHit,
     flow_side,
-    offset_cursor,
+    page_start,
 )
 from tests.fixture_data import (
     CODES,
@@ -220,7 +220,7 @@ class MemorySearch:
     ) -> Page[ProcessHit]:
         _known(database)
         parsed = phrases(query)
-        offset = offset_cursor(cursor)
+        offset = page_start(cursor, limit)
         hits = [
             ProcessHit(
                 ref=BackgroundRef(database=database, id=CODES[key]),
@@ -254,7 +254,7 @@ class MemorySearch:
     ) -> Page[ElementaryFlowHit]:
         _known(database)
         parsed = phrases(query)
-        offset = offset_cursor(cursor)
+        offset = page_start(cursor, limit)
         hits = []
         for key, (name, categories, flow_unit) in sorted(FLOWS.items(), key=lambda i: i[1][0]):
             found_compartment, found_sub = _compartment(categories)
@@ -292,7 +292,7 @@ class MemorySearch:
         _known(database)
         parsed = phrases(query)
         hits = [m for m in methods() if _relevance(parsed, m.spec) is not None]
-        offset = offset_cursor(cursor)
+        offset = page_start(cursor, limit)
         return Page.at_offset(
             hits[offset : offset + limit], len(hits) > offset + limit, offset, limit
         )

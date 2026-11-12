@@ -14,7 +14,7 @@ import duckdb
 
 from ecosemantic.errors import NotSupported
 from ecosemantic.model.entities import ExchangeType, Method
-from ecosemantic.package.background import Dataset, Import, Unlinked
+from ecosemantic.package.background import Dataset, ExchangeKind, Import, Unlinked, exchange_kind
 from ecosemantic.ports.terms import tokens
 from ecosemantic.ports.types import FLOW_TYPES, Side
 
@@ -24,7 +24,7 @@ FIELDS: dict[Kind, tuple[str, ...]] = {
     "flow": ("name", "compartment", "sub_compartment", "cas"),
     "method": ("spec",),
 }
-_EXCHANGE_TYPE: dict[str, ExchangeType] = {
+_EXCHANGE_TYPE: dict[ExchangeKind, ExchangeType] = {
     "production": "product",
     "technosphere": "product",
     "biosphere": "elementary",
@@ -116,11 +116,7 @@ def _exchanges(
     """One row per exchange of a dataset, its reference exchange among them with the amount the
     exchange holds, and one row per input the install cut off with its reason and no input."""
     for exchange in cast(list[Dataset], dataset["exchanges"]):
-        kind = str(exchange["type"])
-        if kind not in _EXCHANGE_TYPE:
-            raise NotSupported(
-                f"exchange type {kind!r} in {dataset['name']!r} is not one the port names"
-            )
+        kind = exchange_kind(exchange, str(dataset["name"]))
         reference = kind == "production"
         target = cast(tuple[str, str], exchange["input"])[1]
         amount = float(cast(float, exchange["amount"]))

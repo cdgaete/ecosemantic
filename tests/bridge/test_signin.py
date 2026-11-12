@@ -931,6 +931,20 @@ async def test_a_document_without_the_fields_a_sign_in_needs_is_refused() -> Non
     assert "revocation_endpoint" in str(hollow.value)
 
 
+async def test_a_registration_out_of_shape_is_invalid(tmp_path: Path) -> None:
+    logto = FakeLogto()
+    logto.register_as = {"handle": None}
+    store = store_for(BRIDGE, tmp_path, None)
+    browser = Browser(logto)
+    async with httpx2.AsyncClient(transport=logto.transport) as http:
+        with pytest.raises(Invalid) as refused:
+            await sign_in(http, BRIDGE, store, False, "workstation", "0.1.12", browser, Shown())
+    browser.finished()
+    assert f"the bridge at {BRIDGE}/register answers no registration" in str(refused.value)
+    assert "handle" in str(refused.value)
+    assert store.load() is None
+
+
 async def test_a_grant_that_carries_no_refresh_token_or_lifetime_is_unavailable(
     tmp_path: Path,
 ) -> None:

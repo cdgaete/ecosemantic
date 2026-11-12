@@ -15,7 +15,7 @@ from ecosemantic.compute.edits import (
     patch_product_system,
 )
 from ecosemantic.compute.links import held_pins, pinned_documents, pinning
-from ecosemantic.errors import Invalid, NotFound
+from ecosemantic.errors import Invalid, NotFound, build_label
 from ecosemantic.mcp.calculation import variant_of
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import DELETE, READ, WRITE
@@ -41,7 +41,7 @@ from ecosemantic.ports.types import (
     Page,
     ProductSystemSummary,
     Summarised,
-    offset_cursor,
+    page_start,
 )
 
 LOG_PAGE = 10
@@ -134,12 +134,12 @@ async def rebase_database(
             + "; ".join(named)
         )
     leaving = stored.database.fingerprint
-    left = "no build" if leaving is None else f"build {leaving[:12]}"
+    left = build_label(leaving)
     entry = await context.storage.put_product_system(
         moved,
         context.acting(),
         f"moved product system {moved.name} from {stored.database.name!r} at {left} to "
-        f"{installed.name!r} at build {str(installed.fingerprint)[:12]}",
+        f"{installed.name!r} at {build_label(installed.fingerprint)}",
     )
     card = SystemCard.of(moved, entry.result_hash, context.deep_link(moved.id))
     return await answer_write(context, card, entry, stored, moved)
@@ -207,10 +207,8 @@ async def import_product_system(context: ServerContext, path: str) -> Written[Sy
 async def get_product_system_log(
     context: ServerContext, product_system_id: str, limit: int = LOG_PAGE, cursor: str | None = None
 ) -> Listing[LogEntry]:
-    if limit < 1:
-        raise Invalid("limit is at least 1")
     entries = await context.storage.log(as_uuid(product_system_id))
-    start = offset_cursor(cursor)
+    start = page_start(cursor, limit)
     page = Page[LogEntry].at_offset(
         entries[start : start + limit], start + limit < len(entries), start, limit
     )

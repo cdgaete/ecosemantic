@@ -8,10 +8,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-import olca_schema as o
-import yaml
-from olca_schema.zipio import ZipReader
-
 from ecosemantic.databases.checks import unnamed
 from ecosemantic.databases.lists import (
     LeftOutRow,
@@ -19,10 +15,12 @@ from ecosemantic.databases.lists import (
     distinct_unlinked,
     process_ids,
     read_left_out,
+    top_categories,
     unlinked_mismatches,
     write_left_out,
     write_unlinked,
 )
+from ecosemantic.databases.profiles import refuse_mismatches, write_profile
 from ecosemantic.databases.scores import (
     ratio,
     relative_differences,
@@ -50,14 +48,6 @@ class Validation:
     unlinked: tuple[UnlinkedRow, ...]
     left_out: tuple[LeftOutRow, ...]
     seconds: dict[str, float]
-
-
-def _categories(bundle: Path) -> dict[str, str]:
-    """The top category of every flow the bundle holds, by flow id."""
-    with ZipReader(str(bundle)) as reader:
-        return {
-            str(flow.id): (flow.category or "").split("/")[0] for flow in reader.read_each(o.Flow)
-        }
 
 
 def _compared_left_out(
@@ -228,7 +218,7 @@ def validate(
     imported = read_background(bundle, bundle.stem, foreground=frozenset())
     stopwatch.lap("read")
     processes = process_ids(imported)
-    rows = distinct_unlinked(imported, _categories(bundle))
+    rows = distinct_unlinked(imported, top_categories(bundle))
     built = read_left_out(built_left_out)
     compared = (
         list_mismatches(imported, built, profile)
@@ -265,7 +255,8 @@ def _tolerance(largest: float) -> float:
 
 def record(profile: Profile, validation: Validation) -> Path:
     """Write a passing run's two lists and its tolerance into the release's profile, under the
-    directory the profiles ship in."""
+    directory the profiles ship in; refused while the run found a mismatch."""
+    refuse_mismatches(validation.mismatches)
     write_unlinked(releases.RELEASES / profile.unlinked, validation.unlinked)
     write_left_out(releases.RELEASES / profile.left_out, validation.left_out)
     updated = profile.model_copy(
@@ -278,8 +269,4 @@ def record(profile: Profile, validation: Validation) -> Path:
             ),
         }
     )
-    path = releases.RELEASES / f"{profile.version}.yaml"
-    path.write_text(
-        yaml.safe_dump(updated.model_dump(mode="json"), sort_keys=False), encoding="utf-8"
-    )
-    return path
+    return write_profile(updated, releases.RELEASES, profile.version)

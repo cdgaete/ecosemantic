@@ -13,6 +13,7 @@ from ecosemantic.errors import Invalid, Unavailable
 
 SolverName = Literal["superlu", "pardiso"]
 SOLVERS: tuple[SolverName, ...] = get_args(SolverName)
+DEFAULT_SOLVER: SolverName = "superlu"
 
 
 def _pypardiso() -> Any:

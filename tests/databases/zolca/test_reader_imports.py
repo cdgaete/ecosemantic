@@ -12,6 +12,7 @@ EXPORT = ZOLCA / "export"
 ALLOWED = ("ecosemantic.errors", "ecosemantic.databases.zolca.derby")
 EXPORT_ALLOWED = (
     "ecosemantic.errors",
+    "ecosemantic.files",
     "ecosemantic.databases.zolca.derby",
     "ecosemantic.databases.zolca.export",
     "olca_schema",
@@ -66,7 +67,7 @@ def test_every_module_of_the_export_is_read() -> None:
     ]
 
 
-def test_the_export_imports_the_standard_library_olca_schema_and_the_reader_alone() -> None:
+def test_the_export_imports_the_standard_library_olca_schema_the_reader_and_files_alone() -> None:
     offenders: dict[str, list[str]] = {}
     for path in sorted(EXPORT.glob("*.py")):
         for module in sorted(modules(ast.parse(path.read_text(encoding="utf-8")))):

@@ -102,15 +102,14 @@ def troubles(placements: list[Placement], routes: list[Route]) -> list[Trouble]:
     found: list[Trouble] = []
     for i, a in enumerate(placements):
         for b in placements[i + 1 :]:
-            if a.x < b.x + b.width and b.x < a.x + a.width:
-                if a.y < b.y + b.height and b.y < a.y + a.height:
-                    found.append(
-                        Trouble(
-                            kind="cards_overlap",
-                            message=f"{a.code} and {b.code} overlap",
-                            codes=[a.code, b.code],
-                        )
+            if _meets(a, b):
+                found.append(
+                    Trouble(
+                        kind="cards_overlap",
+                        message=f"{a.code} and {b.code} overlap",
+                        codes=[a.code, b.code],
                     )
+                )
     spots = {p.code: p for p in placements}
     for r in routes:
         for c in placements:

@@ -34,6 +34,7 @@ export const keys = {
   credentials: ['credentials'] as const,
   accountEntry: ['account-entry'] as const,
   server: ['server'] as const,
+  monteCarlo: ['monte-carlo'] as const,
 }
 
 export const forever = { staleTime: Infinity, gcTime: 30 * 60 * 1000 }
@@ -89,6 +90,8 @@ export const useServer = () => useQuery({ queryKey: keys.server, queryFn: api.se
 
 export const useLayout = (id: string, variant: string | null) =>
   useQuery({ queryKey: keys.layout(id, variant), queryFn: ({ signal }) => api.layout(id, variant, signal), ...forever })
+
+export const useMonteCarloDefaults = () => useQuery({ queryKey: keys.monteCarlo, queryFn: api.monteCarlo, ...forever })
 
 export function usePlaceCards(id: string, variant: string | null) {
   const client = useQueryClient()

@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import * as path from 'node:path'
 import * as url from 'node:url'
-import { render, type Notice } from './render-notices.ts'
+import { fontNotices, render, type Notice } from './render-notices.ts'
 
 type Listed = { name: string; versions: string[]; paths: string[]; license: string; homepage?: string }
 
@@ -20,16 +20,19 @@ function texts(directory: string): string[] {
 const listed = JSON.parse(
   execFileSync('pnpm', ['licenses', 'list', '--prod', '--json'], { cwd: path.resolve(here, '..'), encoding: 'utf8' }),
 ) as Record<string, Listed[]>
-const notices: Notice[] = Object.values(listed)
-  .flat()
-  .flatMap((pkg) =>
-    pkg.versions.map((version, index) => ({
-      name: pkg.name,
-      version,
-      license: pkg.license,
-      homepage: pkg.homepage,
-      texts: texts(pkg.paths[index]),
-    })),
-  )
+const notices: Notice[] = [
+  ...Object.values(listed)
+    .flat()
+    .flatMap((pkg) =>
+      pkg.versions.map((version, index) => ({
+        name: pkg.name,
+        version,
+        license: pkg.license,
+        homepage: pkg.homepage,
+        texts: texts(pkg.paths[index]),
+      })),
+    ),
+  ...fontNotices(path.resolve(here, '../src/assets/fonts')),
+]
 writeFileSync(TARGET, render(notices))
 console.log(`wrote ${notices.length} notices to ${path.relative(process.cwd(), TARGET)}`)

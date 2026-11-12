@@ -2,24 +2,25 @@
 
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ecosemantic.databases.bafu.profile import database_name
 from ecosemantic.databases.zolca.export.write import NotCarried, export
 from ecosemantic.errors import Conflict
-from ecosemantic.package.background import read_background
+from ecosemantic.files import replace
+from ecosemantic.package.background import Import, read_background
 
 
 @dataclass(frozen=True)
 class Built:
-    """What a build wrote: the bundle, the records it holds by folder, and the rows its package does
-    not carry."""
+    """What a build wrote: the bundle, the records it holds by folder, the rows its package does
+    not carry, and the import the core read the staged bundle as."""
 
     bundle: Path
     records: dict[str, int]
     not_carried: tuple[NotCarried, ...]
+    imported: Import = field(repr=False)
 
 
 def build(zolca: Path, *, version: str, out_dir: Path) -> Built:
@@ -34,12 +35,13 @@ def build(zolca: Path, *, version: str, out_dir: Path) -> Built:
     out_dir.mkdir(parents=True, exist_ok=True)
     written = export(zolca, staging)
     try:
-        read_background(written.bundle, database_name(version), foreground=frozenset())
-        os.replace(staging, destination)
+        imported = read_background(written.bundle, database_name(version), foreground=frozenset())
+        replace(staging, destination)
     finally:
         staging.unlink(missing_ok=True)
     return Built(
         bundle=destination,
         records=written.records,
         not_carried=written.not_carried,
+        imported=imported,
     )

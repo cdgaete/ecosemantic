@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 
 from ecosemantic.backends.filesystem.runs import FilesystemRuns
-from ecosemantic.backends.retry import REPLACE_ATTEMPTS
 from ecosemantic.errors import Unavailable
+from ecosemantic.files import REPLACE_ATTEMPTS
 from ecosemantic.ports.run import RunPort
 from ecosemantic.ports.types import RunPatch
 from tests.conformance.runs import RunConformance, draft

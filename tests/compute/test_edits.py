@@ -274,6 +274,11 @@ def test_add_exchange_with_a_formula_stores_its_value(product_system: ProductSys
         )
 
 
+def test_a_second_production_is_refused_by_the_edit(product_system: ProductSystem) -> None:
+    with pytest.raises(Invalid, match="already has a production exchange"):
+        add_exchange(product_system, "tshirt", type="production", amount=3.0)
+
+
 def test_add_exchange_allows_one_production_and_a_foreground_input(
     product_system: ProductSystem,
 ) -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from fastmcp import Client, FastMCP
 
 import ecosemantic.layout as layout_module
 from ecosemantic.errors import Invalid
@@ -15,16 +16,19 @@ from ecosemantic.geometry import (
     ROW_GAP,
     ROW_HEIGHT,
     SECTION,
+    SECTION_LABEL,
+    SECTION_PADDING,
     Link,
     LinkText,
     Placement,
+    card_geometry,
     card_size,
     link_texts,
     links,
     ports,
     shown_inputs,
 )
-from ecosemantic.layout import arrange, depths
+from ecosemantic.layout import arrange, depths, nodes
 from ecosemantic.model.entities import Exchange, Process, ProductSystem
 from ecosemantic.model.refs import (
     BackgroundRef,
@@ -114,9 +118,25 @@ def test_the_reference_is_the_zero_column_and_its_providers_are_deeper() -> None
     assert depths(built, ["fu"]) == {"fu": 0, "mid": 1, "raw": 2}
 
 
-def test_a_placement_carries_the_row_height() -> None:
-    built = system(process("fu", ["a"]), process("a"))
-    assert all(p.row_height == ROW_HEIGHT for p in arrange(built, ["fu"], {}, emitted(built)))
+async def test_the_arrangement_carries_the_card_geometry(
+    full_server: FastMCP, fixture_system_stored: ProductSystem
+) -> None:
+    async with Client(full_server) as client:
+        answer = (
+            await client.call_tool(
+                "graph_layout", {"product_system_id": str(fixture_system_stored.id)}
+            )
+        ).structured_content["value"]
+    card = card_geometry()
+    assert answer["card"] == card.model_dump()
+    assert (
+        card.width,
+        card.header_height,
+        card.section_padding,
+        card.section_label,
+        card.row_height,
+    ) == (CARD_WIDTH, HEADER_HEIGHT, SECTION_PADDING, SECTION_LABEL, ROW_HEIGHT)
+    assert all("row_height" not in placement for placement in answer["cards"])
 
 
 def test_the_longest_path_wins_when_a_process_feeds_two_depths() -> None:
@@ -321,6 +341,29 @@ def test_a_linked_system_is_one_card_a_column_beyond_its_deepest_consumer() -> N
     assert (held[f"system:{part}"].x, held[f"system:{part}"].y) == (900.0, 900.0)
     pairs = [(k.provider, k.consumer) for k in links(built)]
     assert (f"system:{part}", "mid") in pairs and (f"system:{part}", "fu") in pairs
+
+
+def test_the_drawing_s_columns_and_arrows_come_from_one_edge_set() -> None:
+    part = uuid.uuid4()
+    mid = linking("mid", part, ["fu"])
+    mid.exchanges.append(
+        Exchange(
+            id=uuid.uuid4(),
+            type="product",
+            name="part",
+            amount=2.0,
+            unit="unit",
+            input=SystemRef(product_system_id=part, at_hash="a" * 64),
+        )
+    )
+    built = system(process("fu", ["ghost"]), mid)
+    drawn = [
+        (provider, consumer)
+        for consumer, providers in nodes(built).items()
+        for provider in providers
+    ]
+    arrows = [(k.provider, k.consumer) for k in links(built)]
+    assert drawn == list(dict.fromkeys(arrows))
 
 
 def test_a_card_counts_resources_among_its_inputs_and_emissions_among_its_outputs() -> None:

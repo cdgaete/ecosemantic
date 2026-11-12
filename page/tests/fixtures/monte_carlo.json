@@ -1,0 +1,12 @@
+{
+  "hint": null,
+  "value": {
+    "n": null,
+    "n_max": 200,
+    "n_min": 30,
+    "rel_se_target": 0.05,
+    "scope": "full",
+    "seed": 12345
+  },
+  "view_url": null
+}

@@ -13,7 +13,9 @@ from typing import Literal, cast, get_args
 
 from ecosemantic.errors import Invalid
 
-LOOPBACK = ("127.0.0.1", "localhost", "::1")
+LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1"})
+DEFAULT_BRIDGE_URL = "https://bridge.ecosemantic.com"
+DISPLAYS = ("DISPLAY", "WAYLAND_DISPLAY")
 Transport = Literal["stdio", "http"]
 TRANSPORTS: tuple[str, ...] = get_args(Transport)
 PORT_FLOOR = 10000
@@ -50,6 +52,28 @@ class ViewSettings:
     tray: bool = False
 
 
+def named_bridge_url(named: str | None, environ: Mapping[str, str]) -> str | None:
+    """The bridge address a flag names, and otherwise the one its variable stands in for."""
+    if named is not None:
+        return named
+    return environ.get("ECOSEMANTIC_BRIDGE_URL")
+
+
+def bridge_address(named: str | None, environ: Mapping[str, str]) -> str:
+    """The bridge this machine works with: the address it names, the variable standing in for it,
+    or the bridge's own default address."""
+    held = named_bridge_url(named, environ)
+    return DEFAULT_BRIDGE_URL if held is None else held
+
+
+def credential_file(named: Path | None, environ: Mapping[str, str]) -> Path | None:
+    """The file the bridge's credential is kept in, when the flag or its variable names one."""
+    if named is not None:
+        return named
+    held = environ.get("ECOSEMANTIC_BRIDGE_CREDENTIAL_FILE")
+    return None if held is None else Path(held)
+
+
 def settings_from(
     environ: Mapping[str, str],
     systems_dir: Path,
@@ -62,7 +86,7 @@ def settings_from(
     opening: bool | None = None,
     bridge: bool | None = None,
     bridge_url: str | None = None,
-    credential_file: Path | None = None,
+    credential_path: Path | None = None,
     tray: bool = False,
 ) -> ViewSettings:
     """The settings: a flag wins over its variable, and a variable over the default. A bridge
@@ -70,12 +94,8 @@ def settings_from(
     bridge address or a credential file names nothing a server without the bridge reads."""
     named_bridge = bridge if bridge is not None else _named_switch(environ, "ECOSEMANTIC_BRIDGE")
     resolved_bridge = bool(named_bridge)
-    named_url = bridge_url if bridge_url is not None else environ.get("ECOSEMANTIC_BRIDGE_URL")
-    named_credential = (
-        credential_file
-        if credential_file is not None
-        else environ.get("ECOSEMANTIC_BRIDGE_CREDENTIAL_FILE")
-    )
+    named_url = named_bridge_url(bridge_url, environ)
+    named_credential = credential_file(credential_path, environ)
     if not resolved_bridge:
         if named_url is not None:
             raise Invalid("--bridge-url names the bridge of a server started with --bridge")
@@ -124,7 +144,7 @@ def browser_reachable(environ: Mapping[str, str], platform: str) -> bool:
     display, which a session over SSH leaves unset."""
     if platform in ("win32", "darwin"):
         return True
-    return "DISPLAY" in environ or "WAYLAND_DISPLAY" in environ
+    return any(name in environ for name in DISPLAYS)
 
 
 def _named_port(environ: Mapping[str, str]) -> int | None:

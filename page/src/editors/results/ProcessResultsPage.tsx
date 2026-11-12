@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useContributions } from '@/api/queries'
 import { useCategory } from '@/lib/address'
 import type { Hotspot } from '@/api/types'
-import { categoryLabel, formatAmount, formatShare } from '@/lib/format'
+import { categoryLabel, cutNotice, formatAmount, formatShare } from '@/lib/format'
 import { RequestAction } from '@/requests/RequestAction'
 import { DataTable, type Column } from '@/window/DataTable'
 import { EditorHeader } from '@/window/EditorHeader'
@@ -16,7 +16,7 @@ export function ProcessResultsPage({ result }: { result: Result }) {
   const scores = impact.data?.value.scores ?? []
   const { chosen, choose } = useCategory(scores)
   const [cutoff, setCutoff] = useState(1)
-  const parts = useContributions(id, result.hash, { by: 'process', method_id: chosen?.method.id, top_n: 50, demand: demandOf(params!, result.root) }, chosen !== undefined && !result.stale)
+  const parts = useContributions(id, result.hash, { by: 'process', method_id: chosen?.method.id, top_n: 50, cutoff: cutoff / 100, demand: demandOf(params!, result.root) }, chosen !== undefined && !result.stale)
   const columns: Column<Hotspot>[] = [
     { key: 'share', header: 'Contribution', align: 'right', render: (h) => formatShare(h.fraction) },
     { key: 'process', header: 'Process', render: (h) => h.name },
@@ -24,6 +24,7 @@ export function ProcessResultsPage({ result }: { result: Result }) {
     { key: 'product', header: 'Reference product', render: (h) => h.reference_product },
     { key: 'score', header: `Result${chosen ? ` [${chosen.unit}]` : ''}`, align: 'right', render: (h) => formatAmount(h.score) },
   ]
+  const cut = cutNotice(parts.data?.value.cut ?? null)
   return (
     <>
       <EditorHeader icon="result" page="Process results" entity={system?.name ?? ''} />
@@ -43,7 +44,8 @@ export function ProcessResultsPage({ result }: { result: Result }) {
             Don't show &lt; <input id="processes-cutoff" type="number" min="0" max="100" step="0.5" className="w-14 rounded-sm border bg-background px-1 text-right" value={cutoff} onChange={(e) => setCutoff(Number(e.target.value))} /> %
           </label>
         </div>
-        <DataTable columns={columns} rows={(parts.data?.value.processes ?? []).filter((h) => 100 * Math.abs(h.fraction) >= cutoff)} rowKey={(h) => `${h.rank}`} empty={parts.data ? 'No process above the cut-off.' : (parts.error?.message ?? result.waiting)} />
+        <DataTable columns={columns} rows={parts.data?.value.processes ?? []} rowKey={(h) => `${h.rank}`} empty={parts.data ? 'No process above the cut-off.' : (parts.error?.message ?? result.waiting)} />
+        {cut ? <p className="pt-1 text-xs text-muted-foreground">{cut}</p> : null}
         <Hint of={parts.data} />
       </Section>
     </>

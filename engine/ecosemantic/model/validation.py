@@ -13,8 +13,8 @@ from pydantic import BaseModel
 from scipy.sparse.csgraph import connected_components
 from scipy.sparse.linalg import splu
 
-from ecosemantic.errors import Invalid
-from ecosemantic.model.canonical import base_pin
+from ecosemantic.errors import Invalid, build_label
+from ecosemantic.model.canonical import stale
 from ecosemantic.model.entities import Process, ProductSystem
 from ecosemantic.model.refs import BackgroundRef, Database, ForegroundRef, SystemRef
 
@@ -413,7 +413,7 @@ def validate(
             not off,
             "database_build_differs",
             f"{off} name a build of {installed.name} other than the installed "
-            f"{str(installed.fingerprint)[:12]}",
+            + build_label(installed.fingerprint),
             [],
             "install the build it names, or rebase_database moves it onto the installed build",
             detail=", ".join(off),
@@ -445,7 +445,7 @@ def validate(
         for p in pins
         if p.document is None
         or p.document.reference_process is None
-        or (p.ref.case is not None and all(c.name != p.ref.case for c in p.document.cases))
+        or (p.ref.case is not None and not p.document.carries_case(p.ref.case))
     ]
     record(
         "links_resolve",
@@ -467,16 +467,15 @@ def validate(
         "rebase_links moves them to the current state",
         detail=", ".join(behind),
     )
-    base = base_pin(product_system)
-    stale = [s.name for s in product_system.scenarios if s.base_hash != base]
+    outdated = [s.name for s in product_system.scenarios if stale(product_system, s)]
     record(
         "scenarios_current",
-        not stale,
+        not outdated,
         "scenario_behind",
-        f"scenarios are pinned to a base the system has moved past: {stale}",
+        f"scenarios are pinned to a base the system has moved past: {outdated}",
         [],
         "rebase_scenario pins each to the base as it now stands",
-        detail=", ".join(stale),
+        detail=", ".join(outdated),
     )
 
     own_stuck = _undelivering(product_system, None)

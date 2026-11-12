@@ -29,21 +29,25 @@ from pathlib import Path
 from typing import Any
 
 REPOSITORY = Path(__file__).resolve().parents[1]
+
+sys.path.insert(0, str(REPOSITORY))
+
 INSTALLER = REPOSITORY / "installer"
 PYTHON_RECORD = INSTALLER / "python.json"
 BUDGETS = INSTALLER / "budgets.json"
 CACHE = REPOSITORY / ".cache" / "payload"
 RELEASE_BASE = "https://github.com/astral-sh/python-build-standalone/releases/download"
 TIMEOUT_SECONDS = 1800
-CORE_DISTRIBUTIONS = (
-    "ecosemantic",
-    "ecosemantic-core",
-    "ecosemantic-databases",
-    "ecosemantic-engine",
-    "ecosemantic-mcp",
-    "ecosemantic-relay",
-    "ecosemantic-view",
-)
+
+
+def _workspace_distributions() -> tuple[str, ...]:
+    """The core's distributions, as the workspace's members name them."""
+    from scripts.members import distributions
+
+    return distributions()
+
+
+CORE_DISTRIBUTIONS = _workspace_distributions()
 CORE_EXTRAS = (("ecosemantic", "mkl"), ("ecosemantic", "tray"))
 PLATFORMS = {"win-x64": "x86_64-pc-windows-msvc"}
 PRUNED = (
@@ -344,7 +348,7 @@ def built_version(dist: Path) -> str:
         name, version = wheel_identity(path)
         if name in CORE_DISTRIBUTIONS:
             found.setdefault(name, set()).add(version)
-    missing = [name for name in CORE_DISTRIBUTIONS if name not in found]
+    missing = sorted(name for name in CORE_DISTRIBUTIONS if name not in found)
     if missing:
         raise SystemExit(f"{dist} holds no wheel for {', '.join(missing)}")
     twice = {name: sorted(versions) for name, versions in found.items() if len(versions) > 1}

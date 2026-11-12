@@ -63,8 +63,8 @@ export function App({ router = true }: { router?: boolean }) {
   const screens = <Screens />
   return (
     <QueryClientProvider client={client}>
-      <HeldStream />
       {router ? <BrowserRouter>{screens}</BrowserRouter> : screens}
+      <HeldStream />
     </QueryClientProvider>
   )
 }

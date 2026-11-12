@@ -6,7 +6,6 @@ from __future__ import annotations
 import asyncio
 import io
 import json
-import os
 import tempfile
 import uuid
 import zipfile
@@ -14,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ecosemantic.compute.links import pins
+from ecosemantic.files import replace
 from ecosemantic.model import units
 from ecosemantic.model.entities import ProductSystem
 from ecosemantic.model.refs import BackgroundRef, split_native_id
@@ -175,7 +175,7 @@ def _assemble(
                         written.add(member)
         require_whole(staged)
         write_manifest(staged, manifest)
-        os.replace(staged, destination)
+        replace(staged, destination)
     finally:
         staged.unlink(missing_ok=True)
 

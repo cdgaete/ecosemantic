@@ -1,9 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 import { ApiError } from '@/api/client'
-import { keys, useCalculations, useSearchMethods, useStartRun, useSystem, useVocabulary } from '@/api/queries'
-import type { Scope } from '@/api/types'
+import { keys, useCalculations, useMonteCarloDefaults, useSearchMethods, useStartRun, useSystem, useVocabulary } from '@/api/queries'
+import type { MonteCarloConfig, Scope } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { paths, useGo } from '@/lib/paths'
 import { AppLink } from '@/lib/router'
@@ -40,20 +40,26 @@ export function CalculatePage() {
   const [variants, setVariants] = useState<string[]>([])
   const [amount, setAmount] = useState(1)
   const [kind, setKind] = useState<'result' | 'simulation'>(() => (new URLSearchParams(location.search).get('kind') === 'simulation' ? 'simulation' : 'result'))
-  const [scope, setScope] = useState<Scope>('full')
   const start = useStartRun(id)
   const client = useQueryClient()
-  const [mcParams, setMcParams] = useState({ n_min: 30, n_max: 200, rel_se_target: 0.05, seed: 12345 })
+  const defaults = useMonteCarloDefaults()
+  const [mcParams, setMcParams] = useState<Omit<MonteCarloConfig, 'n'> | null>(null)
+  useEffect(() => {
+    const answered = defaults.data?.value
+    if (answered === undefined) return
+    setMcParams({ n_min: answered.n_min, n_max: answered.n_max, rel_se_target: answered.rel_se_target, seed: answered.seed, scope: answered.scope })
+  }, [defaults.data])
   useEditorTab({ id: `calculate:${id}`, kind: 'results', title: `Calculation of: ${system?.name ?? ''}`, path: paths.results(id, 'setup', '') })
   if (!system) return <p className="p-4 text-muted-foreground">{read.error?.message ?? 'Loading…'}</p>
   const names = [...system.scenarios.map((s) => s.name), ...system.cases.map((c) => c.name)]
-  const ready = mode === 'family' ? family !== '' : methodId !== ''
+  const ready = (mode === 'family' ? family !== '' : methodId !== '') && (kind === 'result' || mcParams !== null)
   const rootCode = system.reference_process
   const run = () => {
     const method = mode === 'family' ? { impact_method: family } : { method_id: methodId }
     if (kind === 'simulation') {
+      if (mcParams === null) return
       const demand = demandOf({ variants: [], amount }, rootCode)
-      start.mutate({ ...method, ...(demand ? { demand } : {}), monte_carlo: { ...mcParams, scope } }, { onSuccess: (answer) => go(paths.simulation(id, answer.value.id)) })
+      start.mutate({ ...method, ...(demand ? { demand } : {}), monte_carlo: mcParams }, { onSuccess: (answer) => go(paths.simulation(id, answer.value.id)) })
       return
     }
     useUi.getState().startImpact(id)
@@ -151,7 +157,7 @@ export function CalculatePage() {
                 </span>
               ),
             },
-            ...(kind === 'simulation'
+            ...(kind === 'simulation' && mcParams !== null
               ? [
                   {
                     label: 'Monte Carlo',
@@ -165,7 +171,7 @@ export function CalculatePage() {
                         ))}
                         <label htmlFor="calc-scope" className="flex items-center gap-1">
                           Uncertainty in
-                          <select id="calc-scope" className="min-w-0 max-w-full rounded-sm border bg-background px-1" value={scope} onChange={(e) => setScope(e.target.value as Scope)}>
+                          <select id="calc-scope" className="min-w-0 max-w-full rounded-sm border bg-background px-1" value={mcParams.scope} onChange={(e) => setMcParams({ ...mcParams, scope: e.target.value as Scope })}>
                             <option value="full">all exchanges</option>
                             <option value="biosphere_only">elementary flows only</option>
                           </select>

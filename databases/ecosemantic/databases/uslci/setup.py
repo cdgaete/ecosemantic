@@ -15,10 +15,9 @@ from ecosemantic.databases.lists import read_unlinked
 from ecosemantic.databases.prepared import PreparedRelease
 from ecosemantic.databases.uslci.build import build
 from ecosemantic.databases.uslci.download import Commons, download
-from ecosemantic.databases.uslci.profile import Pin, Profile, database_name, recorded
+from ecosemantic.databases.uslci.profile import Pin, Profile, recorded
 from ecosemantic.databases.uslci.validate import list_mismatches
 from ecosemantic.errors import Invalid
-from ecosemantic.package.background import read_background
 from ecosemantic.ports.types import InstallProgress, Reporter
 
 
@@ -64,11 +63,11 @@ def notices(*inventories: Path) -> tuple[Notice, ...]:
 
 
 def prepare(profile: Profile, server: Commons, work: Path, report: Reporter) -> Prepared:
-    """Download a release, build it into `work`, read the bundle back, and hold it to the two lists
-    the profile records: an unlinked input or a left-out exchange outside them is `Invalid` naming
-    every one, raised before anything is installed. The import it answers has the inputs no process
-    provides cleared, as the install drops them, with the profile's list of them. Each step is
-    reported with the bytes of the files it fetched."""
+    """Download a release, build it into `work`, and hold it to the two lists the profile records:
+    an unlinked input or a left-out exchange outside them is `Invalid` naming every one, raised
+    before anything is installed. The import it answers has the inputs no process provides
+    cleared, as the install drops them, with the profile's list of them. Each step is reported with
+    the bytes of the files it fetched."""
     listed = recorded(profile.unlinked)
     report(InstallProgress(step="downloading"))
     files = download(profile, server)
@@ -78,17 +77,15 @@ def prepare(profile: Profile, server: Commons, work: Path, report: Reporter) -> 
     built = build(
         files.inventory, files.methods, version=profile.version, out_dir=work, bridged=files.bridged
     )
-    report(InstallProgress(step="reading"))
-    imported = read_background(built.bundle, database_name(profile.version), foreground=frozenset())
     report(InstallProgress(step="checking"))
-    mismatches = list_mismatches(imported, built.left_out, profile)
+    mismatches = list_mismatches(built.imported, built.left_out, profile)
     if mismatches:
         raise Invalid("; ".join(mismatches))
     return Prepared(
         bundle=built.bundle,
-        imported=replace(imported, unlinked=[]),
+        imported=replace(built.imported, unlinked=[]),
         unlinked=read_unlinked(listed) if listed is not None else (),
-        dropped=tuple(imported.unlinked),
+        dropped=tuple(built.imported.unlinked),
         pins=(profile.inventory, *profile.bridged, *profile.methods),
         notices=notices(files.inventory, *files.bridged),
     )

@@ -185,6 +185,15 @@ class Process(BaseModel):
         merged.update(value or {})
         return merged
 
+    @model_validator(mode="after")
+    def _one_production(self) -> Process:
+        productions = sum(1 for exchange in self.exchanges if exchange.type == "production")
+        if productions > 1:
+            raise ValueError(
+                f"{self.code!r} has {productions} production exchanges; a process has at most one"
+            )
+        return self
+
     def produces_nothing(self) -> bool:
         """Whether a production exchange of this process states an amount of zero."""
         return any(e.type == "production" and e.amount == 0 for e in self.exchanges)
@@ -440,6 +449,10 @@ class ProductSystem(BaseModel):
             if case.name == name:
                 return case
         raise NotFound(f"no case {name!r} in {self.name!r}")
+
+    def carries_case(self, name: str) -> bool:
+        """Whether a case of this name is the system's."""
+        return any(case.name == name for case in self.cases)
 
     def parameter(self, name: str) -> Parameter:
         """The parameter with this name, or NotFound."""

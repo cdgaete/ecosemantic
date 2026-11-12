@@ -13,7 +13,7 @@ from pathlib import Path
 import olca_schema as o
 from olca_schema.zipio import ZipReader
 
-from ecosemantic.databases.lists import distinct_unlinked
+from ecosemantic.databases.lists import distinct_unlinked, top_category
 from ecosemantic.databases.zolca.derby.database import Database
 from ecosemantic.databases.zolca.export.write import NotCarried, export
 from ecosemantic.errors import Invalid, NotSupported
@@ -103,27 +103,18 @@ def _symbols(records: Iterable[o.Exchange | o.ImpactFactor]) -> set[str]:
     }
 
 
-def _known(symbol: str) -> bool:
-    """Whether the core's unit table holds a symbol."""
-    try:
-        units.by_symbol(symbol)
-    except NotSupported:
-        return False
-    return True
-
-
 def _lacking(bundle: Path, processes: Sequence[o.Process]) -> tuple[str, ...]:
     """Every unit symbol the package's exchanges and impact factors name that the core's table
     lacks, in one sorted tuple."""
     named = _symbols(
         exchange for process in processes for exchange in process.exchanges or []
     ) | _symbols(_factors(bundle))
-    return tuple(sorted(symbol for symbol in named if not _known(symbol)))
+    return tuple(sorted(symbol for symbol in named if not units.knows(symbol)))
 
 
 def _unlinked(imported: Import, flows: dict[str, o.Flow]) -> dict[str, int]:
     """The import's distinct unlinked inputs, counted by the top category of their flow."""
-    tops = {flow_id: (flow.category or "").split("/")[0] for flow_id, flow in flows.items()}
+    tops = {flow_id: top_category(flow) for flow_id, flow in flows.items()}
     return dict(Counter(row.flow_category for row in distinct_unlinked(imported, tops)))
 
 

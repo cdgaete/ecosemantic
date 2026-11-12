@@ -153,9 +153,14 @@ def by_name(name: str) -> Unit:
     return _BY_NAME[name]
 
 
+def knows(symbol: str) -> bool:
+    """Whether the table holds this unit symbol."""
+    return symbol in _BY_SYMBOL
+
+
 def by_symbol(symbol: str) -> Unit:
     """The unit openLCA writes with this symbol."""
-    if symbol not in _BY_SYMBOL:
+    if not knows(symbol):
         raise NotSupported(f"unit symbol {symbol!r} is not one the core knows")
     return _BY_SYMBOL[symbol]
 

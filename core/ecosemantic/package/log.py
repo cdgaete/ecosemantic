@@ -10,7 +10,7 @@ from pydantic import BaseModel, JsonValue
 from ecosemantic.errors import Conflict, Invalid
 from ecosemantic.model.canonical import content_hash, significant
 from ecosemantic.model.entities import Actor, ProductSystem
-from ecosemantic.package.sidecar import read_lines, write_lines
+from ecosemantic.package.sidecar import SIDECAR_DIR, VERSION_HINT, parsed_lines, write_lines
 from ecosemantic.ports.types import Change, Entity, LogEntry, Source
 
 LOG_FILE = "log.jsonl"
@@ -181,6 +181,6 @@ def write_log(root: Path, log: list[LogEntry]) -> None:
 
 def read_log(root: Path) -> list[LogEntry]:
     """The log under root/ecosemantic/, or an empty list when the file does not exist."""
-    entries = [LogEntry.model_validate_json(line) for line in read_lines(root, LOG_FILE)]
+    entries = parsed_lines(root / SIDECAR_DIR / LOG_FILE, LogEntry, VERSION_HINT)
     verify_chain(entries)
     return entries

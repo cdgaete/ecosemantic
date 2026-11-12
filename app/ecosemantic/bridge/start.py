@@ -22,8 +22,6 @@ from ecosemantic.errors import Unauthorised, Unavailable
 from ecosemantic.relay.discovery import BridgeConfiguration, Registration
 from ecosemantic.settings import browser_reachable
 
-DEFAULT_BRIDGE_URL = "https://bridge.ecosemantic.com"
-
 
 @dataclass(frozen=True)
 class BridgeStart:

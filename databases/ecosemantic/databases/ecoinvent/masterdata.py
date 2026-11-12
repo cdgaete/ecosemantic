@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import get_args
 
-from ecosemantic.errors import Invalid, NotSupported
+from ecosemantic.errors import Invalid
 from ecosemantic.model import units
 from ecosemantic.package.base_writer import BaseFlow
 from ecosemantic.ports.types import FlowType
@@ -66,14 +66,14 @@ def _compartment(element: ET.Element) -> tuple[str, str]:
     return text(pair, "compartment"), text(pair, "subcompartment")
 
 
-def _unit(element: ET.Element, name: str, unknown_units: dict[str, list[str]]) -> str:
-    """The core's name for an exchange's unit, or the symbol itself when the core lacks it."""
+def exchange_unit(element: ET.Element, user: str, unknown_units: dict[str, list[str]]) -> str:
+    """The core's name for an exchange's unit, or the symbol itself recorded under the dataset
+    using it when the core lacks it."""
     symbol = text(element, "unitName")
-    try:
-        return unit_name(symbol)
-    except NotSupported:
-        unknown_units.setdefault(symbol, []).append(name)
+    if not units.knows(symbol):
+        unknown_units.setdefault(symbol, []).append(user)
         return symbol
+    return unit_name(symbol)
 
 
 def read_masterdata(ecospold: Path) -> MasterData:
@@ -87,14 +87,14 @@ def read_masterdata(ecospold: Path) -> MasterData:
         exchange = ElementaryExchange(
             id=element.attrib["id"],
             name=name,
-            unit=_unit(element, name, unknown_units),
+            unit=exchange_unit(element, name, unknown_units),
             compartment=compartment,
             subcompartment=subcompartment,
             cas=element.get("casNumber"),
         )
         elementary[exchange.id] = exchange
     for element in _exchanges(masterdata / "IntermediateExchanges.xml", "intermediateExchange"):
-        _unit(element, text(element, "name"), unknown_units)
+        exchange_unit(element, text(element, "name"), unknown_units)
     return MasterData(elementary=elementary, unknown_units=unknown_units)
 
 

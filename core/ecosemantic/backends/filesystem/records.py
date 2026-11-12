@@ -14,12 +14,25 @@ from filelock import AsyncFileLock, FileLock
 from pydantic import BaseModel, ValidationError
 
 from ecosemantic.backends.filesystem.watching import touched
-from ecosemantic.backends.retry import read_bytes, replace
-from ecosemantic.errors import NotFound, Unavailable, field_error
+from ecosemantic.errors import NotFound, unreadable
+from ecosemantic.files import read_bytes, write_whole
 from ecosemantic.ports import posted
 
 SLOT_FILE = "slot.lock"
 POST_LOCK = "post.lock"
+
+
+def record_of(path: Path, root: Path) -> uuid.UUID | None:
+    """The record id the first folder of a path names under a root, or none for a path outside
+    the root and for one whose first folder is not a record id."""
+    try:
+        first = path.resolve().relative_to(root.resolve()).parts[0]
+    except (ValueError, IndexError):
+        return None
+    try:
+        return uuid.UUID(first)
+    except ValueError:
+        return None
 
 
 class RecordFolder[T: BaseModel]:
@@ -60,13 +73,11 @@ class RecordFolder[T: BaseModel]:
         return self._parsed(record)
 
     def write(self, record_id: uuid.UUID, record: T) -> T:
-        """The record written, staged beside its file and moved over it within the bounded
-        retry, so a reader sees the whole of one version or the whole of the other."""
+        """The record written whole: its JSON staged beside its file and moved over it within the
+        bounded retry, so a reader sees the whole of one version or the whole of the other."""
         folder = self.folder(record_id)
         folder.mkdir(parents=True, exist_ok=True)
-        staged = folder / f"{self.record_file}.tmp"
-        staged.write_bytes(record.model_dump_json(indent=1).encode("utf-8"))
-        replace(staged, folder / self.record_file)
+        write_whole(folder / self.record_file, record.model_dump_json(indent=1).encode("utf-8"))
         return record
 
     def patch(self, record_id: uuid.UUID, change: Callable[[T], T]) -> T:
@@ -126,15 +137,7 @@ class RecordFolder[T: BaseModel]:
 
     def _record_of(self, path: Path) -> uuid.UUID | None:
         """The record a written path belongs to, or none for a path that names no record."""
-        folder = self.root / self.kind
-        try:
-            first = path.resolve().relative_to(folder.resolve()).parts[0]
-        except (ValueError, IndexError):
-            return None
-        try:
-            return uuid.UUID(first)
-        except ValueError:
-            return None
+        return record_of(path, self.root / self.kind)
 
     def slot(self) -> AsyncFileLock:
         """The single slot every process over this directory takes, released when its holder's
@@ -150,8 +153,8 @@ class RecordFolder[T: BaseModel]:
         try:
             return self.model.model_validate_json(read_bytes(record))
         except ValidationError as error:
-            reason = field_error(error)
-            raise Unavailable(
-                f"{self.noun} {record.parent.name} cannot be read by this version: {reason}",
-                hint=f"remove {record.parent} to list and start {self.noun}s again",
+            raise unreadable(
+                f"{self.noun} {record.parent.name}",
+                error,
+                f"remove {record.parent} to list and start {self.noun}s again",
             ) from error

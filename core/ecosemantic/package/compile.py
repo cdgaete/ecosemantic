@@ -7,10 +7,18 @@ from typing import cast
 from ecosemantic.engine.background import Background, Factors, Rows
 from ecosemantic.model.entities import Method, Uncertainty
 from ecosemantic.model.refs import Database
-from ecosemantic.package.background import Dataset, Import, require_linked
+from ecosemantic.package.background import (
+    Dataset,
+    ExchangeKind,
+    Import,
+    exchange_kind,
+    require_linked,
+)
+
+Entry = tuple[str, str, float, bool, Uncertainty | None]
 
 
-def _rows(entries: list[tuple[str, str, float, bool, Uncertainty | None]]) -> Rows:
+def _rows(entries: list[Entry]) -> Rows:
     rows, columns, amounts, flipped, uncertainties = (
         zip(*entries, strict=True) if entries else ((), (), (), (), ())
     )
@@ -25,20 +33,26 @@ def compile_background(imported: Import, database: Database) -> Background:
     exchange its flow's row, and a factor its category and flow; every row keeps its
     distribution. Invalid while an input is unlinked."""
     require_linked(imported)
-    technosphere: list[tuple[str, str, float, bool, Uncertainty | None]] = []
-    biosphere: list[tuple[str, str, float, bool, Uncertainty | None]] = []
+    technosphere: list[Entry] = []
+    biosphere: list[Entry] = []
+    written: dict[ExchangeKind, list[Entry]] = {
+        "production": technosphere,
+        "technosphere": technosphere,
+        "biosphere": biosphere,
+    }
     for (_, code), dataset in imported.datasets.items():
         for row in cast(list[Dataset], dataset["exchanges"]):
-            kind = row["type"]
+            kind = exchange_kind(row, str(dataset["name"]))
             _, target = cast(tuple[str, str], row["input"])
-            entry = (
-                target,
-                code,
-                float(cast(float, row["amount"])),
-                kind == "technosphere",
-                cast("Uncertainty | None", row["uncertainty"]),
+            written[kind].append(
+                (
+                    target,
+                    code,
+                    float(cast(float, row["amount"])),
+                    kind == "technosphere",
+                    cast("Uncertainty | None", row["uncertainty"]),
+                )
             )
-            (biosphere if kind == "biosphere" else technosphere).append(entry)
     methods = [Method.of(method.key, method.unit) for method in imported.methods]
     factors = [
         (method.id, flow, value)

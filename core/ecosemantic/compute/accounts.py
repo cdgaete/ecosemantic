@@ -46,7 +46,19 @@ def without_credentials(environ: Mapping[str, str]) -> dict[str, str]:
     return {name: value for name, value in environ.items() if not name.startswith(PREFIXES)}
 
 
+def account_variables(kind: CredentialKind) -> str:
+    """The variables one account kind travels in, and the token an account with a second factor
+    takes."""
+    username, password, token = VARIABLES[kind]
+    variables = f"{username} and {password}"
+    if token is None:
+        return variables
+    return f"{variables} (and {token} for an account with a second factor)"
+
+
 def missing(kind: CredentialKind) -> str:
-    """What a person does to give a source the account it needs."""
-    username, password, _token = VARIABLES[kind]
-    return f"set {username} and {password}, or enter the account on the page's Databases editor"
+    """What a person does to give a source the account it needs when no terminal asks for it."""
+    return (
+        "run this command in a terminal to be asked for it, or set "
+        f"{account_variables(kind)} before running it"
+    )

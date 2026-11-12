@@ -77,6 +77,12 @@ describe('menus', () => {
     expect(labels('collapsed')).toEqual(['Beside the graph', 'Expand'])
   })
 
+  it('offer the three themes in order, the current one ticked', () => {
+    const themes = find(all({ systemId: 's1', theme: 'cobalt' }), 'theme').items ?? []
+    expect(themes.map((item) => item.key)).toEqual(['theme-cobalt', 'theme-ecosemantic', 'theme-openlca'])
+    expect(themes.map((item) => item.label)).toEqual(['✓ Cobalt', 'EcoSemantic', 'openLCA'])
+  })
+
   it('count the open requests', () => {
     expect(find(all({ systemId: 's1', openRequests: 2 }), 'open-requests').label).toBe('Open requests (2)')
   })

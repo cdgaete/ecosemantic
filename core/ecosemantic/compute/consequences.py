@@ -9,7 +9,7 @@ from collections.abc import Mapping, Sequence
 from pydantic import BaseModel, Field
 
 from ecosemantic.compute.links import link_pin, pins
-from ecosemantic.model.canonical import base_pin
+from ecosemantic.model.canonical import stale
 from ecosemantic.model.entities import ProductSystem
 from ecosemantic.model.refs import BackgroundRef, SystemRef
 from ecosemantic.model.validation import Issue, validate
@@ -50,8 +50,7 @@ def consequences(
     `treatments` names the background's treatments."""
     if before is None:
         return Consequences(issues=_stated(after, treatments))
-    was, now = base_pin(before), base_pin(after)
-    staled = sorted(s.name for s in after.scenarios if s.base_hash == was != now)
+    staled = sorted(s.name for s in after.scenarios if not stale(before, s) and stale(after, s))
     behind = [
         LinkBehind(product_system_id=system.id, name=system.name)
         for system in linking

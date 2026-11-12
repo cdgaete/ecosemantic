@@ -10,6 +10,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from ecosemantic.errors import Invalid
+from ecosemantic.files import write_whole
 
 APP = "EcoSemantic Engine"
 TRAY_ARGUMENTS = "-X utf8 -m ecosemantic.tray"
@@ -59,16 +60,8 @@ def home_for(environ: Mapping[str, str]) -> Home:
 
 
 def written(path: Path, text: str) -> None:
-    r"""Write a small file whole: a temporary file beside it with `\n` line endings, then replaced,
-    so a reader never sees half of it. A write or a replace that fails removes the temporary file
-    and raises."""
-    staged = path.with_name(f".{path.name}.tmp")
-    try:
-        staged.write_text(text, encoding="utf-8", newline="\n")
-        staged.replace(path)
-    except OSError:
-        staged.unlink(missing_ok=True)
-        raise
+    r"""Write a small file whole, its `\n` line endings kept, so a reader never sees half of it."""
+    write_whole(path, text.encode("utf-8"))
 
 
 class TraySettings(BaseModel):

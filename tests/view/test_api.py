@@ -27,7 +27,7 @@ from ecosemantic.model.entities import (
     method_id,
 )
 from ecosemantic.model.refs import ElementaryFlowRef
-from ecosemantic.ports.types import InventoryRow, Layout, Spot, System
+from ecosemantic.ports.types import InventoryRow, Layout, MonteCarloConfig, Spot, System
 from ecosemantic.view.api import call_tool
 from ecosemantic.view.app import build_view
 from tests.fixture_data import FIXTURE_BIO, FIXTURE_DB, FLOW_IDS, GWP
@@ -61,6 +61,14 @@ def test_list_get_log_and_versions(
     assert version.status_code == 200 and version.json()["id"] == system_id
     missing = client.get(f"/api/product-systems/{system_id}/versions/{'0' * 64}")
     assert missing.status_code == 404 and missing.json()["error"] == "not_found"
+
+
+def test_the_simulation_defaults_are_the_configuration_the_engine_samples(
+    client: TestClient,
+) -> None:
+    answered = client.get("/api/monte-carlo")
+    assert answered.status_code == 200, answered.text
+    assert answered.json()["value"] == MonteCarloConfig().model_dump(mode="json")
 
 
 def test_a_tool_error_keeps_its_envelope(client: TestClient) -> None:
@@ -280,7 +288,16 @@ async def test_the_layout_answers_the_arrangement_and_keeps_what_is_posted(
     with TestClient(build_view(context, full_server, static=NOWHERE)) as client:
         first = client.get(f"/api/product-systems/{system_id}/layout").json()["value"]
         # the arrangement graph_layout answers an agent
-        assert set(first) == {"map", "cards", "edges", "troubles", "score", "bounds", "scaling"}
+        assert set(first) == {
+            "map",
+            "cards",
+            "edges",
+            "troubles",
+            "score",
+            "bounds",
+            "scaling",
+            "card",
+        }
         cards = first["cards"]
         assert {p["code"] for p in cards} == {p.code for p in fixture_system_stored.processes}
         assert not any(p["held"] for p in cards)

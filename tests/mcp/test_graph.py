@@ -38,7 +38,16 @@ async def test_the_map_names_every_card_and_says_what_is_wrong(
     assert {row["code"] for row in answer["cards"]} == {
         p.code for p in fixture_system_stored.processes
     }
-    assert set(answer) == {"map", "cards", "edges", "troubles", "score", "bounds", "scaling"}
+    assert set(answer) == {
+        "map",
+        "cards",
+        "edges",
+        "troubles",
+        "score",
+        "bounds",
+        "scaling",
+        "card",
+    }
     assert all(t["kind"] != "cards_overlap" for t in answer["troubles"])
     assert all(len(e["points"]) >= 2 for e in answer["edges"])
     assert answer["bounds"]["width"] > 0

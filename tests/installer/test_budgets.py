@@ -27,7 +27,6 @@ from ecosemantic.backends.native.store import (
     build_dir,
     migrated_name,
     served_build,
-    slug,
 )
 from ecosemantic.databases.bafu import profile as bafu_profile
 from ecosemantic.databases.ecoinvent import profile as ecoinvent_profile
@@ -35,6 +34,7 @@ from ecosemantic.databases.uslci import profile as uslci_profile
 from ecosemantic.databases.uslci.download import _split
 from ecosemantic.installs.sources import downloads_in
 from ecosemantic.local import build_context
+from ecosemantic.model.refs import slug
 from ecosemantic.package.background import read_background
 from ecosemantic.ports.types import checked_agent
 from ecosemantic.serve import STOP_NONCE_FILE, YIELD_NONCE_FILE, nonce_path, token_for
@@ -269,7 +269,7 @@ def test_the_budgets_cover_the_longest_paths_the_engine_writes(
     finally:
         context.close()
     assert token_for(models_dir, True) is not None
-    build_id = served_build(databases_dir / DATABASES_DIR / slug(name))
+    build_id = served_build(databases_dir / DATABASES_DIR / slug(name, "-"))
     assert build_id is not None
     tail = longest_path(build_dir(databases_dir, name, build_id))[0]
     migrated = build_dir(databases_dir, name, migrated_name("0" * 64)) / tail

@@ -16,7 +16,6 @@ from ecosemantic.databases.ecoinvent.masterdata import (
 from ecosemantic.databases.ecoinvent.overview import read_urls
 from ecosemantic.databases.ecoinvent.profile import Profile, database_name
 from ecosemantic.databases.ecoinvent.release import Release
-from ecosemantic.errors import NotSupported
 from ecosemantic.model import units
 from ecosemantic.package.base_writer import BaseDataset, BaseMethod
 
@@ -58,15 +57,6 @@ class Probe:
             and len(self.unmatched_factors) == profile.expected_unmatched_factors
             and all(feature in profile.read_as_documentation for feature in self.documentation)
         )
-
-
-def _known(symbol: str) -> bool:
-    """Whether the core's unit registry knows a symbol."""
-    try:
-        units.by_symbol(symbol)
-    except NotSupported:
-        return False
-    return True
 
 
 @dataclass(frozen=True)
@@ -127,7 +117,7 @@ def probe_read(release: Release, profile: Profile, read: Read) -> Probe:
         urls_without_dataset=[key for key in urls if key not in codes],
         documentation=findings.documentation,
         units_without_use=sorted(
-            symbol for symbol in declared if symbol not in used and not _known(symbol)
+            symbol for symbol in declared if symbol not in used and not units.knows(symbol)
         ),
         compartments=[
             (compartment, subcompartment, flow_type(compartment))

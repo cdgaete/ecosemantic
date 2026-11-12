@@ -7,7 +7,7 @@ import pytest
 from ecosemantic.compute.edits import patch_product_system
 from ecosemantic.compute.overrides import apply_case, apply_scenario, apply_variant, case_pin
 from ecosemantic.errors import Invalid, NotFound, StaleScenario
-from ecosemantic.model.canonical import base_pin, content_hash
+from ecosemantic.model.canonical import base_pin, content_hash, stale
 from ecosemantic.model.entities import (
     Case,
     ExchangeOverride,
@@ -16,6 +16,7 @@ from ecosemantic.model.entities import (
     Scenario,
 )
 from ecosemantic.model.refs import BackgroundRef, ForegroundRef
+from ecosemantic.model.validation import validate
 from tests.conftest import ORGANIC
 
 
@@ -195,3 +196,27 @@ def test_a_scenario_applies_while_its_pin_is_the_base_as_it_now_stands(
         system.scenarios[0].base_hash,
         base_pin(edited),
     )
+
+
+def _scenarios_current(system: ProductSystem) -> bool:
+    [case] = [c for c in validate(system).cases if c.id == "scenarios_current"]
+    return case.passed
+
+
+def test_validation_and_apply_variant_agree_on_a_scenario_s_currency(
+    product_system: ProductSystem,
+) -> None:
+    system = product_system.model_copy(deep=True, update={"hash": content_hash(product_system)})
+    scenario = system.scenarios[0]
+    assert not stale(system, scenario)
+    assert _scenarios_current(system)
+    apply_variant(system, scenario.name)
+    moved = system.model_copy(deep=True)
+    moved.process("fabric").exchanges[2].amount = 3.0
+    moved.hash = content_hash(moved)
+    assert stale(moved, scenario)
+    report = validate(moved)
+    assert not _scenarios_current(moved)
+    assert "scenario_behind" in {e.code for e in report.errors}
+    with pytest.raises(StaleScenario):
+        apply_variant(moved, scenario.name)

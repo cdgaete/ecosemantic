@@ -21,10 +21,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ecosemantic.errors import Invalid, NotSupported, Unavailable
+from ecosemantic.files import write_whole
+from ecosemantic.settings import DISPLAYS
 
 SERVER = "ecosemantic"
 CLIENTS = ("claude-desktop", "cursor", "vscode")
-DISPLAYS = ("DISPLAY", "WAYLAND_DISPLAY")
 
 
 @dataclass(frozen=True)
@@ -129,9 +130,9 @@ def connect(client: str, workspace: Path | None, command: Path | None) -> dict[s
     document, servers = held(where)
     replaced = SERVER in servers
     servers = {**servers, SERVER: entry(where, started, os.environ)}
-    staged = where.path.with_name(where.path.name + ".partial")
-    staged.write_text(json.dumps({**document, where.key: servers}, indent=2) + "\n", "utf-8")
-    os.replace(staged, where.path)
+    write_whole(
+        where.path, (json.dumps({**document, where.key: servers}, indent=2) + "\n").encode("utf-8")
+    )
     return {
         "client": client,
         "path": str(where.path),

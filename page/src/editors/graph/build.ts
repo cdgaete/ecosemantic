@@ -1,6 +1,6 @@
 import { MarkerType, type Edge, type Node, type NodeChange } from '@xyflow/react'
 import type { EdgeText } from './FlowEdge'
-import type { Label, LogEntry, Placement, Process, ProductSystem } from '@/api/types'
+import type { Arrangement, CardGeometry, Exchange, Label, LogEntry, Placement, Process, ProductSystem, Route } from '@/api/types'
 
 export interface ProcessNodeData extends Record<string, unknown> {
   process: Process
@@ -10,6 +10,7 @@ export interface ProcessNodeData extends Record<string, unknown> {
   outline: string | null
   systemId: string
   placement: Placement
+  card: CardGeometry
 }
 
 export type ProcessNodeType = Node<ProcessNodeData, 'process'>
@@ -19,17 +20,16 @@ export interface LinkedNodeData extends Record<string, unknown> {
   atHash: string | null
   case: string | null
   placement: Placement
+  card: CardGeometry
 }
 
 export type LinkedNodeType = Node<LinkedNodeData, 'linked'>
 
 export type GraphNode = ProcessNodeType | LinkedNodeType
 
-type Unplaced<N extends GraphNode> = Omit<N, 'data'> & { data: { [K in keyof N['data'] as K extends 'placement' ? never : K]: N['data'][K] } }
+type Unplaced<N extends GraphNode> = Omit<N, 'data'> & { data: { [K in keyof N['data'] as K extends 'placement' | 'card' ? never : K]: N['data'][K] } }
 
 export type BuiltNode = Unplaced<ProcessNodeType> | Unplaced<LinkedNodeType>
-
-export const linkedCode = (productSystemId: string) => `system:${productSystemId}`
 
 export interface Hot {
   processes: Set<string>
@@ -67,6 +67,47 @@ export type Outlines = Map<string, string>
 
 const NONE: Outlines = new Map()
 
+function exchangesOf(system: ProductSystem): Map<string, Exchange> {
+  return new Map(system.processes.flatMap((process) => process.exchanges.map((exchange) => [exchange.id, exchange] as [string, Exchange])))
+}
+
+function arrows(routes: Route[], exchanges: Map<string, Exchange>, hot: Hot): Edge[] {
+  return routes.flatMap((route) => {
+    const exchange = exchanges.get(route.exchange_id)
+    if (exchange === undefined) return []
+    return [
+      {
+        id: `flow-${route.exchange_id}`,
+        source: route.provider,
+        target: route.consumer,
+        sourceHandle: 'out',
+        targetHandle: route.exchange_id,
+        type: 'flow',
+        data: { amount: exchange.amount, unit: exchange.unit, formula: exchange.formula, points: null, rest: false, label: null },
+        markerEnd: { type: MarkerType.ArrowClosed },
+        className: hot.exchanges.has(route.exchange_id) ? 'hot' : undefined,
+      },
+    ]
+  })
+}
+
+function linkedNodes(system: ProductSystem, routes: Route[], exchanges: Map<string, Exchange>): Unplaced<LinkedNodeType>[] {
+  const codes = new Set(system.processes.map((process) => process.code))
+  const found = new Map<string, Unplaced<LinkedNodeType>>()
+  for (const route of routes) {
+    if (codes.has(route.provider) || found.has(route.provider)) continue
+    const input = exchanges.get(route.exchange_id)?.input
+    if (input?.kind !== 'system') continue
+    found.set(route.provider, {
+      id: route.provider,
+      type: 'linked',
+      position: { x: 0, y: 0 },
+      data: { productSystemId: input.product_system_id, atHash: input.at_hash, case: input.case },
+    })
+  }
+  return [...found.values()]
+}
+
 export function outlinesFrom(system: ProductSystem, entries: LogEntry[], colour: (entry: LogEntry) => string): Outlines {
   const owner = new Map<string, string>()
   for (const process of system.processes) {
@@ -92,48 +133,9 @@ function processNode(process: Process, system: ProductSystem, hot: Hot, referenc
   }
 }
 
-export function buildGraph(system: ProductSystem, hot: Hot, reference: string | null, outlines: Outlines = NONE): { nodes: BuiltNode[]; edges: Edge[] } {
+export function buildGraph(system: ProductSystem, arrangement: Arrangement, hot: Hot, reference: string | null, outlines: Outlines = NONE): { nodes: BuiltNode[]; edges: Edge[] } {
+  const exchanges = exchangesOf(system)
   const nodes: BuiltNode[] = system.processes.map((process) => processNode(process, system, hot, process.code === reference, outlines))
-  const linked = new Map<string, Unplaced<LinkedNodeType>>()
-  const linkedEdges: Edge[] = []
-  for (const process of system.processes)
-    for (const e of process.exchanges) {
-      if (e.input?.kind !== 'system') continue
-      const id = linkedCode(e.input.product_system_id)
-      if (!linked.has(id))
-        linked.set(id, { id, type: 'linked', position: { x: 0, y: 0 }, data: { productSystemId: e.input.product_system_id, atHash: e.input.at_hash, case: e.input.case } })
-      linkedEdges.push({
-        id: `flow-${e.id}`,
-        source: id,
-        target: process.code,
-        sourceHandle: 'out',
-        targetHandle: e.id,
-        type: 'flow',
-        data: { amount: e.amount, unit: e.unit, formula: e.formula, points: null, rest: false, label: null },
-        markerEnd: { type: MarkerType.ArrowClosed },
-        className: hot.exchanges.has(e.id) ? 'hot' : undefined,
-      })
-    }
-  nodes.push(...linked.values())
-  const codes = new Set(system.processes.map((p) => p.code))
-  const edges: Edge[] = system.processes.flatMap((process) =>
-    process.exchanges.flatMap((e) =>
-      e.input && e.input.kind === 'foreground' && codes.has(e.input.code)
-        ? [
-            {
-              id: `flow-${e.id}`,
-              source: e.input.code,
-              target: process.code,
-              sourceHandle: 'out',
-              targetHandle: e.id,
-              type: 'flow',
-              data: { amount: e.amount, unit: e.unit, formula: e.formula, points: null, rest: false, label: null },
-              markerEnd: { type: MarkerType.ArrowClosed },
-              className: hot.exchanges.has(e.id) ? 'hot' : undefined,
-            },
-          ]
-        : [],
-    ),
-  )
-  return { nodes, edges: [...edges, ...linkedEdges] }
+  nodes.push(...linkedNodes(system, arrangement.edges, exchanges))
+  return { nodes, edges: arrows(arrangement.edges, exchanges, hot) }
 }

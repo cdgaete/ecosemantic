@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import type { Answer, Arrangement, ProductSystem } from '@/api/types'
+import type { Answer, Arrangement, CardGeometry, ProductSystem } from '@/api/types'
 import { api } from '@/api/client'
 import { formatAmount } from '@/lib/format'
 import { layoutAnswer, placementsFor } from './placements'
@@ -116,6 +116,22 @@ describe('model graph', () => {
     const handles = new Map(Array.from(node.querySelectorAll<HTMLElement>('.react-flow__handle.target')).map((h) => [h.dataset.handleid, h.style.top]))
     for (const hidden of ['many-6', 'many-7', 'many-8']) expect(handles.get(hidden)).toBe(`${foldAnchor}px`)
     expect(handles.get('many-5')).toBe(`${foldAnchor - ROW}px`)
+  })
+
+  it('sizes the card, its header, its section labels and its rows from the geometry the layout hands it', async () => {
+    const widget = doc.processes.find((p) => p.code === 'widget')!
+    const sized: CardGeometry = { width: 321, header_height: 44, section_padding: 8, section_label: 20, row_height: 26 }
+    const base = layoutAnswer(doc)
+    rendered.layout = { ...base, value: { ...base.value, card: sized } }
+    const { container } = renderGraph(doc)
+    await waitFor(() => expect(container.querySelector('.react-flow__node[data-id="widget"]')).not.toBeNull())
+    const node = container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement
+    const card = within(node)
+    expect((node.firstElementChild as HTMLElement).style.width).toBe('321px')
+    expect((card.getByText(widget.name).closest('div') as HTMLElement).style.height).toBe('44px')
+    expect(card.getByText('›› Input flows').style.height).toBe('20px')
+    expect((node.querySelector('[data-zero]') as HTMLElement).style.height).toBe('26px')
+    rendered.layout = null
   })
 
   it('lists rows in use before rows at zero, mutes the zero ones and names them in the fold', async () => {
@@ -293,6 +309,7 @@ describe('model graph', () => {
     }
   })
   it.each([
+    ['cobalt', 'light'],
     ['ecosemantic', 'dark'],
     ['openlca', 'light'],
   ] as const)('draws the graph controls in the %s theme as xyflow %s', async (theme, mode) => {

@@ -10,15 +10,20 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
+from starlette.applications import Starlette
+from starlette.testclient import TestClient
 
 from ecosemantic.errors import Unavailable
+from ecosemantic.serve import stop_route, yield_route
 from ecosemantic.settings.handover import (
     LOOPBACK_ADDRESS,
     SERVICE,
     STOP_NONCE_FILE,
+    YIELD_NONCE_FILE,
     BridgeHealth,
     Health,
     asked_with_nonce,
+    proven,
     read_health,
 )
 
@@ -158,6 +163,25 @@ def test_the_nonce_reaches_the_route_from_a_private_temporary_file(
     assert written.name.startswith(f".{STOP_NONCE_FILE}.")
     assert mode == 0o600
     assert list(tmp_path.iterdir()) == []
+
+
+def test_a_nonce_of_any_value_is_refused_not_failed(tmp_path: Path) -> None:
+    (tmp_path / STOP_NONCE_FILE).write_text("the-real-nonce", encoding="utf-8")
+    (tmp_path / YIELD_NONCE_FILE).write_text("the-real-nonce", encoding="utf-8")
+    for sent in ("é", 5):
+        assert proven(sent, tmp_path, STOP_NONCE_FILE) is False
+    ended: list[bool] = []
+    app = Starlette(
+        routes=[
+            stop_route(tmp_path, lambda: ended.append(True)),
+            yield_route(tmp_path, lambda: ended.append(True)),
+        ]
+    )
+    with TestClient(app) as client:
+        for path in ("/stop", "/yield"):
+            for sent in ("é", 5):
+                assert client.post(path, json={"nonce": sent}).status_code == 401
+    assert ended == []
 
 
 ENGINE = {

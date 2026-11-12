@@ -9,9 +9,9 @@ from datetime import datetime
 from pathlib import Path
 
 from filelock import FileLock
-from pydantic import ValidationError
 
-from ecosemantic.errors import NotFound, Unavailable, field_error
+from ecosemantic.errors import NotFound
+from ecosemantic.package.sidecar import parsed_lines
 from ecosemantic.ports.types import (
     AgentSummary,
     Call,
@@ -64,7 +64,9 @@ class FilesystemActivity:
         for file in files:
             if file.is_file():
                 with self._lock(file.name.removesuffix(SUFFIX)):
-                    calls.extend(_parsed(file))
+                    calls.extend(
+                        parsed_lines(file, Call, f"remove {file} to read the activity again")
+                    )
         return calls
 
     async def record(self, draft: CallDraft) -> Call:
@@ -88,18 +90,3 @@ class FilesystemActivity:
 
     async def list_agents(self) -> list[AgentSummary]:
         return agents_of(await asyncio.to_thread(self._read, None))
-
-
-def _parsed(file: Path) -> list[Call]:
-    """A file's calls, or Unavailable naming the file, the line and the first field this version
-    cannot read in it."""
-    calls: list[Call] = []
-    for number, line in enumerate(file.read_text(encoding="utf-8").splitlines(), start=1):
-        try:
-            calls.append(Call.model_validate_json(line))
-        except ValidationError as error:
-            raise Unavailable(
-                f"{file.name} line {number} cannot be read by this version: {field_error(error)}",
-                hint=f"remove {file} to read the activity again",
-            ) from error
-    return calls

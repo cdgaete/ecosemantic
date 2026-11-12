@@ -14,8 +14,6 @@ from pathlib import Path
 
 from filelock import FileLock, Timeout
 
-from ecosemantic.bridge.credentials import store_for
-from ecosemantic.bridge.start import DEFAULT_BRIDGE_URL
 from ecosemantic.errors import Invalid, Unavailable
 from ecosemantic.settings import derived_port
 from ecosemantic.settings.handover import LOOPBACK_ADDRESS, Health, ask_to_stop, read_health
@@ -199,10 +197,11 @@ def _pid(home: Home) -> int | None:
 def main(argv: list[str] | None = None, environ: Mapping[str, str] | None = None) -> int:
     """Run the tray: a second one for this folder leaves at once, `--quit` ends the first one, and
     the tray that runs starts the engine, signing this folder in after it where the bridge is kept
-    on and no credential is kept. The tray that runs rotates its log under the lock, before any
+    on and nothing gives it a sign-in. The tray that runs rotates its log under the lock, before any
     stream opens it, since Windows renames no file another process holds open; a rotation the OS
     refuses is written as the first line this run writes, and the tray runs on."""
-    home = home_for(os.environ if environ is None else environ)
+    environment = os.environ if environ is None else environ
+    home = home_for(environment)
     arguments = _parser().parse_args(sys.argv[1:] if argv is None else argv)
     if arguments.quit:
         streams_to(home)
@@ -238,12 +237,10 @@ def main(argv: list[str] | None = None, environ: Mapping[str, str] | None = None
             console = interpreter()
         except Invalid as error:
             return _refusal(home, platform, str(error))
-        try:
-            store = store_for(DEFAULT_BRIDGE_URL, settings.models, None)
-        except Unavailable as error:
-            return _refusal(home, platform, str(error))
         engine = _engine(home, platform, settings, console)
-        tray = Tray(engine=engine, platform=platform, home=home, python=console, store=store)
+        tray = Tray(
+            engine=engine, platform=platform, home=home, python=console, environ=environment
+        )
         try:
             tray.start()
         except (*REFUSALS, OSError) as refusal:

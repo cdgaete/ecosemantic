@@ -1,6 +1,6 @@
 [project]
 name = "ecosemantic"
-version = "0.1.15"
+version = "0.1.16"
 description = "Agent-driven life cycle assessment on your own machine: the command and the local composition."
 requires-python = ">=3.12"
 license = "PolyForm-Noncommercial-1.0.0"
@@ -20,12 +20,12 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "ecosemantic-engine==0.1.15",
-    "ecosemantic-relay==0.1.15",
-    "ecosemantic-core==0.1.15",
-    "ecosemantic-databases[ecoinvent]==0.1.15",
-    "ecosemantic-mcp==0.1.15",
-    "ecosemantic-view==0.1.15",
+    "ecosemantic-engine==0.1.16",
+    "ecosemantic-relay==0.1.16",
+    "ecosemantic-core==0.1.16",
+    "ecosemantic-databases[ecoinvent]==0.1.16",
+    "ecosemantic-mcp==0.1.16",
+    "ecosemantic-view==0.1.16",
     "fastmcp>=4,<5",
     "fastmcp-slim>=4,<5",
     "httpx2>=2.12,<3",
@@ -42,7 +42,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-mkl = ["ecosemantic-engine[mkl]==0.1.15"]
+mkl = ["ecosemantic-engine[mkl]==0.1.16"]
 tray = [
     "filelock>=3.29.5,<4",
     "pystray==0.19.5; sys_platform == 'win32'",

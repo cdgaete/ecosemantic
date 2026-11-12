@@ -28,7 +28,6 @@ from ecosemantic.backends.native.install import install
 from ecosemantic.backends.native.inventory import NativeInventory
 from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.bridge.credentials import (
-    NO_STORE_HINT,
     Credential,
     CredentialStore,
     engine_token,
@@ -36,9 +35,11 @@ from ecosemantic.bridge.credentials import (
     store_for,
     token_variable,
 )
+from ecosemantic.bridge.credentials import (
+    status as bridge_status,
+)
 from ecosemantic.bridge.signin import CREDENTIAL_KEPT, client, discover, sign_in, sign_out
 from ecosemantic.bridge.start import (
-    DEFAULT_BRIDGE_URL,
     BridgeStart,
     bridge_start,
     engine_name,
@@ -63,7 +64,7 @@ from ecosemantic.cli.text import (
     telemetry_text,
     terms_text,
 )
-from ecosemantic.engine.solver import SOLVERS
+from ecosemantic.engine.solver import DEFAULT_SOLVER, SOLVERS
 from ecosemantic.errors import (
     Conflict,
     EcoSemanticError,
@@ -72,6 +73,7 @@ from ecosemantic.errors import (
     StaleScenario,
     Unauthorised,
     Unavailable,
+    build_label,
     error_payload,
 )
 from ecosemantic.installs.sources import install_source
@@ -101,7 +103,13 @@ from ecosemantic.ports.types import (
     SourceName,
     source_credential,
 )
-from ecosemantic.settings import TRANSPORTS, ViewSettings, settings_from
+from ecosemantic.settings import (
+    TRANSPORTS,
+    ViewSettings,
+    bridge_address,
+    credential_file,
+    settings_from,
+)
 from ecosemantic.tables.reader import assemble
 from ecosemantic.tables.results import (
     write_contribution,
@@ -132,7 +140,7 @@ def _parser() -> argparse.ArgumentParser:
         sub.add_argument(
             "--solver",
             choices=SOLVERS,
-            default="superlu",
+            default=DEFAULT_SOLVER,
             help="The solver a calculation runs on.",
         )
 
@@ -324,22 +332,6 @@ def _defaulted(args: argparse.Namespace) -> None:
             setattr(args, name, defaulted(None, defaults[name]))
 
 
-def _bridge_url(named: str | None, environ: Mapping[str, str]) -> str:
-    """The bridge a command works with: the address it names, the variable standing in for it, or
-    the bridge's own default address."""
-    if named is not None:
-        return named
-    return environ.get("ECOSEMANTIC_BRIDGE_URL", DEFAULT_BRIDGE_URL)
-
-
-def _credential_file(named: Path | None, environ: Mapping[str, str]) -> Path | None:
-    """The file the credential is kept in, when the command or its variable names one."""
-    if named is not None:
-        return named
-    held = environ.get("ECOSEMANTIC_BRIDGE_CREDENTIAL_FILE")
-    return None if held is None else Path(held)
-
-
 def _shown(code: str, address: str) -> None:
     """Show a device sign-in's code and the address the person enters it at."""
     print(f"code: {code}\naddress: {address}", file=sys.stderr, flush=True)
@@ -357,27 +349,16 @@ def _bridge(args: argparse.Namespace) -> tuple[dict[str, object], Renderer]:
 
 
 def _status(args: argparse.Namespace) -> dict[str, object]:
-    """Whether this engine is signed in to the bridge, from the store and the engine token's
-    variables alone: the handle, the page address and the engine it serves, and where the
-    credential is kept; a machine with no credential store names that and the ways that need
-    none."""
+    """Whether this engine is signed in to the bridge, as the engine token, the store at this
+    command's bridge address and this systems directory, and this command's credential file answer
+    it."""
     environ = os.environ
-    if engine_token(environ) is not None:
-        return {"signed_in": True, "where": token_variable(environ)}
-    credential_file = _credential_file(args.credential_file, environ)
-    if credential_file is None and not has_credential_store():
-        return {"signed_in": False, "where": None, "hint": NO_STORE_HINT}
-    store = store_for(_bridge_url(args.bridge_url, environ), args.systems_dir, credential_file)
-    credential = store.load()
-    if credential is None:
-        return {"signed_in": False, "where": store.where}
-    return {
-        "signed_in": True,
-        "handle": credential.handle,
-        "page": credential.page_url,
-        "engine": str(credential.engine),
-        "where": store.where,
-    }
+    return bridge_status(
+        environ,
+        args.systems_dir,
+        bridge_address(args.bridge_url, environ),
+        credential_file(args.credential_file, environ),
+    ).printed()
 
 
 def _signed_in(args: argparse.Namespace) -> dict[str, object]:
@@ -392,8 +373,8 @@ async def _signing_in(args: argparse.Namespace) -> dict[str, object]:
     from ecosemantic.serve import browser_reachable
 
     environ = os.environ
-    url = _bridge_url(args.bridge_url, environ)
-    store = store_for(url, args.systems_dir, _credential_file(args.credential_file, environ))
+    url = bridge_address(args.bridge_url, environ)
+    store = store_for(url, args.systems_dir, credential_file(args.credential_file, environ))
     async with client() as http:
         config = await discover(http, url)
         credential = await sign_in(
@@ -423,11 +404,11 @@ def _signed_out(args: argparse.Namespace) -> dict[str, object]:
         raise Invalid(
             f"{variable} names an engine token, which is revoked on the bridge's account page"
         )
-    url = _bridge_url(args.bridge_url, environ)
-    credential_file = _credential_file(args.credential_file, environ)
-    if credential_file is None and not has_credential_store():
+    url = bridge_address(args.bridge_url, environ)
+    kept = credential_file(args.credential_file, environ)
+    if kept is None and not has_credential_store():
         return {"signed_out": False, "bridge": url, "where": None}
-    store = store_for(url, args.systems_dir, credential_file)
+    store = store_for(url, args.systems_dir, kept)
     revoked = asyncio.run(_signing_out(store))
     if revoked is None:
         return {"signed_out": False, "bridge": url, "where": store.where}
@@ -448,7 +429,13 @@ async def _signing_out(store: CredentialStore) -> Credential | None:
 
 async def _compute(args: argparse.Namespace, progress: Reporter) -> dict[str, object]:
     """Score a folder's document against the named method and write one run folder."""
-    from ecosemantic.mcp.calculation import contributions_of, impact_of, inventory_of, methods_for
+    from ecosemantic.mcp.calculation import (
+        contributions_of,
+        impact_of,
+        inventory_of,
+        methods_for,
+        one_method,
+    )
     from ecosemantic.mcp.tables import result_key
 
     if not args.folder.is_dir():
@@ -459,9 +446,15 @@ async def _compute(args: argparse.Namespace, progress: Reporter) -> dict[str, ob
         progress(InstallProgress(step="scoring"))
         inventory = NativeInventory(store)
         calculation = NativeCalculation(store)
-        methods, _ = await methods_for(
-            inventory, system.database.name, args.method, args.impact_method
-        )
+        if args.contributions:
+            method, _ = await one_method(
+                inventory, system.database.name, args.method, args.impact_method
+            )
+            methods = [method]
+        else:
+            methods, _ = await methods_for(
+                inventory, system.database.name, args.method, args.impact_method
+            )
         names = [name for name in args.variants.split(",") if name]
         treatments = await treatments_in(inventory, [system])
         result = await impact_of(
@@ -539,9 +532,9 @@ async def _serve(
         await run(context, settings, args.systems_dir, meter_provider=meter_provider)
         return
     bridge = await bridge_start(
-        _bridge_url(args.bridge_url, os.environ),
+        bridge_address(args.bridge_url, os.environ),
         args.systems_dir,
-        _credential_file(args.credential_file, os.environ),
+        credential_file(args.credential_file, os.environ),
         os.environ,
         sys.stdin.isatty(),
         _browser,
@@ -716,8 +709,8 @@ def _held(data: Path, manifest: Manifest, imported: Import) -> bool:
         built_on = manifest.base.fingerprint
         if built_on is not None and held != built_on:
             raise Conflict(
-                f"{manifest.base.name!r} is held at build {str(held)[:12]}; the bundle was built "
-                f"on build {built_on[:12]}"
+                f"{manifest.base.name!r} is held at {build_label(held)}; the bundle was built "
+                f"on {build_label(built_on)}"
             )
         return True
     finally:
@@ -881,7 +874,7 @@ def main(argv: list[str] | None = None) -> int:
                 opening=False if args.no_open else None,
                 bridge=args.bridge,
                 bridge_url=args.bridge_url,
-                credential_file=args.credential_file,
+                credential_path=args.credential_file,
                 tray=args.tray,
             )
             provider = begin(os.environ, args.data_dir, settings.transport, sys.stderr)

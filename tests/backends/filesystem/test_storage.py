@@ -231,6 +231,21 @@ async def test_a_directory_without_its_sidecar_announces_nothing(
     assert not present.gone
 
 
+async def test_a_path_outside_the_root_or_naming_no_system_announces_nothing(
+    tmp_path: Path, resolver: DictResolver
+) -> None:
+    storage = FilesystemStorage(tmp_path / "store", resolver)
+    system = uuid.uuid4()
+    outside = tmp_path / "elsewhere" / str(system) / SIDECAR_DIR
+    outside.mkdir(parents=True)
+    token = storage.root / "token"
+    token.parent.mkdir(parents=True)
+    token.write_text("secret", encoding="utf-8")
+
+    for batch in ({outside}, {token}, {storage.root}, {storage.root / "not-a-system"}):
+        assert await _watch_batch(storage, batch) == [], batch
+
+
 class TestFilesystemPackages(PackageConformance):
     @pytest.fixture
     def storage(self, tmp_path: Path, resolver: DictResolver) -> FilesystemStorage:

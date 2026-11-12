@@ -8,10 +8,9 @@ from collections import deque
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 
-from ecosemantic.compute.overrides import apply_case, case_pin
+from ecosemantic.compute.overrides import apply_case, pin_under
 from ecosemantic.compute.parameters import materialize
 from ecosemantic.errors import Invalid
-from ecosemantic.model.canonical import base_pin
 from ecosemantic.model.entities import ProductSystem, state_of
 from ecosemantic.model.refs import SystemRef
 from ecosemantic.model.validation import Pin, credit_loops
@@ -123,11 +122,9 @@ def linked_credit_loops(linked: Iterable[ProductSystem]) -> list[LinkedLoop]:
 def link_pin(document: ProductSystem, ref: SystemRef) -> str | None:
     """The pin a link holds on the document it links: what the linking system merges of it, the
     case the link names or the base; None when the document does not carry that case."""
-    if ref.case is None:
-        return base_pin(document)
-    if all(c.name != ref.case for c in document.cases):
+    if ref.case is not None and not document.carries_case(ref.case):
         return None
-    return case_pin(document, document.case(ref.case))
+    return pin_under(document, ref.case)
 
 
 def pinning(

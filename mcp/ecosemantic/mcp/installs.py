@@ -16,7 +16,6 @@ from ecosemantic.mcp.effects import READ, WRITE
 from ecosemantic.mcp.envelopes import Answer, as_uuid, bound, boundary
 from ecosemantic.mcp.watcher import reap_install, watch_install
 from ecosemantic.ports.types import (
-    CredentialKind,
     DatabaseSource,
     Install,
     InstallDraft,
@@ -54,11 +53,6 @@ def _offered(context: ServerContext, source: SourceName) -> DatabaseSource:
     )
 
 
-def _article(kind: CredentialKind) -> str:
-    """One account kind as a noun phrase, with the article its name takes."""
-    return f"{'an' if kind[0] in 'aeiou' else 'a'} {kind} account"
-
-
 def _joined(clauses: Sequence[str]) -> str:
     """The clauses as one English list: commas between all but the last, and "and" before it."""
     if len(clauses) == 1:
@@ -67,12 +61,13 @@ def _joined(clauses: Sequence[str]) -> str:
 
 
 def _needs(sources: Sequence[DatabaseSource]) -> str:
-    """The sentence naming every source whose account this server does not hold, with the kind of
-    account each needs; a source that needs no account is held, so it is never among them."""
+    """The sentence naming every source whose account this server does not hold, with the phrase
+    that names the account each needs; a source that needs no account is held, so it is never
+    among them."""
     clauses = [
-        f"{source.name} needs {_article(source.credential)}"
+        f"{source.name} needs {source.account.phrase}"
         for source in sources
-        if source.credential is not None
+        if source.account is not None
     ]
     return f"{_joined(clauses)}, which this engine does not hold."
 

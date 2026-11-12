@@ -87,12 +87,40 @@
           "default": null
         },
         "value": {
-          "description": "Where every card of a product system is drawn and how every arrow runs: the map an agent\nreads, the numbers the page draws, what is wrong with the drawing and its score.",
+          "description": "Where every card of a product system is drawn and how every arrow runs: the map an agent\nreads, the numbers the page draws, what is wrong with the drawing and its score. `card` is the\ngeometry every card is drawn at.",
           "properties": {
             "bounds": {
               "additionalProperties": {
                 "type": "number"
               },
+              "type": "object"
+            },
+            "card": {
+              "description": "A card's size in the pixels the page draws it at: its width, its header, the padding around\na section and the label over its rows, and the height of one row.",
+              "properties": {
+                "header_height": {
+                  "type": "number"
+                },
+                "row_height": {
+                  "type": "number"
+                },
+                "section_label": {
+                  "type": "number"
+                },
+                "section_padding": {
+                  "type": "number"
+                },
+                "width": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "width",
+                "header_height",
+                "section_padding",
+                "section_label",
+                "row_height"
+              ],
               "type": "object"
             },
             "cards": {
@@ -154,10 +182,6 @@
                       "type": "string"
                     },
                     "type": "array"
-                  },
-                  "row_height": {
-                    "default": 22.0,
-                    "type": "number"
                   },
                   "scaled": {
                     "anyOf": [
@@ -353,7 +377,8 @@
             "troubles",
             "score",
             "bounds",
-            "scaling"
+            "scaling",
+            "card"
           ],
           "type": "object"
         },
@@ -3057,7 +3082,7 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "Decompose one impact. by='process' partitions the total over the processes that emit it, each appearing once and the parts summing to the total. by='path' nests it under the demanded process along the supply chain that caused it, with elementary flows itemised at each node. by='flow' partitions it over the substances emitted or drawn, ranked by characterised score. Same total every way. by='path' stops at max_level (default 3) and max_nodes (default 50) and folds a branch below cutoff (default 0.001) of the total into a remainder; by='process' and by='flow' answer the top_n (default 10) largest parts. Example: {\"product_system_id\": \"\u2026\", \"by\": \"path\", \"method_id\": \"m_\u2026\", \"max_level\": 4}.",
+    "description": "Decompose one impact. by='process' partitions the total over the processes that emit it, each appearing once. by='path' nests it under the demanded process along the supply chain that caused it, with elementary flows itemised at each node. by='flow' partitions it over the substances emitted or drawn, ranked by characterised score. Same total every way. by='path' stops at max_level (default 3) and max_nodes (default 50) and folds a branch below cutoff (default 0.001) of the total into a remainder; by='process' and by='flow' answer the top_n (default 10) largest parts that reach cutoff, and cut says how many parts fell below it and their share of the total. Example: {\"product_system_id\": \"\u2026\", \"by\": \"path\", \"method_id\": \"m_\u2026\", \"max_level\": 4}.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -3208,7 +3233,7 @@
           "type": "object"
         },
         "ContributionResult": {
-          "description": "One decomposition of a total over the database build `database` names: flat over\nemitters, nested over paths, or flat over flows, with the processes of each loop holding a\ncredit, whose delivery no check decides, and each exchange sending a positive amount to a\ntreatment, which runs it backwards.",
+          "description": "One decomposition of a total over the database build `database` names: flat over\nemitters, nested over paths, or flat over flows, with the processes of each loop holding a\ncredit, whose delivery no check decides, and each exchange sending a positive amount to a\ntreatment, which runs it backwards. `cut` is what the cut-off left out of a flat list, and\na tree holds its own `truncated` beside none.",
           "properties": {
             "by": {
               "enum": [
@@ -3226,6 +3251,17 @@
                 "type": "array"
               },
               "type": "array"
+            },
+            "cut": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Cut"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             },
             "database": {
               "$ref": "#/$defs/Database"
@@ -3301,6 +3337,26 @@
             "by",
             "total",
             "credit_loops"
+          ],
+          "type": "object"
+        },
+        "Cut": {
+          "description": "What a cut-off left out of a contribution list: the share of the total it was set at, how\nmany items fell under it, and their share, summed in magnitude as the cut-off compares\nthem.",
+          "properties": {
+            "below": {
+              "type": "integer"
+            },
+            "cutoff": {
+              "type": "number"
+            },
+            "share": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "cutoff",
+            "below",
+            "share"
           ],
           "type": "object"
         },
@@ -9706,12 +9762,40 @@
           "default": null
         },
         "value": {
-          "description": "Where every card of a product system is drawn and how every arrow runs: the map an agent\nreads, the numbers the page draws, what is wrong with the drawing and its score.",
+          "description": "Where every card of a product system is drawn and how every arrow runs: the map an agent\nreads, the numbers the page draws, what is wrong with the drawing and its score. `card` is the\ngeometry every card is drawn at.",
           "properties": {
             "bounds": {
               "additionalProperties": {
                 "type": "number"
               },
+              "type": "object"
+            },
+            "card": {
+              "description": "A card's size in the pixels the page draws it at: its width, its header, the padding around\na section and the label over its rows, and the height of one row.",
+              "properties": {
+                "header_height": {
+                  "type": "number"
+                },
+                "row_height": {
+                  "type": "number"
+                },
+                "section_label": {
+                  "type": "number"
+                },
+                "section_padding": {
+                  "type": "number"
+                },
+                "width": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "width",
+                "header_height",
+                "section_padding",
+                "section_label",
+                "row_height"
+              ],
               "type": "object"
             },
             "cards": {
@@ -9773,10 +9857,6 @@
                       "type": "string"
                     },
                     "type": "array"
-                  },
-                  "row_height": {
-                    "default": 22.0,
-                    "type": "number"
                   },
                   "scaled": {
                     "anyOf": [
@@ -9972,7 +10052,8 @@
             "troubles",
             "score",
             "bounds",
-            "scaling"
+            "scaling",
+            "card"
           ],
           "type": "object"
         },
@@ -12594,8 +12675,33 @@
         },
         "value": {
           "items": {
-            "description": "A source an install comes from: the versions its profiles pin, the system models it holds,\nthe credential it needs, whether it has terms to accept, and whether its credential is held.",
+            "description": "A source an install comes from: the versions its profiles pin, the system models it holds,\nthe credential it needs, whether it has terms to accept, and whether its credential is held.\n`account` is that credential's name and phrase, none when its install needs no account.",
             "properties": {
+              "account": {
+                "anyOf": [
+                  {
+                    "description": "An account kind's name and the phrase that names one, as Python and the page write them.",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "phrase": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "phrase"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The name and phrase of the account this source's install needs.",
+                "readOnly": true
+              },
               "credential": {
                 "anyOf": [
                   {
@@ -12644,7 +12750,8 @@
               "versions",
               "system_models",
               "credential",
-              "terms"
+              "terms",
+              "account"
             ],
             "type": "object"
           },

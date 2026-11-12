@@ -39,7 +39,7 @@ OLCA_ENCODINGS = (
 )
 LAYERS = (
     ("errors", "relay"),
-    ("model",),
+    ("model", "files", "access"),
     ("engine", "ports", "quantity"),
     ("geometry", "compute", "events"),
     ("routes", "scaling", "package", "tables"),
@@ -56,6 +56,7 @@ SURFACES = {"view": "view/", "cli": "cli/", "workspace": "workspace/"}
 CALLABLE_BELOW_MCP: dict[str, frozenset[str]] = {
     "view": frozenset(
         {
+            "ecosemantic.access.secret_matches",
             "ecosemantic.errors.error_payload",
             "ecosemantic.errors.error_status",
             "ecosemantic.events.pump_installs",
@@ -76,7 +77,9 @@ CALLABLE_BELOW_MCP: dict[str, frozenset[str]] = {
             "ecosemantic.backends.native.install.install",
             "ecosemantic.compute.accounts.account_from",
             "ecosemantic.compute.accounts.missing",
+            "ecosemantic.errors.build_label",
             "ecosemantic.errors.error_payload",
+            "ecosemantic.files.write_whole",
             "ecosemantic.package.background.read_background",
             "ecosemantic.package.manifest.read_manifest",
             "ecosemantic.package.model_package.import_model_package",
@@ -184,6 +187,33 @@ def test_layout_is_pure() -> None:
         tree, "ecosemantic.view", "ecosemantic.backends", "ecosemantic.mcp", "ecosemantic.runs"
     )
     assert not offenders
+
+
+STAGED_NAMES = frozenset({"staged", "staging", "partial", "temporary"})
+
+
+def replaces_a_file(tree: ast.Module) -> list[int]:
+    """Each line a module replaces a file at: `os.replace`, or `.replace(` on a staged file."""
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        held = node.func.value
+        if node.func.attr != "replace" or not isinstance(held, ast.Name):
+            continue
+        if held.id == "os" or held.id in STAGED_NAMES:
+            found.append(node.lineno)
+    return found
+
+
+def test_no_source_replaces_a_file_outside_files() -> None:
+    offenders = sorted(
+        f"{path}:{line}"
+        for path, tree in modules().items()
+        if not path.startswith("files/")
+        for line in replaces_a_file(tree)
+    )
+    assert offenders == [], offenders
 
 
 def test_no_mcp_module_binds_the_backends() -> None:

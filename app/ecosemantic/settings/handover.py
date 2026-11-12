@@ -7,7 +7,6 @@ Nothing here imports the server, the page or the tools, so a tray reads it witho
 
 from __future__ import annotations
 
-import hmac
 import http.client
 import json
 import os
@@ -19,7 +18,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ValidationError
 
+from ecosemantic.access import secret_matches
 from ecosemantic.errors import Unavailable, field_error
+from ecosemantic.files import replace
 
 UNSPECIFIED = ("0.0.0.0", "::")
 LOOPBACK_ADDRESS = "127.0.0.1"
@@ -107,11 +108,11 @@ def read_nonce(systems_dir: Path, nonce_file: str) -> str:
         return ""
 
 
-def proven(sent: str, systems_dir: Path, nonce_file: str) -> bool:
+def proven(sent: object, systems_dir: Path, nonce_file: str) -> bool:
     """Whether a request's nonce is the one written in this folder, which proves the caller can
     write there."""
     held = read_nonce(systems_dir, nonce_file)
-    return bool(held) and hmac.compare_digest(sent, held)
+    return bool(held) and secret_matches(sent, held)
 
 
 def asked_with_nonce(systems_dir: Path, nonce_file: str, url: str) -> dict[str, object] | None:
@@ -146,7 +147,7 @@ def _staged(stored: Path, nonce: str) -> None:
     try:
         with os.fdopen(handle, "w", encoding="utf-8") as opened:
             opened.write(nonce)
-        os.replace(staged, stored)
+        replace(staged, stored)
     except OSError:
         staged.unlink(missing_ok=True)
         raise

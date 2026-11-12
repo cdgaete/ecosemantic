@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import csv
+import uuid
 from pathlib import Path
 
+import pytest
 import yaml
 
+from ecosemantic.errors import Invalid
 from ecosemantic.model.canonical import content_hash
 from ecosemantic.model.entities import ProductSystem
 from ecosemantic.model.refs import slug
 from ecosemantic.tables.folder import (
     FORMULA_COLUMNS,
     LITERAL_COLUMNS,
+    MODEL_FILE,
     folder_name,
     read_model,
     write_folder,
@@ -139,3 +143,19 @@ def test_the_schema_names_the_columns_the_tables_carry(
         with (folder / "inputs" / file).open(newline="", encoding="utf-8") as handle:
             assert next(csv.reader(handle)) == columns
         assert list(schema["files"][file]["columns"]) == columns
+
+
+def test_a_model_with_two_productions_is_invalid(
+    tmp_path: Path, product_system: ProductSystem
+) -> None:
+    folder = write_folder(tmp_path, product_system)
+    path = folder / MODEL_FILE
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    reference = next(p for p in raw["processes"] if p["code"] == product_system.reference_process)
+    production = next(e for e in reference["exchanges"] if e["type"] == "production")
+    reference["exchanges"].append(production | {"id": str(uuid.uuid4()), "amount": 3.0})
+    path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    with pytest.raises(Invalid) as caught:
+        read_model(folder)
+    assert "is not a product system" in str(caught.value)
+    assert "has 2 production exchanges" in str(caught.value)

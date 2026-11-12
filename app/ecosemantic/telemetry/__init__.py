@@ -34,6 +34,7 @@ from opentelemetry.sdk.metrics.export import (
 from opentelemetry.sdk.resources import Resource
 
 from ecosemantic.errors import Invalid, Unavailable
+from ecosemantic.files import replace
 from ecosemantic.settings import Transport
 
 SWITCH = "ECOSEMANTIC_TELEMETRY"
@@ -115,7 +116,7 @@ def _write(data_dir: Path, held: dict[str, object]) -> None:
         descriptor, temporary = tempfile.mkstemp(dir=data_dir, prefix=f"{FILE}.")
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
             json.dump(held, handle)
-        os.replace(temporary, path)
+        replace(Path(temporary), path)
     except OSError as error:
         raise Unavailable(
             f"cannot write {path}: {error.strerror}",

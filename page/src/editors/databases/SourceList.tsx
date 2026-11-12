@@ -1,11 +1,10 @@
 import type { DatabaseSource, SourceName } from '@/api/types'
 import { cn } from '@/lib/utils'
 import { Icon } from '@/window/Icon'
-import { ACCOUNT_NAMES } from './account'
 
 function requirement(source: DatabaseSource): string {
   const parts = [source.versions.length > 0 ? source.versions.join(', ') : 'a zip you hold']
-  parts.push(source.credential === null ? 'no account' : ACCOUNT_NAMES[source.credential].phrase)
+  parts.push(source.account === null ? 'no account' : source.account.phrase)
   if (source.credential !== null && source.held) parts.push('account saved')
   if (source.terms) parts.push('terms to accept')
   return parts.join(' · ')

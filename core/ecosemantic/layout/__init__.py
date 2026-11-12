@@ -20,14 +20,12 @@ from ecosemantic.geometry import (
     card_size,
     link_texts,
     linked_card,
-    linked_code,
     links,
     ports,
     rows,
     shown_inputs,
 )
 from ecosemantic.model.entities import Process, ProductSystem
-from ecosemantic.model.refs import ForegroundRef, SystemRef
 from ecosemantic.ports.types import Side
 from ecosemantic.routes import route
 from ecosemantic.troubles import score, troubles
@@ -66,26 +64,15 @@ def _linked_anatomy() -> _Anatomy:
     )
 
 
-def providers_of(process: Process) -> list[str]:
-    """The cards that feed one process: the processes of its product system by code, and each
-    linked system by its card's key."""
-    found: list[str] = []
-    for e in process.exchanges:
-        if isinstance(e.input, ForegroundRef):
-            found.append(e.input.code)
-        elif isinstance(e.input, SystemRef) and linked_code(e.input) not in found:
-            found.append(linked_code(e.input))
-    return found
-
-
 def nodes(system: ProductSystem) -> dict[str, list[str]]:
-    """Every card of a drawing with the cards that feed it: each process, and each linked
-    system once, which nothing in this system feeds."""
-    found = {p.code: providers_of(p) for p in system.processes}
-    for providers in list(found.values()):
-        for provider in providers:
-            if provider.startswith(LINKED):
-                found.setdefault(provider, [])
+    """Every card of a drawing with the cards that feed it: the providers `links` gives each
+    process once, in its order, and each linked system once, which nothing here feeds."""
+    found: dict[str, list[str]] = {p.code: [] for p in system.processes}
+    for arrow in links(system):
+        providers = found[arrow.consumer]
+        if arrow.provider not in providers:
+            providers.append(arrow.provider)
+        found.setdefault(arrow.provider, [])
     return found
 
 

@@ -20,11 +20,13 @@ from uuid import uuid4
 import httpx2
 import jwt
 import truststore
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from ecosemantic.bridge.credentials import Credential, CredentialStore
 from ecosemantic.errors import Invalid, Unauthorised, Unavailable, field_error
 from ecosemantic.relay.discovery import WELL_KNOWN, BridgeConfiguration, Registered, Registration
+from ecosemantic.settings import LOOPBACK
+from ecosemantic.settings.handover import LOOPBACK_ADDRESS
 
 VERIFIED_ALGORITHMS = frozenset(
     {
@@ -44,8 +46,6 @@ IMPLIED_ALGORITHMS = {
     "EC": {"P-256": "ES256", "P-384": "ES384", "P-521": "ES512"},
     "OKP": {"Ed25519": "EdDSA"},
 }
-LOOPBACK = "127.0.0.1"
-LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 SECURE_SCHEMES = frozenset({"https", "wss"})
 LOOPBACK_SCHEMES = frozenset({"http", "ws"})
 CALLBACK_PATH = "/callback"
@@ -108,7 +108,7 @@ def secure(url: str) -> str:
     held = urlsplit(url)
     if held.scheme in SECURE_SCHEMES:
         return url
-    if held.scheme in LOOPBACK_SCHEMES and held.hostname in LOOPBACK_HOSTS:
+    if held.scheme in LOOPBACK_SCHEMES and held.hostname in LOOPBACK:
         return url
     raise Invalid(
         f"{url!r} is neither https nor a loopback address; the bridge's addresses are https"
@@ -129,12 +129,9 @@ async def discover(http: httpx2.AsyncClient, bridge_url: str) -> BridgeConfigura
     where = _address(bridge_url)
     what = f"the bridge at {where}"
     document = _document(await _reached(http.get(f"{where}{WELL_KNOWN}"), what), what)
-    try:
-        config = BridgeConfiguration.model_validate(document)
-    except ValidationError as error:
-        raise Invalid(
-            f"{where} does not publish the bridge's discovery document: {field_error(error)}"
-        ) from error
+    config = _validated(
+        BridgeConfiguration, document, f"{where} does not publish the bridge's discovery document"
+    )
     for address in (
         config.issuer,
         config.tunnel_url,
@@ -175,10 +172,10 @@ async def browser_sign_in(
     verifier = secrets.token_urlsafe(VERIFIER_BYTES)
     state = secrets.token_urlsafe(16)
     answered: asyncio.Future[dict[str, str]] = asyncio.get_running_loop().create_future()
-    server = await asyncio.start_server(_one_callback(answered), host=LOOPBACK, port=0)
+    server = await asyncio.start_server(_one_callback(answered), host=LOOPBACK_ADDRESS, port=0)
     try:
         port = server.sockets[0].getsockname()[1]
-        redirect_uri = f"http://{LOOPBACK}:{port}{CALLBACK_PATH}"
+        redirect_uri = f"http://{LOOPBACK_ADDRESS}:{port}{CALLBACK_PATH}"
         opener(_authorization_url(config, oidc, redirect_uri, state, _challenge(verifier)))
         query = await _answered(answered, wait)
         refused = query.get("error")
@@ -285,8 +282,10 @@ async def register(
         ),
         f"the bridge at {where}",
     )
-    registered = Registered.model_validate(
-        _document(answered, f"the bridge at {where}", unauthorised=UNAUTHORISED_STATUSES)
+    registered = _validated(
+        Registered,
+        _document(answered, f"the bridge at {where}", unauthorised=UNAUTHORISED_STATUSES),
+        f"the bridge at {where} answers no registration",
     )
     return registered.model_copy(update={"page_url": secure(registered.page_url)})
 
@@ -662,6 +661,15 @@ def _document(
     if response.status_code in unauthorised:
         raise Unauthorised(said)
     raise Unavailable(said)
+
+
+def _validated[M: BaseModel](model: type[M], document: object, named: str) -> M:
+    """The document the bridge published, read as its model: `Invalid` naming what the document is
+    and the field it answers wrong when it is out of shape."""
+    try:
+        return model.model_validate(document)
+    except ValidationError as error:
+        raise Invalid(f"{named}: {field_error(error)}") from error
 
 
 def _untrusted(why: str) -> Unauthorised:

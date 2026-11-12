@@ -7,7 +7,6 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ecosemantic.bridge.credentials import Credential
 from ecosemantic.settings import workspace_digest
 from ecosemantic.settings.handover import SERVICE, BridgeHealth, Health
 from ecosemantic.tray.menu import StartAtLogin
@@ -68,26 +67,6 @@ class FakeLauncher:
         self.processes.append(process)
         self.logs.append(log)
         return process
-
-
-@dataclass
-class FakeStore:
-    """The credential store the tray reads: the credential the test keeps there, and how many reads
-    it answered."""
-
-    credential: Credential | None = None
-    loads: int = 0
-    where = "the test's store"
-
-    def load(self) -> Credential | None:
-        self.loads += 1
-        return self.credential
-
-    def save(self, credential: Credential) -> None:
-        self.credential = credential
-
-    def delete(self) -> None:
-        self.credential = None
 
 
 @dataclass

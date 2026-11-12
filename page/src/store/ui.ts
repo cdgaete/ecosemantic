@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { withoutToken } from '@/api/client'
 
-export type Theme = 'ecosemantic' | 'openlca'
+export type Theme = 'cobalt' | 'ecosemantic' | 'openlca'
 export type EditorKind = 'system' | 'process' | 'background' | 'search' | 'results' | 'simulation'
 export interface EditorTab {
   id: string
@@ -82,7 +82,7 @@ function stamp(theme: Theme): void {
 export const useUi = create<UiState>()(
   persist(
     (set, get) => ({
-      theme: 'ecosemantic',
+      theme: 'cobalt',
       person: null,
       panelWidth: PANEL_WIDTH,
       panelMode: 'beside',
@@ -157,6 +157,8 @@ export const useUi = create<UiState>()(
     }),
     {
       name: 'ecosemantic-page',
+      version: 1,
+      migrate: (persisted, version) => (version < 1 ? { ...(persisted as Partial<UiState>), theme: 'cobalt' } : persisted) as UiState,
       merge: (persisted, current) => ({ ...current, ...(persisted as Partial<UiState>), scaledView: current.scaledView }),
       partialize: (state) => ({
         theme: state.theme,
@@ -171,7 +173,7 @@ export const useUi = create<UiState>()(
         formulaValues: state.formulaValues,
         minimapOpen: state.minimapOpen,
       }),
-      onRehydrateStorage: () => (state) => stamp(state?.theme ?? 'ecosemantic'),
+      onRehydrateStorage: () => (state) => stamp(state?.theme ?? 'cobalt'),
     },
   ),
 )

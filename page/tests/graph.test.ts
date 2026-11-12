@@ -1,18 +1,24 @@
+/// <reference types="node" />
+import { readdirSync, readFileSync } from 'node:fs'
+import * as path from 'node:path'
+import * as url from 'node:url'
 import { buildGraph, changedCards, changedSuppliers, droppedCards, hotFrom, edgeText, outlinesFrom } from '@/editors/graph/build'
 import { atRest, detailAt, framing, routePath } from '@/editors/graph/layout'
+import { layoutAnswer, routed } from './placements'
 import system from './fixtures/system.json'
 import log from './fixtures/log.json'
 import agentSystem from './fixtures/agent_system.json'
 import agentLog from './fixtures/agent_log.json'
 import type { NodeChange } from '@xyflow/react'
-import type { ProcessNodeType } from '@/editors/graph/build'
+import type { LinkedNodeType, ProcessNodeType } from '@/editors/graph/build'
+import systems from './fixtures/systems.json'
 import type { LogEntry, ProductSystem } from '@/api/types'
 
 const doc = system.value as ProductSystem
 
 describe('graph', () => {
   it('draws one card per base process and one link per foreground input', () => {
-    const { nodes, edges } = buildGraph(doc, hotFrom(null), 'widget')
+    const { nodes, edges } = buildGraph(doc, routed(doc).value, hotFrom(null), 'widget')
     expect(nodes.map((n) => n.id).sort()).toEqual(doc.processes.map((p) => p.code).sort())
     expect(edges).toHaveLength(1)
     expect(edges[0].source).toBe('frame')
@@ -21,12 +27,12 @@ describe('graph', () => {
   })
 
   it('marks the reference card only when the validation answer names one root', () => {
-    const { nodes } = buildGraph(doc, hotFrom(null), null)
+    const { nodes } = buildGraph(doc, routed(doc).value, hotFrom(null), null)
     expect(nodes.some((n) => n.data.reference)).toBe(false)
   })
 
   it('draws a link for each foreground input', () => {
-    expect(buildGraph(doc, hotFrom(null), 'widget').edges).toHaveLength(1)
+    expect(buildGraph(doc, routed(doc).value, hotFrom(null), 'widget').edges).toHaveLength(1)
   })
 
   it('marks what the latest entry changed, processes by id and exchanges by id', () => {
@@ -41,7 +47,7 @@ describe('graph', () => {
     }
     const hot = hotFrom(entry)
     expect(hot.processes.has(frame.id)).toBe(true)
-    const { nodes } = buildGraph(doc, hot, 'widget')
+    const { nodes } = buildGraph(doc, routed(doc).value, hot, 'widget')
     expect(nodes.find((n) => n.id === 'widget')?.data.hot).toBe(true)
     expect(nodes.find((n) => n.id === 'widget')?.data.hotExchanges).toEqual([widget.exchanges[1].id])
     expect(nodes.find((n) => n.id === 'frame')?.data.hot).toBe(true)
@@ -51,8 +57,73 @@ describe('graph', () => {
     const built = agentSystem.value as ProductSystem
     const outlines = outlinesFrom(built, agentLog.value as LogEntry[], (entry) => `colour-${entry.seq}`)
     expect(outlines.get('bottle')).toBe('colour-5')
-    expect(buildGraph(built, hotFrom(null), null, outlines).nodes[0].data.outline).toBe('colour-5')
-    expect(buildGraph(built, hotFrom(null), null).nodes[0].data.outline).toBeNull()
+    expect(buildGraph(built, routed(built).value, hotFrom(null), null, outlines).nodes[0].data.outline).toBe('colour-5')
+    expect(buildGraph(built, routed(built).value, hotFrom(null), null).nodes[0].data.outline).toBeNull()
+  })
+})
+
+describe('the arrows the arrangement routes', () => {
+  const widget = doc.processes.find((p) => p.code === 'widget')!
+
+  it('draws one arrow per route, from the route\'s provider to its consumer, over the exchange it feeds', () => {
+    const arrangement = routed(doc).value
+    const { edges } = buildGraph(doc, arrangement, hotFrom(null), 'widget')
+    expect(edges.map((e) => ({ id: e.id, source: e.source, target: e.target, targetHandle: e.targetHandle }))).toEqual(
+      arrangement.edges.map((r) => ({ id: `flow-${r.exchange_id}`, source: r.provider, target: r.consumer, targetHandle: r.exchange_id })),
+    )
+    const frame = widget.exchanges.find((e) => e.id === edges[0].targetHandle)!
+    expect((edges[0].data as { amount: number; unit: string; formula: string | null }).amount).toBe(frame.amount)
+    expect((edges[0].data as { amount: number; unit: string; formula: string | null }).unit).toBe(frame.unit)
+    expect((edges[0].data as { amount: number; unit: string; formula: string | null }).formula).toBe(frame.formula)
+  })
+
+  it('draws nothing the arrangement does not route, for an input naming a code the system lacks', () => {
+    const ghost = { ...widget.exchanges[3], id: 'ghost-exchange', input: { kind: 'foreground' as const, code: 'ghost' } }
+    const product: ProductSystem = { ...doc, processes: doc.processes.map((p) => (p.code === 'widget' ? { ...p, exchanges: [...p.exchanges, ghost] } : p)) }
+    expect(buildGraph(product, routed(product).value, hotFrom(null), 'widget').edges.map((e) => e.targetHandle)).not.toContain('ghost-exchange')
+    expect(buildGraph(product, layoutAnswer(product).value, hotFrom(null), 'widget').edges).toEqual([])
+  })
+
+  it('takes a linked card\'s system, pin and case from the exchange its route carries', () => {
+    const part = (systems.value as { id: string }[]).find((s) => s.id !== doc.id)!
+    const link = { kind: 'system' as const, product_system_id: part.id, at_hash: 'ab'.repeat(32), case: 'light' }
+    const linking: ProductSystem = {
+      ...doc,
+      processes: doc.processes.map((p) => (p.code === 'widget' ? { ...p, exchanges: [...p.exchanges, { ...widget.exchanges[3], id: 'link-a', input: link }] } : p)),
+    }
+    const arrangement = routed(linking).value
+    expect(arrangement.edges.map((r) => r.provider)).toContain(`system:${part.id}`)
+    const linked = buildGraph(linking, arrangement, hotFrom(null), 'widget').nodes.find((n) => n.type === 'linked') as LinkedNodeType
+    expect(linked.id).toBe(`system:${part.id}`)
+    expect(linked.data).toMatchObject({ productSystemId: part.id, atHash: 'ab'.repeat(32), case: 'light' })
+  })
+
+  it('draws no card of a linked system the system does not route', () => {
+    expect(buildGraph(doc, routed(doc).value, hotFrom(null), 'widget').nodes.some((n) => n.type === 'linked')).toBe(false)
+  })
+})
+
+const here = path.dirname(url.fileURLToPath(import.meta.url))
+const GRAPH = path.resolve(here, '../src/editors/graph')
+
+function sources(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) return sources(full)
+    return /\.tsx?$/.test(entry.name) ? [full] : []
+  })
+}
+
+const KEY = /(['"`])system:/
+
+describe('a card key', () => {
+  it('is a string no file of the graph spells, the arrangement answering it', () => {
+    const offenders = sources(GRAPH).flatMap((file) =>
+      readFileSync(file, 'utf8')
+        .split('\n')
+        .flatMap((line, at) => (KEY.test(line) ? [`${path.relative(GRAPH, file)}:${at + 1}: ${line.trim()}`] : [])),
+    )
+    expect(offenders).toEqual([])
   })
 })
 
@@ -69,10 +140,10 @@ describe('changedSuppliers', () => {
   it('names the card each arrow the latest entry added comes from', () => {
     // the widget's input from the frame is the one foreground arrow
     const entry = { ...(log.value[0] as LogEntry), changes: [{ op: 'add', entity: 'exchange', id: '73b7d6fd-7d08-53d6-bd18-093e6cd44574', field: null, before: null, after: null }] } as LogEntry
-    const { nodes, edges } = buildGraph(doc, hotFrom(entry), 'widget')
+    const { nodes, edges } = buildGraph(doc, routed(doc).value, hotFrom(entry), 'widget')
     expect(changedCards(nodes)).toEqual(['widget'])
     expect(changedSuppliers(edges)).toEqual(['frame'])
-    expect(changedSuppliers(buildGraph(doc, hotFrom(null), 'widget').edges)).toEqual([])
+    expect(changedSuppliers(buildGraph(doc, routed(doc).value, hotFrom(null), 'widget').edges)).toEqual([])
   })
 })
 
@@ -120,13 +191,13 @@ describe('changedCards', () => {
     const process = doc.processes[0]
     const other = doc.processes[1]
     const entry = { ...log.value[0], changes: [{ ...log.value[0].changes[0], entity: 'exchange', id: other.exchanges[0].id }, { ...log.value[0].changes[0], entity: 'process', id: process.id }] } as LogEntry
-    const built = buildGraph(doc, hotFrom(entry), null)
+    const built = buildGraph(doc, routed(doc).value, hotFrom(entry), null)
     expect(changedCards(built.nodes).sort()).toEqual([process.code, other.code].sort())
   })
 
   it('names none for no entry', () => {
     const doc = system.value as ProductSystem
-    expect(changedCards(buildGraph(doc, hotFrom(null), null).nodes)).toEqual([])
+    expect(changedCards(buildGraph(doc, routed(doc).value, hotFrom(null), null).nodes)).toEqual([])
   })
 })
 

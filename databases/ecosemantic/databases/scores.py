@@ -77,29 +77,37 @@ def score_every_dataset(imported: Import, *, name: str, compiled: Path | None = 
     return Scores(values=values, declared=declared, seconds=stopwatch.seconds)
 
 
+def relative(ours: np.ndarray, theirs: np.ndarray, scale: float | np.ndarray) -> np.ndarray:
+    """Each pair's absolute difference over the larger of the two magnitudes, and zero where both
+    magnitudes are at most 1e-12 of `scale`."""
+    mine = np.asarray(ours, dtype=float)
+    other = np.asarray(theirs, dtype=float)
+    difference = np.abs(mine - other)
+    denominator = np.maximum(np.abs(mine), np.abs(other))
+    negligible = (np.abs(mine) <= NEGLIGIBLE * scale) & (np.abs(other) <= NEGLIGIBLE * scale)
+    return np.divide(difference, denominator, out=np.zeros_like(difference), where=~negligible)
+
+
 def relative_differences(
     core: Mapping[K, float], other: Mapping[K, float], *, group: Callable[[K], str]
 ) -> dict[K, float]:
-    """Each score both sides compute, by its absolute difference over the larger of the two
-    magnitudes, and zero for a pair at most 1e-12 of its group's largest magnitude in `other`, the
-    published or independent side: a column the core scores thousands of times larger than the
-    reference, as BAFU's Water use, would otherwise call a reference score of 0.002 equal to a
-    core score of 13.8. A group's magnitude is taken over `other`'s scores in it."""
+    """Each score both sides compute, by `relative`: its absolute difference over the larger of the
+    two magnitudes, and zero for a pair whose two magnitudes are at most 1e-12 of its group's
+    largest magnitude in `other`, the published or independent side: a column the core scores
+    thousands of times larger than the reference, as BAFU's Water use, would otherwise call a
+    reference score of 0.002 equal to a core score of 13.8. A group's magnitude is taken over
+    `other`'s scores in it."""
     scales: dict[str, float] = {}
     for key, value in other.items():
         name = group(key)
         scales[name] = max(scales.get(name, 0.0), abs(value))
-    found: dict[K, float] = {}
-    for key, ours in core.items():
-        if key not in other:
-            continue
-        theirs = other[key]
-        scale = scales[group(key)]
-        if abs(ours) <= NEGLIGIBLE * scale and abs(theirs) <= NEGLIGIBLE * scale:
-            found[key] = 0.0
-        else:
-            found[key] = abs(ours - theirs) / max(abs(ours), abs(theirs))
-    return found
+    keys = [key for key in core if key in other]
+    found = relative(
+        np.array([core[key] for key in keys]),
+        np.array([other[key] for key in keys]),
+        np.array([scales[group(key)] for key in keys]),
+    )
+    return dict(zip(keys, found.tolist(), strict=True))
 
 
 def ratio(declared: str, unit: str) -> float | None:

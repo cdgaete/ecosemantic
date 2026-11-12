@@ -6,7 +6,7 @@ import csv
 import json
 import math
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import independent_scores
@@ -22,6 +22,7 @@ from ecosemantic.databases.lists import (
     write_left_out,
     write_unlinked,
 )
+from ecosemantic.databases.profiles import write_profile
 from ecosemantic.databases.uslci import profile as releases
 from ecosemantic.databases.uslci.build import build
 from ecosemantic.databases.uslci.profile import read_profile
@@ -32,6 +33,7 @@ from ecosemantic.databases.uslci.validate import (
     record,
     validate,
 )
+from ecosemantic.errors import Invalid
 from tests.databases.uslci_fixture import (
     CODES,
     EXPECTED,
@@ -396,6 +398,20 @@ def test_record_writes_the_lists_the_tolerance_and_the_validated_block(
     ]
 
 
+def test_uslci_record_refuses_a_run_with_mismatches(
+    prepared: Prepared, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    shipped = _shipped(tmp_path)
+    monkeypatch.setattr(releases, "RELEASES", shipped)
+    validation = _first(prepared)
+    assert validation.mismatches == ()
+    before = sorted(path.name for path in shipped.iterdir())
+    with pytest.raises(Invalid) as refused:
+        record(read_profile(VERSION), replace(validation, mismatches=("a", "b")))
+    assert str(refused.value) == "2 mismatches, the first: a"
+    assert sorted(path.name for path in shipped.iterdir()) == before
+
+
 def test_the_recorded_profile_validates_against_its_own_lists(
     prepared: Prepared, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -453,9 +469,7 @@ def test_the_validate_command_exits_one_on_a_mismatch(
     shipped = _shipped(tmp_path)
     monkeypatch.setattr(releases, "RELEASES", shipped)
     recorded = read_profile(VERSION).model_copy(update={"tolerance": 1e-9})
-    (shipped / f"{VERSION}.yaml").write_text(
-        yaml.safe_dump(recorded.model_dump(mode="json"), sort_keys=False), encoding="utf-8"
-    )
+    write_profile(recorded, shipped, VERSION)
     changed, _ = _changed(prepared, tmp_path, 1.01)
     assert (
         databases_cli.main(
@@ -474,3 +488,43 @@ def test_the_validate_command_exits_one_on_a_mismatch(
     answer = json.loads(capsys.readouterr().out)
     assert len(answer["mismatches"]) == 1
     assert WIDGET in answer["mismatches"][0]
+
+
+def test_validate_record_with_a_mismatch_names_it(
+    prepared: Prepared,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    shipped = _shipped(tmp_path)
+    monkeypatch.setattr(releases, "RELEASES", shipped)
+    recorded = read_profile(VERSION).model_copy(update={"tolerance": 1e-9})
+    write_profile(recorded, shipped, VERSION)
+    changed, _ = _changed(prepared, tmp_path, 1.01)
+    first = validate(
+        prepared.bundle,
+        independent=changed,
+        built_left_out=prepared.left_out,
+        unlinked=None,
+        left_out=None,
+        tolerance=1e-9,
+    ).mismatches[0]
+    assert (
+        databases_cli.main(
+            [
+                "uslci",
+                "validate",
+                VERSION,
+                "--bundle",
+                str(prepared.bundle),
+                "--independent",
+                str(changed),
+                "--record",
+            ]
+        )
+        == 1
+    )
+    envelope = json.loads(capsys.readouterr().err.strip().splitlines()[-1])
+    assert envelope["error"] == "invalid"
+    assert first in envelope["message"]
+    assert list(shipped.glob("*.csv")) == []

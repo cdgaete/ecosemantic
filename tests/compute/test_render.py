@@ -4,6 +4,7 @@ import uuid
 
 import pytest
 
+from ecosemantic.compute.links import link_pin
 from ecosemantic.compute.overrides import case_pin
 from ecosemantic.compute.render import (
     BASE_CASE,
@@ -13,6 +14,7 @@ from ecosemantic.compute.render import (
     render,
 )
 from ecosemantic.model.canonical import base_pin
+from ecosemantic.model.refs import SystemRef
 from tests.database_fixture import casing_system, device_system
 
 
@@ -52,6 +54,13 @@ def test_a_system_without_cases_renders_its_base() -> None:
     device = device_system(casing)
     rendered = render(device, None)
     assert (rendered.case, rendered.pin) == (BASE_CASE, base_pin(device))
+
+
+def test_a_rendered_case_and_a_link_under_it_hold_one_pin() -> None:
+    system = casing_system()
+    for case in (None, "light", "heavy"):
+        ref = SystemRef(product_system_id=system.id, at_hash="a" * 64, case=case)
+        assert render(system, case).pin == link_pin(system, ref)
 
 
 def test_rendering_is_deterministic_and_an_edit_moves_pins_not_ids() -> None:

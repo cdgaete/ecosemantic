@@ -14,18 +14,21 @@ from typing import cast
 from ecoinvent_interface import EcoinventRelease, Settings
 from pydantic import JsonValue
 
-from ecosemantic.backends.native.install import Installed, install
+from ecosemantic.backends.native.install import Installed, install, refuse_taken
 from ecosemantic.compute.accounts import missing
 from ecosemantic.databases.bafu.download import Terms, download, translating
 from ecosemantic.databases.bafu.profile import chosen as bafu_chosen
+from ecosemantic.databases.bafu.profile import database_name as bafu_name
 from ecosemantic.databases.bafu.profile import read_profile as read_bafu
 from ecosemantic.databases.bafu.setup import prepare as prepare_bafu
 from ecosemantic.databases.bafu.setup import session as bafu_session
+from ecosemantic.databases.ecoinvent.profile import database_name as ecoinvent_name
 from ecosemantic.databases.ecoinvent.profile import pinned
 from ecosemantic.databases.ecoinvent.release import SystemModel
 from ecosemantic.databases.ecoinvent.setup import prepare as prepare_ecoinvent
 from ecosemantic.databases.prepared import PreparedRelease
 from ecosemantic.databases.uslci.profile import chosen as uslci_chosen
+from ecosemantic.databases.uslci.profile import database_name as uslci_name
 from ecosemantic.databases.uslci.profile import read_profile as read_uslci
 from ecosemantic.databases.uslci.setup import commons
 from ecosemantic.databases.uslci.setup import prepare as prepare_uslci
@@ -60,6 +63,18 @@ def downloads_in(data_dir: Path) -> Iterator[None]:
         del os.environ[DOWNLOAD_CACHE]
 
 
+def database_of(draft: InstallDraft) -> str:
+    """The name of the database a draft installs: the name an openlca draft gives, and for a
+    release the name its profile gives the version the draft names or the newest it pins."""
+    if draft.source == "openlca":
+        return cast(str, draft.name)
+    if draft.source == "uslci":
+        return uslci_name(uslci_chosen(draft.version))
+    if draft.source == "bafu":
+        return bafu_name(bafu_chosen(draft.version))
+    return ecoinvent_name(cast(str, draft.version), cast(str, draft.system_model))
+
+
 def install_source(
     data_dir: Path,
     draft: InstallDraft,
@@ -69,10 +84,13 @@ def install_source(
     """Install the database a draft names from the source it is built from, reporting each step and
     answering the summary the command prints; a `bafu` draft whose terms are not accepted answers
     them, installing and downloading nothing. A source whose install needs an account and is given
-    none is `Unavailable`, naming the variables and the page that supply it."""
+    none is `Unavailable`, naming the terminal and the variables that supply it. A database that is
+    already installed under the name the draft installs is `Conflict` unless the draft replaces it,
+    refused before anything is downloaded."""
     kind = source_credential(draft.source)
     if kind is not None and account is None:
         raise Unavailable(f"{draft.source} needs an account", hint=missing(kind))
+    refuse_taken(data_dir, database_of(draft), draft.replace)
     with downloads_in(data_dir):
         if draft.source == "openlca":
             return _openlca(data_dir, draft, report)

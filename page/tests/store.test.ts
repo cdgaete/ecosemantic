@@ -70,6 +70,59 @@ describe('ui store', () => {
     expect(document.documentElement.getAttribute('data-theme')).toBe('openlca')
   })
 
+  it('stamps Cobalt on the document', () => {
+    useUi.getState().setTheme('cobalt')
+    expect(document.documentElement.getAttribute('data-theme')).toBe('cobalt')
+  })
+
+  it('opens on Cobalt in a browser that has not chosen a theme', () => {
+    expect(useUi.getInitialState().theme).toBe('cobalt')
+  })
+
+  it('moves a state saved before the migration to Cobalt and keeps every other saved field', async () => {
+    const pinned = [tab('p')]
+    localStorage.setItem(
+      'ecosemantic-page',
+      JSON.stringify({
+        state: {
+          theme: 'ecosemantic',
+          person: 'carlos',
+          panelWidth: 640,
+          panelMode: 'expanded',
+          navDocked: true,
+          navWidth: 300,
+          pinned,
+          seen: { s1: 7 },
+          collapsed: { general: true },
+          formulaValues: true,
+          minimapOpen: true,
+        },
+        version: 0,
+      }),
+    )
+    await useUi.persist.rehydrate()
+    expect(useUi.getState().theme).toBe('cobalt')
+    expect(document.documentElement.getAttribute('data-theme')).toBe('cobalt')
+    expect(useUi.getState().person).toBe('carlos')
+    expect(useUi.getState().panelWidth).toBe(640)
+    expect(useUi.getState().panelMode).toBe('expanded')
+    expect(useUi.getState().navDocked).toBe(true)
+    expect(useUi.getState().navWidth).toBe(300)
+    expect(useUi.getState().pinned).toEqual(pinned)
+    expect(useUi.getState().seen).toEqual({ s1: 7 })
+    expect(useUi.getState().collapsed).toEqual({ general: true })
+    expect(useUi.getState().formulaValues).toBe(true)
+    expect(useUi.getState().minimapOpen).toBe(true)
+    localStorage.removeItem('ecosemantic-page')
+  })
+
+  it('keeps a theme saved after the migration', async () => {
+    localStorage.setItem('ecosemantic-page', JSON.stringify({ state: { theme: 'openlca' }, version: 1 }))
+    await useUi.persist.rehydrate()
+    expect(useUi.getState().theme).toBe('openlca')
+    localStorage.removeItem('ecosemantic-page')
+  })
+
   it('toggles a section', () => {
     useUi.getState().toggleSection('general')
     expect(useUi.getState().collapsed.general).toBe(true)

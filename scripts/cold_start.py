@@ -24,19 +24,26 @@ from pathlib import Path
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 
+REPOSITORY = Path(__file__).resolve().parents[1]
+
+sys.path.insert(0, str(REPOSITORY))
+
 TELEMETRY_OFF = {"ECOSEMANTIC_TELEMETRY": "off"}
 
 
 def tool(root: Path, dist: Path, python: str) -> Path:
     """The `ecosemantic` command `uv tool install` puts in a temporary tool directory, under the
     Python version named."""
+    from scripts.members import distributions
+
     uv = shutil.which("uv")
     if uv is None:
         sys.exit("uv is not on PATH")
     found = sorted(dist.glob("ecosemantic*-py3-none-any.whl"))
     app = [wheel for wheel in found if wheel.name.startswith("ecosemantic-")]
-    if len(found) != 7 or len(app) != 1:
-        sys.exit(f"{dist} holds no build of the seven wheels")
+    held = len(distributions())
+    if len(found) != held or len(app) != 1:
+        sys.exit(f"{dist} holds no build of the {held} wheels")
     siblings = [str(wheel) for wheel in found if wheel not in app]
     bins = root / "bin"
     environ = {**os.environ, "UV_TOOL_DIR": str(root / "tools"), "UV_TOOL_BIN_DIR": str(bins)}

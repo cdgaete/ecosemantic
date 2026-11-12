@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
 
 import olca_schema as o
 from olca_schema.zipio import ZipWriter
 
 from ecosemantic.errors import Conflict, Invalid, NotSupported
+from ecosemantic.files import replace
 from ecosemantic.model.entities import Uncertainty
 from ecosemantic.model.refs import (
     Scheme,
@@ -20,13 +19,12 @@ from ecosemantic.model.refs import (
     olca_process_id,
     olca_product_flow_id,
 )
+from ecosemantic.package.background import ExchangeKind
 from ecosemantic.package.jsonld import UnitTable, location_entity
 from ecosemantic.package.manifest import SCHEMA_VERSION, BaseDatabase, Manifest, write_manifest
 from ecosemantic.package.olca import to_olca_uncertainty
 from ecosemantic.package.wholeness import require_whole
 from ecosemantic.ports.types import FlowType
-
-ExchangeKind = Literal["production", "technosphere", "biosphere"]
 
 
 @dataclass(frozen=True)
@@ -312,7 +310,7 @@ def write_base_bundle(
             datasets=[],
         ),
     )
-    os.replace(staged, destination)
+    replace(staged, destination)
     return Written(
         bundle=destination,
         processes=len(processes),

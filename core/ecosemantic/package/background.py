@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import get_args
+from typing import Literal, cast, get_args
 
 import olca_schema as o
 from olca_schema.zipio import ZipReader
@@ -18,6 +18,7 @@ from ecosemantic.ports.types import FlowType
 
 Key = tuple[str, str]
 Dataset = dict[str, object]
+ExchangeKind = Literal["production", "technosphere", "biosphere"]
 ELEMENTARY_ROOT = "elementary flows"
 ALLOCATED = (
     o.AllocationType.PHYSICAL_ALLOCATION,
@@ -116,6 +117,14 @@ def _distribution(process: o.Process, e: o.Exchange, flow: _Flow, factor: float)
         owner=f"{process.name!r}, exchange of {flow.entity.name!r}",
     )
     return {"uncertainty": uncertainty.scaled(factor) if uncertainty else None}
+
+
+def exchange_kind(row: Dataset, dataset: str) -> ExchangeKind:
+    """The kind an exchange row names, and NotSupported for a kind the port does not name."""
+    kind = str(row["type"])
+    if kind not in get_args(ExchangeKind):
+        raise NotSupported(f"exchange type {kind!r} in {dataset!r} is not one the port names")
+    return cast(ExchangeKind, kind)
 
 
 def exchange_refusal(e: o.Exchange, flow: o.Flow) -> str | None:

@@ -166,6 +166,38 @@ def test_activity_metadata_always_carries_the_canonical_keys() -> None:
         )
 
 
+def test_a_process_with_two_productions_is_refused() -> None:
+    with pytest.raises(ValidationError, match="has 2 production exchanges"):
+        Process(
+            id=uuid.uuid4(),
+            code="shirt",
+            name="shirt",
+            unit="kilogram",
+            location="GLO",
+            reference_product="shirt",
+            exchanges=[
+                Exchange(
+                    id=uuid.uuid4(), type="production", name="shirt", amount=1.0, unit="kilogram"
+                ),
+                Exchange(
+                    id=uuid.uuid4(), type="production", name="shirt", amount=3.0, unit="kilogram"
+                ),
+            ],
+        )
+
+
+def test_a_process_with_no_production_is_accepted() -> None:
+    process = Process(
+        id=uuid.uuid4(),
+        code="shirt",
+        name="shirt",
+        unit="kilogram",
+        location="GLO",
+        reference_product="shirt",
+    )
+    assert process.exchanges == []
+
+
 def test_parameter_takes_exactly_one_of_value_or_formula() -> None:
     Parameter(name="a", value=1.0)
     Parameter(name="b", formula="a * 2")
@@ -210,6 +242,12 @@ def test_scenario_returns_by_name_or_names_the_miss(product_system: ProductSyste
     assert product_system.scenario(scenario.name) is scenario
     with pytest.raises(NotFound, match="no scenario 'ghost' in"):
         product_system.scenario("ghost")
+
+
+def test_a_system_says_which_cases_it_carries(product_system: ProductSystem) -> None:
+    assert product_system.carries_case("small")
+    assert product_system.carries_case("large")
+    assert not product_system.carries_case("ghost")
 
 
 def test_case_returns_by_name_or_names_the_miss(product_system: ProductSystem) -> None:

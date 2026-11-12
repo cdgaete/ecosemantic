@@ -203,8 +203,8 @@ def write_contribution(
     root: Path, key: ResultKey, result: ContributionResult, at: datetime
 ) -> Path:
     """One decomposition as a table; the schema names which column set it carries, the loops
-    holding a credit, in the system and inside the systems it links, and the exchanges running a
-    treatment backwards."""
+    holding a credit, in the system and inside the systems it links, the exchanges running a
+    treatment backwards, and what a cut-off left out of a flat list."""
     folder = _open(
         root,
         key,
@@ -214,6 +214,7 @@ def write_contribution(
             "database": result.database.model_dump(mode="json"),
             "by": result.by,
             "truncated": result.truncated,
+            "cut": None if result.cut is None else result.cut.model_dump(mode="json"),
             "credit_loops": result.credit_loops,
             "linked_credit_loops": [
                 loop.model_dump(mode="json") for loop in result.linked_credit_loops

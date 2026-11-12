@@ -7,6 +7,7 @@ import { useSystemStream } from '@/api/stream'
 import type { Call } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { formatAgo, formatAmount, shortHash } from '@/lib/format'
+import { movedSince } from '@/lib/hashes'
 import { paths, useGo } from '@/lib/paths'
 import { AppLink } from '@/lib/router'
 import { EditorHeader } from '@/window/EditorHeader'
@@ -24,11 +25,11 @@ function Who({ call }: { call: Call }) {
   )
 }
 
-function Calculation({ call, systemId, database, current }: { call: Call; systemId: string; database: string; current: string }) {
+function Calculation({ call, systemId, database, current }: { call: Call; systemId: string; database: string; current: string | null | undefined }) {
   const [unfolded, setUnfolded] = useState(false)
   const scores = call.summary?.scores ?? []
   const variants = variantsOf(call)
-  const earlier = call.at_hash !== null && call.at_hash !== current
+  const earlier = movedSince(call.at_hash, current)
   return (
     <li className="border-b py-2">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -88,7 +89,7 @@ export function ResultsList() {
         {calculations.data && recorded.length === 0 ? <p className="text-muted-foreground">No calculation is recorded for this system yet. Calculate one, or ask the agent to.</p> : null}
         <ul className="text-[12.5px]">
           {recorded.map((call) => (
-            <Calculation key={call.id} call={call} systemId={id} database={system?.database.name ?? ''} current={system?.hash ?? ''} />
+            <Calculation key={call.id} call={call} systemId={id} database={system?.database.name ?? ''} current={system?.hash} />
           ))}
         </ul>
       </Section>

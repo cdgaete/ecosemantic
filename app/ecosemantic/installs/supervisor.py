@@ -7,20 +7,15 @@ import os
 import sys
 import uuid
 from pathlib import Path
-from typing import cast
 
 from ecosemantic.backends.filesystem.installs import install_dir
 from ecosemantic.backends.filesystem.run_folder import LOG_FILE, heartbeat_age
 from ecosemantic.compute.accounts import without_credentials
-from ecosemantic.databases.bafu.profile import chosen as bafu_chosen
-from ecosemantic.databases.bafu.profile import database_name as bafu_name
 from ecosemantic.databases.bafu.profile import versions as bafu_versions
-from ecosemantic.databases.ecoinvent.profile import database_name as ecoinvent_name
 from ecosemantic.databases.ecoinvent.profile import profiled
-from ecosemantic.databases.uslci.profile import chosen as uslci_chosen
-from ecosemantic.databases.uslci.profile import database_name as uslci_name
 from ecosemantic.databases.uslci.profile import versions as uslci_versions
 from ecosemantic.installs.handover import encoded
+from ecosemantic.installs.sources import database_of
 from ecosemantic.ports.types import (
     STALE_SECONDS,
     UNIT_PROCESS,
@@ -75,15 +70,8 @@ class LocalInstaller:
         ]
 
     def database(self, draft: InstallDraft) -> str:
-        """The name of the database a draft installs: the name an openlca draft gives, and for a
-        release the name its profile gives the version the draft names or the newest it pins."""
-        if draft.source == "openlca":
-            return cast(str, draft.name)
-        if draft.source == "uslci":
-            return uslci_name(uslci_chosen(draft.version))
-        if draft.source == "bafu":
-            return bafu_name(bafu_chosen(draft.version))
-        return ecoinvent_name(cast(str, draft.version), cast(str, draft.system_model))
+        """The name of the database a draft installs."""
+        return database_of(draft)
 
     def start(self, install_id: uuid.UUID, account: Account | None) -> int:
         """Start the process that carries one install, apart from the server, with the account on

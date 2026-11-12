@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import IO, cast
 
 from ecosemantic.backends.filesystem.run_folder import LOG_FILE, heartbeat_age, run_dir
+from ecosemantic.engine.solver import SolverName
 from ecosemantic.ports.types import STALE_SECONDS
 
 WINDOWS_DETACHED = 0x00000200 | 0x00000008
@@ -63,7 +64,7 @@ class LocalLauncher:
     """Carries each run in a worker process on this machine, over the directories the server
     binds and under its solver."""
 
-    def __init__(self, systems: Path, data: Path, runs_root: Path, solver: str) -> None:
+    def __init__(self, systems: Path, data: Path, runs_root: Path, solver: SolverName) -> None:
         self.systems = systems
         self.data = data
         self.runs_root = runs_root

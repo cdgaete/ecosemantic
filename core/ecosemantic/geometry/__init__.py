@@ -30,6 +30,28 @@ LINKED_HEIGHT = HEADER_HEIGHT + 2 * SECTION_PADDING + ROW_HEIGHT
 LINKED = "system:"
 
 
+class CardGeometry(BaseModel):
+    """A card's size in the pixels the page draws it at: its width, its header, the padding around
+    a section and the label over its rows, and the height of one row."""
+
+    width: float
+    header_height: float
+    section_padding: float
+    section_label: float
+    row_height: float
+
+
+def card_geometry() -> CardGeometry:
+    """The geometry every card is drawn at, which the arrangement carries once."""
+    return CardGeometry(
+        width=CARD_WIDTH,
+        header_height=HEADER_HEIGHT,
+        section_padding=SECTION_PADDING,
+        section_label=SECTION_LABEL,
+        row_height=ROW_HEIGHT,
+    )
+
+
 def linked_code(ref: SystemRef) -> str:
     """The key a linked system's card is drawn and held by."""
     return f"{LINKED}{ref.product_system_id}"
@@ -53,7 +75,6 @@ class Placement(BaseModel):
     height: float
     depth: int
     shown_inputs: int = 0
-    row_height: float = ROW_HEIGHT
     held: bool = False
     inputs: list[Port] = []
     outputs: list[uuid.UUID] = []

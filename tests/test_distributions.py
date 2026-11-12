@@ -16,6 +16,8 @@ from pathlib import Path
 import pytest
 from packaging.requirements import Requirement
 
+from scripts.members import distributions, member_directories
+
 REPOSITORY = Path(__file__).resolve().parents[1]
 LEVELS = {
     "ecosemantic-engine": 1,
@@ -34,16 +36,15 @@ def canonical(name: str) -> str:
 
 @cache
 def members() -> dict[str, dict]:
-    root = tomllib.loads((REPOSITORY / "pyproject.toml").read_text(encoding="utf-8"))
     found = {}
-    for directory in root["tool"]["uv"]["workspace"]["members"]:
+    for directory, name in zip(member_directories(), distributions(), strict=True):
         project = tomllib.loads(
             (REPOSITORY / directory / "pyproject.toml").read_text(encoding="utf-8")
         )["project"]
         required = [Requirement(line) for line in project.get("dependencies", [])]
         for extra in project.get("optional-dependencies", {}).values():
             required += [Requirement(line) for line in extra]
-        found[project["name"]] = {
+        found[name] = {
             "directory": REPOSITORY / directory,
             "version": project["version"],
             "requires": required,

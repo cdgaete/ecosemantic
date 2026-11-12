@@ -2,6 +2,21 @@
 
 Each release names what it adds, changes and removes, newest first.
 
+## 0.1.16
+
+- The page opens in the Cobalt theme, drawn in Source Sans 3 and JetBrains Mono, which it carries under the OFL-1.1 and lists in its third-party notices; the `Theme` menu offers Cobalt beside the two others, and a browser that kept another theme moves to Cobalt once.
+- A page opened at an address carrying its token opens its event stream with that token.
+- `contribution_analysis` by process and by flow keeps the parts whose share reaches `cutoff` and answers `cut`: the cut-off, how many parts fell under it and their share of the total. The page says what a list leaves out, and a contribution run's folder records it.
+- `graph_layout` and `arrange_graph` answer `card`, the geometry every card is drawn at, in place of a `row_height` on each card, and `list_sources` answers each source's `account`, its name and the phrase that names one. The page draws its cards, its arrows and a process's rows from those answers, and its simulation form starts from the defaults the engine samples at, which `/api/monte-carlo` serves.
+- A process with two production exchanges is refused, in an edit and in a `model.yaml`, and a `model.yaml` that is no product system is refused as `invalid`, naming the file.
+- Every tool that takes a `limit` refuses one below 1 as `invalid`.
+- `ecosemantic compute --contributions` refuses an impact method family of several methods, as `contribution_analysis` does, and `ecosemantic setup` refuses a database that is already installed before anything is downloaded, unless `--replace` is passed.
+- A product system's log, requests or layout that this version cannot read is answered as `unavailable` in one sentence naming the file, the line and the field it refuses, with the remedy, as the activity and a run's record are. Each of the three is written whole, so a reader sees one version or the other and a write that fails leaves the file as it was.
+- Every writer lands a file through one bounded retry, so a file another program holds on Windows is answered as `unavailable`, naming it: the bridge's credential, a chat client's configuration, the tray's settings, a product system's package and a database's build among them.
+- The tray reads its sign-in as `ecosemantic bridge status` does: an engine token is a sign-in, and a machine without a credential store starts the tray signed out, where it refused to start.
+- A setup that needs an account and is given none says to run the command in a terminal to be asked for it, or names the variables that carry it. A download cache that cannot be written is `unavailable` for a BAFU install as for a USLCI one, a bridge that answers a registration out of shape is `invalid`, naming the field, and `/stop` and `/yield` answer 401 to a nonce that is not the one held, whatever value is sent.
+- `ecosemantic-databases uslci validate --record` refuses to record a run that found mismatches, naming how many and the first.
+
 ## 0.1.15
 
 - The accounts screen at `/accounts` enters an ecoinvent or Nexus account on the computer where the engine runs, and the tray's menu offers `Database accounts…`, which opens it there.

@@ -10,7 +10,7 @@ from lca_data_interface import CommonsServer
 
 from ecosemantic.databases import command
 from ecosemantic.databases.command import Command
-from ecosemantic.databases.uslci.build import build
+from ecosemantic.databases.uslci.build import Built, build
 from ecosemantic.databases.uslci.download import download
 from ecosemantic.databases.uslci.probe import probe
 from ecosemantic.databases.uslci.profile import read_profile, recorded
@@ -35,7 +35,7 @@ def _download(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
-def _build(args: argparse.Namespace) -> dict[str, object]:
+def _build(args: argparse.Namespace) -> Built:
     """Build a release into one bundle under --out, from its profile's downloads or given files."""
     if (args.inventory is None) != (args.method is None) or (
         args.bridged is not None and args.inventory is None
@@ -47,8 +47,7 @@ def _build(args: argparse.Namespace) -> dict[str, object]:
         profile = read_profile(args.version)
         files = download(profile, CommonsServer(profile.server))
         inventory, methods, bridged = files.inventory, files.methods, files.bridged
-    built = build(inventory, methods, version=args.version, out_dir=args.out, bridged=bridged)
-    return {**dataclasses.asdict(built), "bundle": str(built.bundle)}
+    return build(inventory, methods, version=args.version, out_dir=args.out, bridged=bridged)
 
 
 def _probe(args: argparse.Namespace) -> dict[str, object]:
@@ -71,7 +70,7 @@ def _validate(args: argparse.Namespace) -> Validation:
         tolerance=profile.tolerance,
         compiled=args.compiled,
     )
-    if args.record and not validation.mismatches:
+    if args.record:
         record(profile, validation)
     return validation
 

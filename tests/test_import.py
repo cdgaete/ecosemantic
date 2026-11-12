@@ -9,14 +9,9 @@ from pathlib import Path
 import pytest
 from packaging.requirements import Requirement
 
-DISTRIBUTIONS = (
-    "ecosemantic",
-    "ecosemantic-engine",
-    "ecosemantic-core",
-    "ecosemantic-mcp",
-    "ecosemantic-view",
-    "ecosemantic-databases",
-)
+from scripts.members import distributions
+
+DISTRIBUTIONS = distributions()
 
 
 def test_every_distribution_answers_the_version_the_command_declares() -> None:

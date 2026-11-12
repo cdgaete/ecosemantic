@@ -1,6 +1,78 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme="ecosemantic"], [data-theme="ecosemantic"] *));
+
+@font-face {
+  font-family: "Source Sans 3";
+  src: url("../assets/fonts/sourcesans3.woff2") format("woff2");
+  font-weight: 200 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../assets/fonts/jetbrainsmono.woff2") format("woff2");
+  font-weight: 100 800;
+  font-display: swap;
+}
+
 :root,
+[data-theme="cobalt"] {
+  --radius: 0.5rem;
+  --background: 255 255 255;
+  --foreground: 26 38 55;
+  --card: 255 255 255;
+  --card-foreground: 26 38 55;
+  --popover: 255 255 255;
+  --popover-foreground: 26 38 55;
+  --primary: 58 86 128;
+  --primary-foreground: 255 255 255;
+  --secondary: 237 240 244;
+  --secondary-foreground: 26 38 55;
+  --accent: 45 92 162;
+  --accent-foreground: 255 255 255;
+  --muted: 237 240 244;
+  --muted-foreground: 75 85 101;
+  --destructive: 179 42 14;
+  --destructive-foreground: 255 255 255;
+  --border: 217 222 229;
+  --input: 186 193 204;
+  --ring: 58 86 128;
+  --highlight: 251 187 29;
+  --warning: 138 90 0;
+  --warning-foreground: 110 68 4;
+  --warning-muted: 243 235 221;
+  --success: 44 110 40;
+  --success-foreground: 13 74 40;
+  --success-muted: 229 241 227;
+  --chrome: 237 240 244;
+  --selected: 229 236 245;
+  --node-border: 42 135 67;
+  --link-stroke: 75 85 101;
+  --xy-edge-stroke: rgb(var(--link-stroke));
+  --role-system: 23 128 143;
+  --role-process: 42 135 67;
+  --role-product: 23 128 143;
+  --role-elementary: 90 140 30;
+  --role-parameter: 163 117 0;
+  --role-result: 200 86 18;
+  --role-simulation: 200 86 18;
+  --role-database: 95 111 134;
+  --role-folder: 95 111 134;
+  --role-log: 95 111 134;
+  --role-request: 95 111 134;
+  --chart-1: 0 144 166;
+  --chart-2: 143 33 71;
+  --chart-3: 90 140 30;
+  --chart-4: 53 102 184;
+  --chart-5: 217 84 26;
+  --chart-6: 122 79 176;
+  --chart-7: 166 124 0;
+  color-scheme: light;
+  --font-sans: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
 [data-theme="ecosemantic"] {
   --radius: 0.625rem;
   --background: 15 23 42;
@@ -53,6 +125,8 @@
   --chart-6: 62 158 91;
   --chart-7: 7 99 108;
   color-scheme: dark;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
 [data-theme="openlca"] {
@@ -107,6 +181,8 @@
   --chart-6: 127 183 229;
   --chart-7: 255 137 0;
   color-scheme: light;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
 @theme {

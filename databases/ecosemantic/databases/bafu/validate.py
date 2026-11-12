@@ -9,8 +9,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-import yaml
-
 from ecosemantic.databases.bafu.differences import (
     Difference,
     read_differences,
@@ -21,10 +19,11 @@ from ecosemantic.databases.bafu.workbook import Workbook, matched, read_workbook
 from ecosemantic.databases.checks import unnamed
 from ecosemantic.databases.lists import (
     distinct_unlinked,
-    flow_categories,
     process_ids,
+    top_categories,
     unlinked_mismatches,
 )
+from ecosemantic.databases.profiles import refuse_mismatches, write_profile
 from ecosemantic.databases.scores import (
     Scores,
     per_unit,
@@ -264,7 +263,7 @@ def validate(
     stopwatch.lap("read")
     processes = process_ids(imported)
     mismatches = unnamed(imported) + unlinked_mismatches(
-        distinct_unlinked(imported, flow_categories(imported)), unlinked, processes
+        distinct_unlinked(imported, top_categories(bundle)), unlinked, processes
     )
     stopwatch.lap("checks")
     workbook = read_workbook(results)
@@ -294,10 +293,7 @@ def record(profile: Profile, validation: Validation, *, directory: Path) -> Path
     """Write a passing run's known differences beside the profile and its validated block into
     `<directory>/<version>.yaml`, keeping every other key; refused while the run found a
     mismatch."""
-    if validation.mismatches:
-        raise Invalid(
-            f"{len(validation.mismatches)} mismatches, the first: {validation.mismatches[0]}"
-        )
+    refuse_mismatches(validation.mismatches)
     write_differences(directory / profile.differences, validation.differences)
     updated = profile.model_copy(
         update={
@@ -309,8 +305,4 @@ def record(profile: Profile, validation: Validation, *, directory: Path) -> Path
             )
         }
     )
-    path = directory / f"{profile.version}.yaml"
-    path.write_text(
-        yaml.safe_dump(updated.model_dump(mode="json"), sort_keys=False), encoding="utf-8"
-    )
-    return path
+    return write_profile(updated, directory, profile.version)

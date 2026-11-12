@@ -13,7 +13,7 @@ from ecosemantic.ports.types import Account, CredentialKind
 def account_for(kind: CredentialKind, environ: Mapping[str, str], terminal: bool) -> Account:
     """The account a kind of credential is held by in `environ`; otherwise the answers to a prompt,
     the password and a Nexus token read without echo, when `terminal`; and otherwise `Unavailable`
-    naming the variables and the page that supply it."""
+    naming the terminal and the variables that supply it."""
     held = account_from(environ, kind)
     if held is not None:
         return held

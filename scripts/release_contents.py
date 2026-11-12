@@ -19,6 +19,10 @@ VIEW_FILES = (
     "ecosemantic/view/static/THIRD_PARTY_NOTICES.txt",
 )
 
+REPOSITORY = Path(__file__).resolve().parents[1]
+
+sys.path.insert(0, str(REPOSITORY))
+
 
 def _wheel(path: Path) -> list[str]:
     with zipfile.ZipFile(path) as archive:
@@ -42,11 +46,14 @@ def missing(path: Path) -> list[str]:
 
 
 def main() -> int:
+    from scripts.members import distributions
+
     dist = Path(sys.argv[1])
     wheels = sorted(dist.glob("*.whl"))
     sdists = sorted(dist.glob("*.tar.gz"))
     report = {path.name: missing(path) for path in wheels + sdists}
-    passed = len(wheels) == 7 and len(sdists) == 7 and not any(report.values())
+    held = len(distributions())
+    passed = len(wheels) == held and len(sdists) == held and not any(report.values())
     print(json.dumps({"passed": passed, "missing": report}, indent=1))
     return 0 if passed else 1
 

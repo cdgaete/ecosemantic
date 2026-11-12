@@ -5,16 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from ecosemantic.backends.native.store import NativeStore, slug
+from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.backends.native.store import served_build as served_build_id
 from ecosemantic.errors import NotFound, Unavailable
 from tests.engine_fixture import served_build
 from tests.fixture_data import CODES, FIXTURE_BIO, FIXTURE_DB, LOOP_DB
-
-
-def test_slug_lowercases_and_joins_runs_of_other_characters() -> None:
-    assert slug("ecoinvent-3.12-cutoff-native") == "ecoinvent-3-12-cutoff-native"
-    assert slug("  USLCI (2025) ") == "uslci-2025"
 
 
 def test_an_empty_data_directory_serves_nothing(tmp_path: Path) -> None:

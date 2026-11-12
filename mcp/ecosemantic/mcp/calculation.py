@@ -10,7 +10,7 @@ from pydantic import Field
 
 from ecosemantic.compute.links import held_pins, linked_credit_loops, linked_documents, pinned
 from ecosemantic.compute.montecarlo import paired_delta, paired_samples
-from ecosemantic.compute.overrides import apply_variant, stale
+from ecosemantic.compute.overrides import apply_variant
 from ecosemantic.compute.parameters import materialize
 from ecosemantic.compute.results import (
     ContributionResult,
@@ -18,6 +18,7 @@ from ecosemantic.compute.results import (
     InventoryResult,
     PinBehind,
     VariantScores,
+    cut_below,
 )
 from ecosemantic.errors import Invalid, NotFound, StaleScenario
 from ecosemantic.mcp.context import ServerContext
@@ -36,7 +37,7 @@ from ecosemantic.mcp.envelopes import (
 from ecosemantic.mcp.linking import moved_by
 from ecosemantic.mcp.panels import panel
 from ecosemantic.mcp.treatments import named_backwards, treatments_of
-from ecosemantic.model.canonical import base_pin
+from ecosemantic.model.canonical import base_pin, stale
 from ecosemantic.model.entities import DemandItem, Method, ProductSystem
 from ecosemantic.model.refs import BackgroundRef, Database, ForegroundRef
 from ecosemantic.model.validation import credit_loops, reference_of
@@ -55,7 +56,7 @@ from ecosemantic.ports.types import (
     MonteCarloConfig,
     Page,
     System,
-    offset_cursor,
+    page_start,
 )
 
 MAX_ITERATIONS = 200
@@ -132,8 +133,7 @@ async def one_method(
     """Exactly one method, for the tools that decompose a single total."""
     methods, hint = await methods_for(inventory, database, method_id, impact_method)
     if len(methods) != 1:
-        specs = [m.spec for m in methods]
-        raise Invalid(f"this tool takes one method; {impact_method!r} names {len(specs)}")
+        raise Invalid(f"a decomposition takes one method; {impact_method!r} names {len(methods)}")
     return methods[0], hint
 
 
@@ -299,29 +299,34 @@ async def contributions_of(
     cutoff: float = CUTOFF,
 ) -> ContributionResult:
     """One score of a materialised product system, decomposed along `by`, with the loops holding
-    a credit and the exchanges running a treatment backwards."""
+    a credit and the exchanges running a treatment backwards. A flat list keeps the items whose
+    fraction reaches `cutoff` and says what it dropped."""
     system = System.of(base, linked)
     named = credit_loops(base)
     inside = linked_credit_loops(linked.values())
     backwards = named_backwards(base, linked, treatments)
     if by == "process":
         found = await calculation.hotspots(system, items, method, top_n)
+        processes, cut = cut_below(found.items, cutoff)
         value = ContributionResult(
             database=base.database,
             by=by,
             total=found.total,
-            processes=found.items,
+            processes=processes,
+            cut=cut,
             credit_loops=named,
             linked_credit_loops=inside,
             treatments_run_backwards=backwards,
         )
     elif by == "flow":
         flows = await calculation.flow_hotspots(system, items, method, top_n)
+        kept, cut = cut_below(flows.items, cutoff)
         value = ContributionResult(
             database=base.database,
             by=by,
             total=flows.total,
-            flows=flows.items,
+            flows=kept,
+            cut=cut,
             credit_loops=named,
             linked_credit_loops=inside,
             treatments_run_backwards=backwards,
@@ -415,7 +420,7 @@ async def calculate_inventory(
     items = demand_of(base, demand)
     treatments = await treatments_of(context.inventory, base, linked)
     result, rows = await inventory_of(context.calculation, treatments, base, linked, items)
-    page = inventory_page(rows, compartment, query, limit, offset_cursor(cursor))
+    page = inventory_page(rows, compartment, query, limit, page_start(cursor, limit))
     filters = {"compartment": compartment}
     words = bool(applied_filters(filters)) and bool(inventory_page(rows, None, query, 1, 0).items)
     out = listing(page, empty_search_hint(filters, words)) if not page.items else listing(page)
@@ -460,14 +465,16 @@ def register(server: FastMCP, context: ServerContext) -> None:
         tags={COMPUTE},
         description=(
             "Decompose one impact. by='process' partitions the total over the processes "
-            "that emit it, each appearing once and the parts summing to the total. "
+            "that emit it, each appearing once. "
             "by='path' nests it under the demanded process along the supply chain that "
             "caused it, with elementary flows itemised at each node. by='flow' partitions "
             "it over the substances emitted or drawn, ranked by characterised score. Same "
             f"total every way. by='path' stops at max_level (default {MAX_LEVEL}) and "
             f"max_nodes (default {MAX_NODES}) and folds a branch below cutoff (default "
             f"{CUTOFF}) of the total into a remainder; by='process' and by='flow' answer the "
-            f'top_n (default {TOP_N}) largest parts. Example: {{"product_system_id": '
+            f"top_n (default {TOP_N}) largest parts that reach cutoff, and cut says how many "
+            "parts fell below it and their share of the total. Example: "
+            '{"product_system_id": '
             '"…", "by": "path", "method_id": "m_…", "max_level": 4}.'
         ),
         app=panel("contribution"),

@@ -152,6 +152,44 @@ def test_the_build_command_prints_one_json_document(
     assert answer["processes"] == EXPECTED["processes"]
 
 
+def test_the_build_command_leaves_the_import_out(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    inventory = write_inventory(tmp_path / INVENTORY_NAME)
+    method = write_method(tmp_path / METHOD_NAME)
+    out = tmp_path / "out"
+    assert (
+        databases_cli.main(
+            [
+                "uslci",
+                "build",
+                "1.2026-09.0",
+                "--out",
+                str(out),
+                "--inventory",
+                str(inventory),
+                "--method",
+                str(method),
+            ]
+        )
+        == 0
+    )
+    answer = json.loads(capsys.readouterr().out)
+
+    assert set(answer) == {
+        "bundle",
+        "processes",
+        "elementary_flows",
+        "methods",
+        "categories",
+        "converted",
+        "unit_converted",
+        "bridges_linked",
+        "bridges_unlinked",
+        "left_out",
+    }
+
+
 def test_the_build_command_builds_the_profile_s_downloads(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

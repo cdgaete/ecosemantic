@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useLocation, useParams } from 'react-router-dom'
 import { keys, useImpact, useSystem } from '@/api/queries'
 import { useUi } from '@/store/ui'
+import { movedSince } from '@/lib/hashes'
 import { paths, useGo } from '@/lib/paths'
 import { serializeParams, toImpactArguments, type ResultParams } from './params'
 import { useResultParams } from './useResultParams'
@@ -34,7 +35,7 @@ export function useResult() {
   }, [current, hash])
   const root = system?.reference_process ?? null
   const empty: ResultParams = { variants: [], amount: 1 }
-  const stale = current !== '' && hash !== '' && current !== hash
+  const stale = movedSince(hash, current)
   const impact = useImpact(id, hash, toImpactArguments(params ?? empty, root), params !== null && hash !== '' && !stale, () => useUi.getState().takeStartedImpact(id))
   const seconds = useElapsed(impact.isFetching)
   const waiting = stale ? 'Recalculate to compute this page for the current model.' : `Calculating over the background database: ${seconds} s`

@@ -3,8 +3,9 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { ReactFlowProvider, useStoreApi } from '@xyflow/react'
 import { useEffect } from 'react'
 import { MemoryRouter } from 'react-router-dom'
-import type { Placement, ProductSystem } from '@/api/types'
+import type { CardGeometry, Placement, ProductSystem } from '@/api/types'
 import { buildGraph, hotFrom, type LinkedNodeType } from '@/editors/graph/build'
+import { routed } from './placements'
 import { LinkedNode } from '@/editors/graph/LinkedNode'
 import { formatAmount } from '@/lib/format'
 import system from './fixtures/system.json'
@@ -18,7 +19,8 @@ vi.mock('@/api/client', async (importOriginal) => {
 const doc = system.value as ProductSystem
 const part = (systems.value as { id: string; name: string }[]).find((s) => s.id !== doc.id)!
 
-const placement: Placement = { code: 'system', x: 0, y: 0, width: 300, height: 74, depth: 0, shown_inputs: 0, row_height: 22, held: false, inputs: [], outputs: [], output: 37, activity: null, scaled: null }
+const placement: Placement = { code: 'system', x: 0, y: 0, width: 300, height: 74, depth: 0, shown_inputs: 0, held: false, inputs: [], outputs: [], output: 37, activity: null, scaled: null }
+const card: CardGeometry = { width: 300, header_height: 40, section_padding: 6, section_label: 18, row_height: 22 }
 
 function linking(): ProductSystem {
   const widget = doc.processes.find((p) => p.code === 'widget')!
@@ -35,7 +37,7 @@ function linking(): ProductSystem {
 
 describe('a linked system on the canvas', () => {
   it('is one card with an arrow to each process consuming it', () => {
-    const { nodes, edges } = buildGraph(linking(), hotFrom(null), 'widget')
+    const { nodes, edges } = buildGraph(linking(), routed(linking()).value, hotFrom(null), 'widget')
     const linked = nodes.filter((n) => n.type === 'linked')
     expect(linked.map((n) => n.id)).toEqual([`system:${part.id}`])
     const arrows = edges.filter((e) => e.source === `system:${part.id}`)
@@ -43,12 +45,12 @@ describe('a linked system on the canvas', () => {
   })
 
   it('draws the system icon, its name, its pin and its case, and opens the pinned version', async () => {
-    const node = buildGraph(linking(), hotFrom(null), 'widget').nodes.find((n) => n.type === 'linked') as LinkedNodeType
+    const node = buildGraph(linking(), routed(linking()).value, hotFrom(null), 'widget').nodes.find((n) => n.type === 'linked') as LinkedNodeType
     render(
       <QueryClientProvider client={new QueryClient()}>
         <MemoryRouter>
           <ReactFlowProvider>
-            <LinkedNode {...({ id: node.id, data: { ...node.data, placement }, type: 'linked' } as unknown as Parameters<typeof LinkedNode>[0])} />
+            <LinkedNode {...({ id: node.id, data: { ...node.data, placement, card }, type: 'linked' } as unknown as Parameters<typeof LinkedNode>[0])} />
           </ReactFlowProvider>
         </MemoryRouter>
       </QueryClientProvider>,
@@ -61,12 +63,34 @@ describe('a linked system on the canvas', () => {
     expect(screen.getByText('case light')).toBeInTheDocument()
   })
 
+  it('sizes the card, its header and its row from the geometry the layout hands it', async () => {
+    const node = buildGraph(linking(), routed(linking()).value, hotFrom(null), 'widget').nodes.find((n) => n.type === 'linked') as LinkedNodeType
+    const sized: CardGeometry = { width: 321, header_height: 44, section_padding: 8, section_label: 20, row_height: 26 }
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <ReactFlowProvider>
+            <LinkedNode {...({ id: node.id, data: { ...node.data, placement, card: sized }, type: 'linked' } as unknown as Parameters<typeof LinkedNode>[0])} />
+          </ReactFlowProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    const name = await screen.findByText(part.name)
+    const shell = document.querySelector('[style*="width: 321px"]') as HTMLElement
+    expect(shell.style.height).toBe('74px')
+    const header = name.closest('div') as HTMLElement
+    expect(header.style.height).toBe('44px')
+    const row = screen.getByText('ababab…abab').closest('div') as HTMLElement
+    expect(row.style.height).toBe(`${sized.row_height + 2 * sized.section_padding}px`)
+    expect(row.style.padding).toBe(`${sized.section_padding}px`)
+  })
+
   it('turns to its name in large type below half zoom, as a process card does', async () => {
-    const node = buildGraph(linking(), hotFrom(null), 'widget').nodes.find((n) => n.type === 'linked') as LinkedNodeType
+    const node = buildGraph(linking(), routed(linking()).value, hotFrom(null), 'widget').nodes.find((n) => n.type === 'linked') as LinkedNodeType
     function Zoomed() {
       const store = useStoreApi()
       useEffect(() => store.setState({ transform: [0, 0, 0.3] }), [store])
-      return <LinkedNode {...({ id: node.id, data: { ...node.data, placement }, type: 'linked' } as unknown as Parameters<typeof LinkedNode>[0])} />
+      return <LinkedNode {...({ id: node.id, data: { ...node.data, placement, card }, type: 'linked' } as unknown as Parameters<typeof LinkedNode>[0])} />
     }
     render(
       <QueryClientProvider client={new QueryClient()}>
@@ -83,12 +107,12 @@ describe('a linked system on the canvas', () => {
   })
 
   it('shows the scaled output beside the pin in the scaled view, and nothing in the per-unit view', async () => {
-    const node = buildGraph(linking(), hotFrom(null), 'widget').nodes.find((n) => n.type === 'linked') as LinkedNodeType
+    const node = buildGraph(linking(), routed(linking()).value, hotFrom(null), 'widget').nodes.find((n) => n.type === 'linked') as LinkedNodeType
     const drawn = (scaled: Record<string, number> | null) => (
       <QueryClientProvider client={new QueryClient()}>
         <MemoryRouter>
           <ReactFlowProvider>
-            <LinkedNode {...({ id: node.id, data: { ...node.data, placement: { ...placement, scaled } }, type: 'linked' } as unknown as Parameters<typeof LinkedNode>[0])} />
+            <LinkedNode {...({ id: node.id, data: { ...node.data, placement: { ...placement, scaled }, card }, type: 'linked' } as unknown as Parameters<typeof LinkedNode>[0])} />
           </ReactFlowProvider>
         </MemoryRouter>
       </QueryClientProvider>

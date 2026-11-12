@@ -2,6 +2,7 @@
   "hint": null,
   "value": [
     {
+      "account": null,
       "credential": null,
       "held": true,
       "name": "openlca",
@@ -12,6 +13,7 @@
       "versions": []
     },
     {
+      "account": null,
       "credential": null,
       "held": true,
       "name": "uslci",
@@ -24,6 +26,10 @@
       ]
     },
     {
+      "account": {
+        "name": "Nexus",
+        "phrase": "a Nexus account"
+      },
       "credential": "nexus",
       "held": true,
       "name": "bafu",
@@ -36,6 +42,10 @@
       ]
     },
     {
+      "account": {
+        "name": "ecoinvent",
+        "phrase": "an ecoinvent account"
+      },
       "credential": "ecoinvent",
       "held": true,
       "name": "ecoinvent",

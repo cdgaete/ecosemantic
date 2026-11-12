@@ -59,6 +59,12 @@ from ecosemantic.serve import (
     workspace_digest,
     yield_route,
 )
+from ecosemantic.settings import (
+    DEFAULT_BRIDGE_URL,
+    bridge_address,
+    credential_file,
+    named_bridge_url,
+)
 from ecosemantic.settings.handover import SERVICE, BridgeHealth, Health
 from ecosemantic.view.app import build_view
 from ecosemantic.view.stream import RETRY_MILLISECONDS
@@ -195,10 +201,28 @@ def test_a_bridge_address_without_the_bridge_is_refused(tmp_path: Path) -> None:
 
 def test_a_credential_file_without_the_bridge_is_refused(tmp_path: Path) -> None:
     with pytest.raises(Invalid, match="--credential-file names the credential"):
-        settings_from({}, tmp_path, credential_file=tmp_path / "credential.json")
+        settings_from({}, tmp_path, credential_path=tmp_path / "credential.json")
     with pytest.raises(Invalid, match="--credential-file names the credential"):
         settings_from({"ECOSEMANTIC_BRIDGE_CREDENTIAL_FILE": "credential.json"}, tmp_path)
-    assert settings_from({}, tmp_path, bridge=True, credential_file=tmp_path / "c").bridge is True
+    assert settings_from({}, tmp_path, bridge=True, credential_path=tmp_path / "c").bridge is True
+
+
+def test_the_bridge_address_and_credential_file_resolve_from_their_flags_and_variables(
+    tmp_path: Path,
+) -> None:
+    environ = {
+        "ECOSEMANTIC_BRIDGE_URL": "https://bridge.test",
+        "ECOSEMANTIC_BRIDGE_CREDENTIAL_FILE": "credential.json",
+    }
+    assert named_bridge_url("https://lab.test", environ) == "https://lab.test"
+    assert named_bridge_url(None, environ) == "https://bridge.test"
+    assert named_bridge_url(None, {}) is None
+    assert bridge_address("https://lab.test", environ) == "https://lab.test"
+    assert bridge_address(None, environ) == "https://bridge.test"
+    assert bridge_address(None, {}) == DEFAULT_BRIDGE_URL
+    assert credential_file(tmp_path / "kept", environ) == tmp_path / "kept"
+    assert credential_file(None, environ) == Path("credential.json")
+    assert credential_file(None, {}) is None
 
 
 async def test_the_page_opens_when_no_page_follows_within_the_wait() -> None:

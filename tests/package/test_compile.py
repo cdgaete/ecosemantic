@@ -2,20 +2,23 @@ from __future__ import annotations
 
 import dataclasses
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pytest
 
+from ecosemantic.backends.native.catalog import catalog_rows
 from ecosemantic.engine.background import Background
-from ecosemantic.errors import Invalid
-from ecosemantic.package.background import Import, Unlinked, read_background
+from ecosemantic.errors import Invalid, NotSupported
+from ecosemantic.package.background import Dataset, Import, Unlinked, read_background
 from ecosemantic.package.base_writer import BaseExchange, BaseFlow, BaseRows, write_base_bundle
 from ecosemantic.package.compile import compile_background
 from tests.engine_fixture import NOW, fixture_background, fixture_rows
 from tests.fixture_data import CODES, FIXTURE_DATABASE, FIXTURE_DB, FLOW_IDS
 
 
-def compiled(rows: BaseRows, directory: Path) -> Background:
+def import_of(rows: BaseRows, directory: Path) -> Import:
+    """The fixture's rows written as a bundle and read back as an import."""
     bundle = write_base_bundle(
         rows,
         scheme="olca",
@@ -24,8 +27,11 @@ def compiled(rows: BaseRows, directory: Path) -> Background:
         destination=directory / "bundle.zip",
         now=NOW,
     ).bundle
-    imported = read_background(bundle, FIXTURE_DB, foreground=frozenset())
-    return compile_background(imported, FIXTURE_DATABASE)
+    return read_background(bundle, FIXTURE_DB, foreground=frozenset())
+
+
+def compiled(rows: BaseRows, directory: Path) -> Background:
+    return compile_background(import_of(rows, directory), FIXTURE_DATABASE)
 
 
 def test_the_fixture_compiles_to_its_datasets_flows_and_methods(tmp_path: Path) -> None:
@@ -88,6 +94,24 @@ def test_every_exchange_keeps_its_distribution(tmp_path: Path) -> None:
     co2 = background.position("flow", FLOW_IDS["co2"])
     [emitted] = np.flatnonzero((biosphere.row == co2) & (biosphere.column == elec))
     assert biosphere.scale[emitted] == pytest.approx(5.0)
+
+
+def test_a_row_of_an_unknown_kind_is_refused_by_compile_and_catalog(tmp_path: Path) -> None:
+    given = import_of(fixture_rows(), tmp_path)
+    key = (FIXTURE_DB, CODES["steel"])
+    exchanges = cast(list[Dataset], given.datasets[key]["exchanges"])
+    unknown = {**exchanges[0], "type": "x"}
+    refused = dataclasses.replace(
+        given,
+        datasets={
+            at: {**dataset, "exchanges": [unknown, *exchanges[1:]]} if at == key else dataset
+            for at, dataset in given.datasets.items()
+        },
+    )
+    with pytest.raises(NotSupported, match="'x'"):
+        compile_background(refused, FIXTURE_DATABASE)
+    with pytest.raises(NotSupported, match="'x'"):
+        catalog_rows(refused)
 
 
 def test_an_import_with_an_unlinked_input_is_invalid() -> None:

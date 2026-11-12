@@ -8,9 +8,12 @@ import threading
 import time
 from pathlib import Path
 
+import keyring
 import pytest
 from filelock import FileLock
+from keyring.backends.fail import Keyring as FailKeyring
 
+from ecosemantic import files
 from ecosemantic.errors import Invalid, Unavailable
 from ecosemantic.settings import derived_port, workspace_digest
 from ecosemantic.settings.handover import SERVICE, BridgeHealth, Health
@@ -442,28 +445,25 @@ def test_a_first_start_the_machine_refuses_is_told_to_the_person(
     assert not home.pid.exists()
 
 
-def test_a_machine_without_a_credential_store_is_told_the_tray_cannot_start(
+def test_a_machine_without_a_credential_store_starts_the_tray_signed_out(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(keyring, "get_keyring", lambda: FailKeyring())
     environ = {"LOCALAPPDATA": str(tmp_path)}
     home = home_for(environ)
     home.logs.mkdir(parents=True)
-    settings_for(tmp_path).write(home.settings)
+    settings_for(tmp_path, bridge=False).write(home.settings)
     (tmp_path / "python.exe").write_text("", encoding="utf-8")
     monkeypatch.setattr(sys, "executable", str(tmp_path / "pythonw.exe"))
     platform = FakePlatform()
-    refused = "this machine has no credential store for the bridge's sign-in"
+    signed: list[bool] = []
 
-    def refusing(*args: object) -> None:
-        raise Unavailable(refused)
+    def runner(tray: Tray) -> None:
+        signed.append(tray.state().signed_in)
 
-    monkeypatch.setattr("ecosemantic.tray.__main__.store_for", refusing)
-    monkeypatch.setattr(
-        "ecosemantic.tray.__main__.platform_and_runner", lambda: (platform, lambda tray: None)
-    )
-    assert main([], environ) == 1
-    assert platform.refusals == [(APP, refused)]
-    assert refused in (home.logs / "tray.log").read_text(encoding="utf-8")
+    monkeypatch.setattr("ecosemantic.tray.__main__.platform_and_runner", lambda: (platform, runner))
+    assert main([], environ) == 0
+    assert signed == [False]
     assert not home.pid.exists()
 
 
@@ -700,11 +700,12 @@ def test_a_platform_the_job_refuses_is_shown_as_a_refusal(
 def test_a_write_that_fails_leaves_no_temporary_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def refusing(self: Path, target: Path) -> Path:
-        raise OSError(5, "the file is held by another process")
+    def refusing(source: object, destination: object) -> None:
+        raise PermissionError(13, "the file is held by another process")
 
-    monkeypatch.setattr(Path, "replace", refusing)
-    with pytest.raises(OSError, match="held by another process"):
+    monkeypatch.setattr(files, "REPLACE_WAIT_SECONDS", 0)
+    monkeypatch.setattr(os, "replace", refusing)
+    with pytest.raises(Unavailable, match="another process holds it"):
         written(tmp_path / "tray.pid", "4242\n")
     assert list(tmp_path.iterdir()) == []
 

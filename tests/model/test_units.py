@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from ecosemantic.databases.bafu import probe as bafu_probe
+from ecosemantic.databases.ecoinvent import probe as ecoinvent_probe
+from ecosemantic.databases.uslci import probe as uslci_probe
 from ecosemantic.errors import NotSupported
 from ecosemantic.model import units
 from ecosemantic.model.units import UNITS, by_name, by_symbol, canonical, convert
@@ -90,6 +95,26 @@ def test_normal_and_standard_cubic_metres_are_units_of_their_own() -> None:
     assert normal.group == units.NORMAL_VOLUME
     assert units.canonical(units.STANDARD_VOLUME) == standard
     assert units.canonical(units.NORMAL_VOLUME) == normal
+
+
+def test_the_table_says_which_symbols_it_knows() -> None:
+    assert units.knows("kg")
+    assert not units.knows("furlong")
+
+
+def test_no_probe_keeps_its_own_unit_check() -> None:
+    for probe in (uslci_probe, bafu_probe, ecoinvent_probe):
+        assert not hasattr(probe, "_known")
+
+
+def test_no_source_catches_a_unit_refusal() -> None:
+    root = Path(__file__).resolve().parents[2] / "databases" / "ecosemantic" / "databases"
+    catching = [
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*.py")
+        if "except NotSupported" in path.read_text(encoding="utf-8")
+    ]
+    assert catching == []
 
 
 def test_unknown_units_are_not_supported() -> None:

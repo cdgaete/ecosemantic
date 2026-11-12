@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from ecosemantic.compute.links import held_pins, linked_documents
 from ecosemantic.compute.parameters import materialize
 from ecosemantic.errors import Invalid
-from ecosemantic.geometry import Placement, link_texts, links
+from ecosemantic.geometry import CardGeometry, Placement, card_geometry, link_texts, links
 from ecosemantic.layout import arrange, bounds
 from ecosemantic.mcp.calculation import demand_of, variant_of
 from ecosemantic.mcp.context import ServerContext
@@ -25,7 +25,8 @@ from ecosemantic.troubles import Trouble, score, troubles
 
 class Arrangement(BaseModel):
     """Where every card of a product system is drawn and how every arrow runs: the map an agent
-    reads, the numbers the page draws, what is wrong with the drawing and its score."""
+    reads, the numbers the page draws, what is wrong with the drawing and its score. `card` is the
+    geometry every card is drawn at."""
 
     map: str
     cards: list[Placement]
@@ -34,6 +35,7 @@ class Arrangement(BaseModel):
     score: int
     bounds: dict[str, float]
     scaling: str | None
+    card: CardGeometry
 
 
 class CardSpot(BaseModel):
@@ -95,6 +97,7 @@ async def _arrangement(
         score=score(found),
         bounds=bounds(placements),
         scaling=reason,
+        card=card_geometry(),
     )
 
 

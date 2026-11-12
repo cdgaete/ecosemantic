@@ -15,7 +15,7 @@ from ecosemantic.engine.background import Background
 from ecosemantic.engine.foreground import Foreground
 from ecosemantic.engine.loops import Loops, loops_of
 from ecosemantic.engine.paths import PathTree, Walked, walk
-from ecosemantic.engine.solver import Solver, SolverName
+from ecosemantic.engine.solver import DEFAULT_SOLVER, Solver, SolverName
 from ecosemantic.errors import Invalid
 from ecosemantic.model.entities import DemandItem, Method, ProductSystem
 from ecosemantic.model.refs import ForegroundRef
@@ -76,7 +76,7 @@ class Calculation:
     and per category the direct impact of each activity and the cradle-to-gate intensities, each
     built on first use."""
 
-    def __init__(self, background: Background, solver: SolverName = "superlu") -> None:
+    def __init__(self, background: Background, solver: SolverName = DEFAULT_SOLVER) -> None:
         self.background = background
         self.technosphere = _csr(background.technosphere)
         self.biosphere = _csr(background.biosphere)

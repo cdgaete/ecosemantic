@@ -26,10 +26,9 @@ from ecosemantic.backends.native.store import (
     point,
     remove_unnamed_builds,
     served_build,
-    slug,
 )
 from ecosemantic.errors import Conflict
-from ecosemantic.model.refs import Database
+from ecosemantic.model.refs import Database, slug
 from ecosemantic.package.background import Import, Unlinked, require_linked
 from ecosemantic.package.compile import compile_background
 
@@ -56,8 +55,10 @@ def _keep(directory: Path, bundle: Path) -> str:
     return digest
 
 
-def _refuse_taken(target: Path, name: str, replace: bool) -> None:
-    """Conflict for a database another name holds, and for this one's without replace."""
+def refuse_taken(directory: Path, name: str, replace: bool) -> None:
+    """Conflict for a database another name holds in this directory, and for this one's without
+    replace."""
+    target = directory / DATABASES_DIR / slug(name, "-")
     build_id = served_build(target)
     if build_id is None:
         return
@@ -95,13 +96,13 @@ def install(
         system_model=system_model,
     )
     rows = catalog_rows(imported, dropped)
-    target = directory / DATABASES_DIR / slug(database.name)
+    target = directory / DATABASES_DIR / slug(database.name, "-")
     migrate(directory)
     digest = _keep(directory, bundle)
     build_id = uuid.uuid4().hex
     build = target / BUILDS_DIR / build_id
     with install_lock(target):
-        _refuse_taken(target, database.name, replace)
+        refuse_taken(directory, database.name, replace)
         build.mkdir(parents=True)
         try:
             background = compile_background(imported, database)

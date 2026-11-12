@@ -25,6 +25,10 @@ from fastmcp.client.transports import StdioTransport
 
 from ecosemantic.mcp.server import ROSTER
 
+REPOSITORY = Path(__file__).resolve().parents[1]
+
+sys.path.insert(0, str(REPOSITORY))
+
 TELEMETRY_OFF = {"ECOSEMANTIC_TELEMETRY": "off"}
 OPENED = """
 import json, sys
@@ -37,10 +41,14 @@ with es.open(data_dir=Path(sys.argv[1]), systems_dir=Path(sys.argv[2])) as ws:
 
 
 def wheels(dist: Path) -> list[Path]:
-    """The build's seven wheels, refused when the directory holds another count."""
+    """The build's wheels, one for each of the core's distributions, refused when the directory
+    holds another count."""
+    from scripts.members import distributions
+
     found = sorted(dist.glob("ecosemantic*-py3-none-any.whl"))
-    if len(found) != 7:
-        sys.exit(f"{dist} holds {len(found)} ecosemantic wheels, not seven")
+    held = len(distributions())
+    if len(found) != held:
+        sys.exit(f"{dist} holds {len(found)} ecosemantic wheels, not {held}")
     return found
 
 

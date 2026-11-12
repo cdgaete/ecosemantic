@@ -14,16 +14,15 @@ from lca_data_interface import NexusSession
 
 from ecosemantic.databases.bafu.build import build
 from ecosemantic.databases.bafu.download import Downloads, Nexus, download
-from ecosemantic.databases.bafu.profile import Profile, database_name, recorded
+from ecosemantic.databases.bafu.profile import Profile, recorded
 from ecosemantic.databases.lists import (
     distinct_unlinked,
-    flow_categories,
     process_ids,
+    top_categories,
     unlinked_mismatches,
 )
 from ecosemantic.databases.prepared import PreparedRelease
 from ecosemantic.errors import Invalid
-from ecosemantic.package.background import read_background
 from ecosemantic.ports.types import Account, InstallProgress, Reporter
 
 
@@ -106,10 +105,10 @@ def not_applied(bundle: Path) -> NotApplied:
 
 def prepare(profile: Profile, nexus: Nexus, work: Path, report: Reporter) -> Prepared:
     """Download a release's pack with its terms accepted — the command asks for them first — build
-    it into `work`, read the bundle back under the release's name, and hold the unlinked inputs of
-    that import to the list the profile records: one outside the list is `Invalid` naming every
-    one, raised before anything is installed. The import it answers has those inputs cleared, as
-    the install drops them. Each step is reported, the download with the bytes of its files."""
+    it into `work`, and hold the unlinked inputs of that import to the list the profile records:
+    one outside the list is `Invalid` naming every one, raised before anything is installed. The
+    import it answers has those inputs cleared, as the install drops them. Each step is reported,
+    the download with the bytes of its files."""
     report(InstallProgress(step="downloading"))
     fetched = cast(Downloads, download(profile, nexus, accept_terms=True, results=False))
     report(
@@ -120,20 +119,18 @@ def prepare(profile: Profile, nexus: Nexus, work: Path, report: Reporter) -> Pre
     )
     report(InstallProgress(step="building"))
     built = build(fetched.inventory, version=profile.version, out_dir=work)
-    report(InstallProgress(step="reading"))
-    imported = read_background(built.bundle, database_name(profile.version), foreground=frozenset())
     report(InstallProgress(step="checking"))
-    found = distinct_unlinked(imported, flow_categories(imported))
+    found = distinct_unlinked(built.imported, top_categories(built.bundle))
     mismatches = unlinked_mismatches(
-        found=found, path=recorded(profile.unlinked), processes=process_ids(imported)
+        found=found, path=recorded(profile.unlinked), processes=process_ids(built.imported)
     )
     if mismatches:
         raise Invalid("; ".join(mismatches))
     return Prepared(
         bundle=built.bundle,
-        imported=replace(imported, unlinked=[]),
+        imported=replace(built.imported, unlinked=[]),
         unlinked=found,
-        dropped=tuple(imported.unlinked),
+        dropped=tuple(built.imported.unlinked),
         licence=fetched.licence,
         citation=fetched.citation,
         not_applied=not_applied(built.bundle),

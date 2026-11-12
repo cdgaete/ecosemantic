@@ -24,17 +24,24 @@ class Command:
 
 
 def _document(answer: object) -> object:
-    """A dataclass answer as its fields, a path field as its string, and any other answer as it
-    stands."""
+    """A dataclass answer as the fields its repr shows, and any other answer as it stands."""
     if isinstance(answer, type) or not dataclasses.is_dataclass(answer):
         return answer
-    return {name: _plain(value) for name, value in dataclasses.asdict(answer).items()}
+    return {
+        field.name: getattr(answer, field.name)
+        for field in dataclasses.fields(answer)
+        if field.repr
+    }
 
 
-def _plain(value: object) -> object:
-    """A field as the JSON document carries it: a path as its string, and any other value as it
-    stands."""
-    return str(value) if isinstance(value, Path) else value
+def _serialised(value: object) -> object:
+    """A value JSON does not carry on its own: a dataclass as the dict `dataclasses.asdict` gives
+    it, and a path as its string."""
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, type) or not dataclasses.is_dataclass(value):
+        raise TypeError(f"{type(value).__name__} does not go into a document")
+    return dataclasses.asdict(value)
 
 
 def main(
@@ -53,5 +60,5 @@ def main(
     except EcoSemanticError as exc:
         print(error_payload(exc).model_dump_json(), file=sys.stderr)
         return 1
-    print(json.dumps(_document(answer)))
+    print(json.dumps(_document(answer), default=_serialised))
     return code(answer)

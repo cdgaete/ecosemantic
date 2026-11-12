@@ -37,6 +37,18 @@ def field_error(error: ValidationError) -> str:
     return error_line(first["loc"], first["msg"])
 
 
+def build_label(fingerprint: str | None) -> str:
+    """A build named by its fingerprint's first twelve characters as `build <twelve>`, or
+    `no build` when the fingerprint is None."""
+    return "no build" if fingerprint is None else f"build {fingerprint[:12]}"
+
+
+def unreadable(subject: str, error: ValidationError, hint: str) -> Unavailable:
+    """A stored document this version cannot read, named by its subject, with the first field it
+    refuses and the remedy `hint` names."""
+    return Unavailable(f"{subject} cannot be read by this version: {field_error(error)}", hint=hint)
+
+
 class Refusal(BaseModel):
     """One cell a folder cannot be read at: where it is, what it held and why it is refused."""
 
@@ -105,10 +117,9 @@ class OtherBuild(Conflict):
         self.database = database
         self.named = named
         self.installed = installed
-        build = "no build" if named is None else f"build {named[:12]}"
         super().__init__(
-            f"{product_system!r} names {build} of {database!r}; this store holds build "
-            f"{str(installed)[:12]}"
+            f"{product_system!r} names {build_label(named)} of {database!r}; this store holds "
+            f"{build_label(installed)}"
         )
 
 

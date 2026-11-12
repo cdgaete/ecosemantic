@@ -6,7 +6,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import re
 import shutil
 import threading
 from collections.abc import Callable
@@ -18,12 +17,12 @@ import duckdb
 from filelock import FileLock, Timeout
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from ecosemantic.backends.retry import read_bytes, replace
 from ecosemantic.engine.background import Background
 from ecosemantic.engine.calculation import Calculation
-from ecosemantic.engine.solver import SolverName, require_solver
+from ecosemantic.engine.solver import DEFAULT_SOLVER, SolverName, require_solver
 from ecosemantic.errors import NotFound, Unavailable
-from ecosemantic.model.refs import Database
+from ecosemantic.files import read_bytes, replace
+from ecosemantic.model.refs import Database, slug
 
 T = TypeVar("T")
 FORMAT = 5
@@ -57,12 +56,6 @@ class Entry(BaseModel):
         return self
 
 
-def slug(name: str) -> str:
-    """The directory name of a database: lowercased, each run of characters other than a-z and
-    0-9 one hyphen, no hyphen at either end."""
-    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
-
-
 def served_build(database_dir: Path) -> str | None:
     """The build id a database directory's pointer names, or None when it holds no pointer."""
     pointer = database_dir / POINTER_FILE
@@ -73,7 +66,7 @@ def served_build(database_dir: Path) -> str | None:
 
 def build_dir(directory: Path, name: str, build_id: str) -> Path:
     """The directory of one build of a database under the data directory."""
-    return directory / DATABASES_DIR / slug(name) / BUILDS_DIR / build_id
+    return directory / DATABASES_DIR / slug(name, "-") / BUILDS_DIR / build_id
 
 
 def point(database_dir: Path, build_id: str) -> None:
@@ -229,7 +222,7 @@ class NativeStore:
     built and again when the store lists the databases or is asked for a name it does not hold;
     every port call, catalog query and solve runs on the store's one worker thread."""
 
-    def __init__(self, directory: Path, solver: str = "superlu") -> None:
+    def __init__(self, directory: Path, solver: SolverName = DEFAULT_SOLVER) -> None:
         self.directory = directory
         self.solver: SolverName = require_solver(solver)
         self._entries: dict[str, Entry] = {}
@@ -398,7 +391,7 @@ class NativeStore:
         """Re-read the registry when the build the pointer names is not the one this store
         loaded, so a catalog or background opens the build the pointer names; NotFound when the
         database is gone."""
-        if served_build(self.directory / DATABASES_DIR / slug(name)) == self._builds[name]:
+        if served_build(self.directory / DATABASES_DIR / slug(name, "-")) == self._builds[name]:
             return
         self._read()
         if name not in self._entries:

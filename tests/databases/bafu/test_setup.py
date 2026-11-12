@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from ecosemantic.databases.bafu import build as bafu_build
 from ecosemantic.databases.bafu import profile as bafu_profile
 from ecosemantic.databases.bafu import setup as bafu_setup
 from ecosemantic.databases.bafu.build import build
@@ -32,6 +33,7 @@ VERSION = "2026-v1"
 ZOLCA = FIXTURES / "openlca.zip"
 FLOW_ID = "an-input"
 FLOW_NAME = "an input"
+PRODUCT_FLOW_ID = "00000000-0000-4000-8000-000000000081"
 PROCESS_NAME = "a process"
 
 
@@ -93,16 +95,17 @@ def a_process(tmp_path: Path) -> str:
     return code.split("_", 1)[0]
 
 
-def unlisted_input(process_id: str) -> Unlinked:
-    """One input no dataset of the fixture's package provides, taken by `process_id`."""
+def unlisted_input(process_id: str, flow_id: str = FLOW_ID) -> Unlinked:
+    """One input no dataset of the fixture's package provides, taken by `process_id` of the flow
+    `flow_id`."""
     return Unlinked(
         process=PROCESS_NAME,
         process_id=process_id,
         flow=FLOW_NAME,
-        flow_id=FLOW_ID,
+        flow_id=flow_id,
         provider_id=None,
         reason="no dataset of the package provides it",
-        dataset=f"{process_id}_{FLOW_ID}",
+        dataset=f"{process_id}_{flow_id}",
         position=1,
         is_input=True,
         amount=1.0,
@@ -128,7 +131,7 @@ def importable(row: Unlinked | None = None):
 
 
 def _release(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, listed: bool
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, listed: bool, flow_id: str = FLOW_ID
 ) -> tuple[StubNexus, Profile, UnlinkedRow]:
     """The fixture's release recorded in a temporary profiles directory, its unlinked list holding
     the input the doubled read answers, or holding nothing."""
@@ -136,14 +139,16 @@ def _release(
     row = UnlinkedRow(
         process_id=process_id,
         process_name=PROCESS_NAME,
-        flow_id=FLOW_ID,
+        flow_id=flow_id,
         flow_name=FLOW_NAME,
         flow_category="",
         provider_id=None,
     )
     server, profile, released = fixture_release(tmp_path, unlinked=(row,) if listed else ())
     monkeypatch.setattr(bafu_profile, "RELEASES", released)
-    monkeypatch.setattr(bafu_setup, "read_background", importable(unlisted_input(process_id)))
+    monkeypatch.setattr(
+        bafu_build, "read_background", importable(unlisted_input(process_id, flow_id))
+    )
     return server, profile, row
 
 
@@ -193,11 +198,38 @@ def test_prepare_reports_its_steps_in_order(
         "downloading",
         "downloaded",
         "building",
-        "reading",
         "checking",
     ]
     fetched = ZOLCA.stat().st_size + (server.root / LICENCE_FILE).stat().st_size
     assert reported[1].count == fetched
+
+
+def test_an_unlinked_product_flow_carries_its_top_category(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    server, profile, row = _release(tmp_path, monkeypatch, listed=True, flow_id=PRODUCT_FLOW_ID)
+
+    prepared = prepare(profile, server, tmp_path / "work", lambda _: None)
+
+    assert [found.flow_category for found in prepared.unlinked] == ["Resources"]
+    assert prepared.unlinked[0].key == row.key
+
+
+def test_prepare_reads_the_bundle_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    server, profile, _row = _release(tmp_path, monkeypatch, listed=True)
+    reads: list[str] = []
+    real = bafu_build.read_background
+
+    def counted(path: Path, name: str, *, foreground: frozenset[str]) -> Import:
+        reads.append(name)
+        return real(path, name, foreground=foreground)
+
+    monkeypatch.setattr(bafu_build, "read_background", counted)
+    monkeypatch.setattr(bafu_setup, "read_background", counted, raising=False)
+
+    prepare(profile, server, tmp_path / "work", lambda _: None)
+
+    assert reads == ["bafu-2026-v1"]
 
 
 def test_session_logs_in_with_the_account_it_is_given() -> None:

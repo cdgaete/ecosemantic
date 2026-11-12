@@ -129,7 +129,8 @@ async def test_an_impact_method_with_many_categories_is_invalid(
                 {"product_system_id": str(widget), "impact_method": "gwp", "by": "process"},
             )
         payload = json.loads(str(caught.value))
-        assert payload["error"] == "invalid" and "2" in payload["message"]
+        assert payload["error"] == "invalid"
+        assert payload["message"] == "a decomposition takes one method; 'gwp' names 2"
 
 
 async def test_by_flow_partitions_the_total_over_substances(
@@ -146,6 +147,33 @@ async def test_by_flow_partitions_the_total_over_substances(
     assert sum(f["score"] for f in out["flows"]) == pytest.approx(out["total"]["value"])
     assert out["flows"][0]["name"] == "Carbon dioxide, fossil"
     assert out["flows"][0]["fraction"] == pytest.approx(3.85 / 4.158)
+
+
+async def test_a_list_by_process_or_by_flow_drops_what_is_under_the_cutoff_and_says_what_it_cut(
+    server: FastMCP, widget: uuid.UUID
+) -> None:
+    args = {"product_system_id": str(widget), "method_id": GWP_ID, "cutoff": 0.1}
+    async with Client(server) as client:
+        processes = (
+            await client.call_tool("contribution_analysis", {**args, "by": "process"})
+        ).structured_content["value"]
+        flows = (
+            await client.call_tool("contribution_analysis", {**args, "by": "flow"})
+        ).structured_content["value"]
+        path = (
+            await client.call_tool("contribution_analysis", {**args, "by": "path"})
+        ).structured_content["value"]
+    assert [p["name"] for p in processes["processes"]] == [
+        "electricity production",
+        "steel production",
+    ]
+    assert processes["cut"]["cutoff"] == 0.1
+    assert processes["cut"]["below"] == 1
+    assert processes["cut"]["share"] == pytest.approx(0.1 / 4.158)
+    assert [f["name"] for f in flows["flows"]] == ["Carbon dioxide, fossil"]
+    assert flows["cut"]["below"] == 1
+    assert flows["cut"]["share"] == pytest.approx(0.308 / 4.158)
+    assert path["cut"] is None
 
 
 async def test_inventory_rows_name_their_source(server: FastMCP, widget: uuid.UUID) -> None:

@@ -1,6 +1,6 @@
 import { useContributions } from '@/api/queries'
 import type { Hotspot, Process, ProductSystem } from '@/api/types'
-import { categoryLabel, formatAgo, formatAmount, formatShare } from '@/lib/format'
+import { categoryLabel, cutNotice, formatAgo, formatAmount, formatShare } from '@/lib/format'
 import { RequestAction } from '@/requests/RequestAction'
 import { DataTable, type Column } from '@/window/DataTable'
 import { EditorHeader } from '@/window/EditorHeader'
@@ -28,6 +28,7 @@ export function GeneralPage({ result }: { result: Result }) {
   const { id, params, hash, system, impact, root, stale, waiting } = result
   const first = impact.data?.value.scores[0]
   const top = useContributions(id, hash, { by: 'process', method_id: first?.method.id, top_n: 5, demand: demandOf(params!, root) }, first !== undefined && !stale)
+  const cut = cutNotice(top.data?.value.cut ?? null)
   const rootProcess = system?.processes.find((p) => p.code === root)
   const action = <RequestAction systemId={id} entity="product_system" entityId={id} />
   const columns: Column<Hotspot>[] = [
@@ -58,6 +59,7 @@ export function GeneralPage({ result }: { result: Result }) {
             <BarChart rows={(top.data.value.processes ?? []).map((h) => ({ label: h.location ? `${h.name} · ${h.location}` : h.name, value: h.score, share: h.fraction }))} unit={first.unit} />
             <div className="pt-3">
               <DataTable columns={columns} rows={top.data.value.processes ?? []} rowKey={(h) => `${h.rank}`} />
+              {cut ? <p className="pt-1 text-xs text-muted-foreground">{cut}</p> : null}
               <Hint of={top.data} />
             </div>
           </>

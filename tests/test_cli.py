@@ -24,6 +24,7 @@ from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.cli import _parser, main
 from ecosemantic.cli.clients import SERVER
 from ecosemantic.compute.edits import add_scenario
+from ecosemantic.databases.bafu import build as bafu_build
 from ecosemantic.databases.bafu import profile as bafu_profile
 from ecosemantic.databases.bafu import setup as bafu_setup
 from ecosemantic.databases.ecoinvent.profile import profiled
@@ -35,6 +36,7 @@ from ecosemantic.mcp.context import AccountStart, ServerContext, Start
 from ecosemantic.model.canonical import content_hash
 from ecosemantic.model.entities import (
     Case,
+    Method,
     Parameter,
     ParameterOverride,
     ProductSystem,
@@ -56,13 +58,14 @@ from tests.databases.uslci.install_fixture import fixture_release
 from tests.databases.uslci_fixture import EXPECTED as USLCI_EXPECTED
 from tests.dict_resolver import DictResolver
 from tests.engine_fixture import served_build
-from tests.fixture_data import CODES, FIXTURE_DB, GWP
+from tests.fixture_data import CODES, FIXTURE_DB, GWP, WATER
 from tests.mcp.test_accounts import SCREEN, source
 from tests.openlca_fixture import METHOD, NAME, build_package
 from tests.openlca_fixture import PROCESSES as OPENLCA_PROCESSES
 from tests.package.conftest import AGENT
 
 GWP_ID = method_id(" > ".join(GWP))
+WATER_ID = method_id(" > ".join(WATER))
 
 
 def test_no_subcommand_is_an_error(capsys: pytest.CaptureFixture[str]) -> None:
@@ -488,6 +491,40 @@ def test_setup_uslci_refuses_the_same_name_twice_without_replace(
     assert json.loads(out)["directory"] == str(directory)
 
 
+class _Unreachable:
+    """A release server an install reaches for the first time only when it downloads."""
+
+    def __init__(self, base: str) -> None:
+        raise AssertionError("downloaded")
+
+
+def test_setup_of_an_installed_database_is_refused_before_any_download(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data = _uslci(tmp_path, monkeypatch)
+    code, _out, _err = _setup(["uslci", "--data-dir", str(data)], capsys)
+    assert code == 0
+
+    monkeypatch.setattr(uslci_setup, "CommonsServer", _Unreachable)
+    code, _out, err = _setup(["uslci", "--data-dir", str(data)], capsys)
+
+    assert code == 1 and json.loads(err)["error"] == "conflict", err
+    assert "database 'uslci-1.2026-09.0' is installed" in err
+    assert "downloaded" not in err
+
+
+def test_setup_with_replace_installs_an_installed_database_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data = _uslci(tmp_path, monkeypatch)
+    code, _out, _err = _setup(["uslci", "--data-dir", str(data)], capsys)
+    assert code == 0
+
+    code, _out, err = _setup(["uslci", "--data-dir", str(data), "--replace"], capsys)
+
+    assert code == 0, err
+
+
 def test_setup_uslci_writes_nothing_when_an_input_is_outside_its_list(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -508,7 +545,7 @@ def _bafu(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("NEXUS_PASSWORD", os.environ.get("NEXUS_PASSWORD") or "the-password")
     monkeypatch.setattr(bafu_profile, "RELEASES", recorded)
     monkeypatch.setattr(bafu_setup, "NexusSession", bafu_session(server))
-    monkeypatch.setattr(bafu_setup, "read_background", importable())
+    monkeypatch.setattr(bafu_build, "read_background", importable())
     return tmp_path / "data"
 
 
@@ -585,7 +622,7 @@ def test_setup_bafu_refuses_an_unlisted_unlinked_input(
 ) -> None:
     data = _bafu(tmp_path, monkeypatch)
     monkeypatch.setattr(
-        bafu_setup, "read_background", importable(unlisted_input(a_process(tmp_path)))
+        bafu_build, "read_background", importable(unlisted_input(a_process(tmp_path)))
     )
     code, _out, err = _setup(["bafu", "--data-dir", str(data), "--accept-terms"], capsys)
 
@@ -931,6 +968,68 @@ def test_compute_writes_the_contributions_and_the_inventory_the_tools_answer(
     schema = yaml.safe_load((inventory / "schema.yaml").read_text(encoding="utf-8"))
     assert schema["floor"] == listed.floor
     assert schema["dropped"] == listed.dropped
+
+
+class _EveryFamily(NativeInventory):
+    """A native inventory that answers every method of the database, whatever family is named."""
+
+    async def list_methods(self, database: str, impact_method: str | None = None) -> list[Method]:
+        return await super().list_methods(database)
+
+
+def test_compute_contributions_refuse_a_family_of_several_methods(
+    fixture_system_stored: ProductSystem,
+    bundle_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from ecosemantic import cli as cli_module
+
+    monkeypatch.setattr(cli_module, "NativeInventory", _EveryFamily)
+    folder = write_folder(tmp_path, fixture_system_stored)
+    argv = [
+        "compute",
+        "--data-dir",
+        str(bundle_dir),
+        "--folder",
+        str(folder),
+        "--impact-method",
+        "gwp",
+        "--contributions",
+    ]
+    assert main(argv) == 1
+    assert "a decomposition takes one method; 'gwp' names 2" in capsys.readouterr().err
+    assert not (folder / "results").exists()
+
+
+def test_compute_scores_every_method_of_a_family(
+    fixture_system_stored: ProductSystem,
+    bundle_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from ecosemantic import cli as cli_module
+
+    monkeypatch.setattr(cli_module, "NativeInventory", _EveryFamily)
+    folder = write_folder(tmp_path, fixture_system_stored)
+    argv = [
+        "compute",
+        "--data-dir",
+        str(bundle_dir),
+        "--folder",
+        str(folder),
+        "--impact-method",
+        "gwp",
+        "--json",
+    ]
+    assert main(argv) == 0
+    run = Path(json.loads(capsys.readouterr().out)["folder"])
+    with (run / "scores.csv").open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert len(rows) == 2
+    assert {row["method_id"] for row in rows} == {GWP_ID, WATER_ID}
 
 
 def test_compute_refuses_a_folder_whose_system_links_another(

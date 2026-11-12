@@ -10,7 +10,6 @@ export interface FlowSide {
 }
 
 export interface FlowSides {
-  sides: Record<string, Side>
   flows: Record<string, FlowSide>
   errors: string[]
 }
@@ -35,18 +34,16 @@ export function useElementaryFlows(named: NamedFlow[]): FlowSides {
   const answers = useQueries({
     queries: named.map(({ ref }) => ({ queryKey: keys.flow(ref.database, ref.id), queryFn: () => api.elementaryFlow(ref.database, ref.id), ...forever })),
   })
-  const sides: Record<string, Side> = {}
   const flows: Record<string, FlowSide> = {}
   const errors: string[] = []
   answers.forEach((answer, i) => {
     const { ref, name } = named[i]
     if (answer.data) {
-      sides[ref.id] = answer.data.value.side
       flows[ref.id] = { side: answer.data.value.side, compartment: answer.data.value.compartment, flow_type: answer.data.value.flow_type }
     }
     if (answer.error) errors.push(`${name}: ${answer.error.message}`)
   })
-  return { sides, flows, errors }
+  return { flows, errors }
 }
 
 export function useFlowSides(exchanges: Exchange[]): FlowSides {

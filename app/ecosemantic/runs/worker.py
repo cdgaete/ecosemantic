@@ -17,7 +17,7 @@ from ecosemantic.backends.native.inventory import NativeInventory
 from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.compute.links import linked_documents
 from ecosemantic.compute.parameters import materialize
-from ecosemantic.engine.solver import SOLVERS
+from ecosemantic.engine.solver import DEFAULT_SOLVER, SOLVERS, SolverName
 from ecosemantic.errors import EcoSemanticError, error_payload, failure_payload
 from ecosemantic.package.resolver import InventoryResolver
 from ecosemantic.ports.types import MonteCarloResult, RunPatch, RunProgress, System
@@ -44,7 +44,7 @@ def _reporter(
 
 
 async def _carry(
-    systems: Path, data: Path, runs_root: Path, run_id: uuid.UUID, solver: str
+    systems: Path, data: Path, runs_root: Path, run_id: uuid.UUID, solver: SolverName
 ) -> None:
     runs = FilesystemRuns(runs_root)
     folder = run_dir(runs_root, run_id)
@@ -94,7 +94,11 @@ async def _carry(
 
 
 def run_once(
-    systems: Path, data: Path, runs_root: Path, run_id: uuid.UUID, solver: str = "superlu"
+    systems: Path,
+    data: Path,
+    runs_root: Path,
+    run_id: uuid.UUID,
+    solver: SolverName = DEFAULT_SOLVER,
 ) -> None:
     """Carry one run to a terminal status, in this process, under the named solver."""
     asyncio.run(_carry(systems, data, runs_root, run_id, solver))
@@ -107,7 +111,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data-dir", required=True, type=Path)
     parser.add_argument("--runs-dir", required=True, type=Path)
     parser.add_argument("--run", required=True, type=uuid.UUID)
-    parser.add_argument("--solver", choices=SOLVERS, default="superlu")
+    parser.add_argument("--solver", choices=SOLVERS, default=DEFAULT_SOLVER)
     args = parser.parse_args(argv)
     run_once(args.systems_dir, args.data_dir, args.runs_dir, args.run, args.solver)
     return 0

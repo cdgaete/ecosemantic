@@ -7,11 +7,14 @@ from pathlib import Path
 import independent_scores
 import pytest
 
+from ecosemantic.databases.uslci import build as uslci_build
 from ecosemantic.databases.uslci import profile as releases
+from ecosemantic.databases.uslci import setup as uslci_setup
 from ecosemantic.databases.uslci.build import build
 from ecosemantic.databases.uslci.setup import notices, prepare
 from ecosemantic.databases.uslci.validate import validate
 from ecosemantic.errors import Invalid
+from ecosemantic.package.background import Import
 from ecosemantic.ports.types import InstallProgress
 from tests.databases.uslci.install_fixture import (
     INVENTORY_COMMIT,
@@ -71,10 +74,26 @@ def test_prepare_reports_its_steps_in_order(
         "downloading",
         "downloaded",
         "building",
-        "reading",
         "checking",
     ]
     assert reported[1].count == sum(path.stat().st_size for path in server.files.values())
+
+
+def test_prepare_reads_the_bundle_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    server, profile = _release(tmp_path, monkeypatch)
+    reads: list[str] = []
+    real = uslci_build.read_background
+
+    def counted(path: Path, name: str, *, foreground: frozenset[str]) -> Import:
+        reads.append(name)
+        return real(path, name, foreground=foreground)
+
+    monkeypatch.setattr(uslci_build, "read_background", counted)
+    monkeypatch.setattr(uslci_setup, "read_background", counted, raising=False)
+
+    prepare(profile, server, tmp_path / "work", lambda _: None)
+
+    assert reads == [f"uslci-{VERSION}"]
 
 
 def test_prepare_answers_the_import_with_its_unlinked_inputs_cleared(

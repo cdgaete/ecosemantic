@@ -1,28 +1,9 @@
 import { splitBackgroundExchanges } from '@/editors/background/exchanges'
-import { splitExchanges } from '@/editors/process/exchanges'
 import { describeUncertainty } from '@/lib/uncertainty'
-import system from './fixtures/system.json'
 import backgroundProcess from './fixtures/background_process.json'
-import type { BackgroundExchange, BackgroundProcess, ProductSystem } from '@/api/types'
+import type { BackgroundExchange, BackgroundProcess } from '@/api/types'
 
-const widget = (system.value as ProductSystem).processes.find((p) => p.code === 'widget')!
 const background = (backgroundProcess.value as BackgroundProcess).exchanges! as BackgroundExchange[]
-
-describe('splitExchanges', () => {
-  it('puts product inputs and drawn flows under inputs, production and emitted flows under outputs', () => {
-    const co2 = widget.exchanges.find((e) => e.type === 'elementary')!
-    const split = splitExchanges(widget, { [co2.input!.kind === 'elementary_flow' ? co2.input!.id : '']: 'output' })
-    expect(split.outputs[0].type).toBe('production')
-    expect(split.outputs.map((e) => e.name)).toContain(co2.name)
-    expect(split.inputs.every((e) => e.type === 'product')).toBe(true)
-    expect(split.unresolved).toEqual([])
-  })
-
-  it('keeps a flow whose side is not yet answered apart', () => {
-    const split = splitExchanges(widget, {})
-    expect(split.unresolved.map((e) => e.type)).toEqual(['elementary'])
-  })
-})
 
 describe('splitBackgroundExchanges', () => {
   const cutOff: BackgroundExchange = {

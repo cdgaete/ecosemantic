@@ -1,6 +1,7 @@
 import { useRuns } from '@/api/queries'
 import type { Run } from '@/api/types'
 import { formatAmount, shortHash } from '@/lib/format'
+import { movedSince } from '@/lib/hashes'
 import { paths } from '@/lib/paths'
 import { AppLink } from '@/lib/router'
 import { RequestAction } from '@/requests/RequestAction'
@@ -26,7 +27,7 @@ export function SimulationsPage({ view }: { view: SystemView }) {
     { key: 'method', header: 'Impact method', render: (r) => r.methods[0]?.impact_method ?? '' },
     { key: 'posted', header: 'Posted', render: (r) => r.posted_at },
     { key: 'finished', header: 'Finished', render: (r) => r.finished_at ?? '–' },
-    { key: 'hash', header: 'Computed on', render: (r) => (r.at_hash === view.system.hash ? shortHash(r.at_hash) : `${shortHash(r.at_hash)} (an earlier state)`) },
+    { key: 'hash', header: 'Computed on', render: (r) => (movedSince(r.at_hash, view.system.hash) ? `${shortHash(r.at_hash)} (an earlier state)` : shortHash(r.at_hash)) },
   ]
   return (
     <>

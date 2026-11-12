@@ -1,9 +1,10 @@
 import { Handle, Position, useStore, type NodeProps } from '@xyflow/react'
 import { memo, type CSSProperties, type ReactNode } from 'react'
-import type { Exchange } from '@/api/types'
+import type { CardGeometry, Exchange } from '@/api/types'
 import { formatAmount } from '@/lib/format'
 import { AppLink } from '@/lib/router'
 import { paths } from '@/lib/paths'
+import { rowsOf } from '@/lib/placement'
 import { cn } from '@/lib/utils'
 import { useUi } from '@/store/ui'
 import { Icon, type IconName } from '@/window/Icon'
@@ -32,7 +33,7 @@ function amountCell(exchange: Exchange, scaled: Record<string, number> | null, v
   return <span title={exchange.formula ?? undefined}>{formatAmount(exchange.amount)}</span>
 }
 
-function Row({ exchange, systemId, hot, scaled }: { exchange: Exchange; systemId: string; hot: boolean; scaled: Record<string, number> | null }) {
+function Row({ exchange, systemId, hot, scaled, card }: { exchange: Exchange; systemId: string; hot: boolean; scaled: Record<string, number> | null; card: CardGeometry }) {
   const values = useUi((s) => s.formulaValues)
   const amount = amountCell(exchange, scaled, values)
   const name =
@@ -52,8 +53,9 @@ function Row({ exchange, systemId, hot, scaled }: { exchange: Exchange; systemId
   return (
     <div
       data-zero={exchange.amount === 0}
+      style={{ height: card.row_height }}
       className={cn(
-        'grid h-[22px] grid-cols-[16px_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md px-1',
+        'grid grid-cols-[16px_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md px-1',
         exchange.type === 'production' && 'font-semibold',
         exchange.amount === 0 && 'text-muted-foreground opacity-60',
         hot && 'flash shadow-[0_0_0_2px_rgb(var(--highlight))]',
@@ -68,20 +70,18 @@ function Row({ exchange, systemId, hot, scaled }: { exchange: Exchange; systemId
 }
 
 function ProcessNodeComponent({ data }: NodeProps<ProcessNodeType>) {
-  const { process, reference, hot, hotExchanges, outline, systemId, placement } = data
-  const byId = new Map(process.exchanges.map((e) => [e.id, e]))
-  const inputs = placement.inputs.flatMap((port) => byId.get(port.exchange_id) ?? [])
-  const outputs = placement.outputs.flatMap((exchangeId) => byId.get(exchangeId) ?? [])
+  const { process, reference, hot, hotExchanges, outline, systemId, placement, card } = data
+  const { inputs, outputs } = rowsOf(process, placement)
   const detail = useStore((s) => detailAt(s.transform[2]))
   const chosen = useUi((s) => s.chosenProcess === process.id)
   const listed = inputs.slice(0, placement.shown_inputs)
   const hidden = inputs.slice(placement.shown_inputs)
   return (
     <div
-      style={{ height: placement.height, ...(outline ? ({ '--outline': outline } as CSSProperties) : {}) }}
+      style={{ width: card.width, height: placement.height, ...(outline ? ({ '--outline': outline } as CSSProperties) : {}) }}
       data-chosen={chosen || undefined}
       className={cn(
-        'w-[300px] overflow-hidden rounded-xl bg-background text-xs shadow-sm outline outline-[1.5px] -outline-offset-[1.5px] outline-node-border',
+        'overflow-hidden rounded-xl bg-background text-xs shadow-sm outline outline-[1.5px] -outline-offset-[1.5px] outline-node-border',
         reference && 'outline-[2.5px] -outline-offset-[2.5px]',
         hot && !outline && !chosen && 'shadow-[0_0_0_3px_rgb(var(--highlight))]',
         chosen && !outline && 'shadow-[0_0_0_3px_rgb(var(--accent))]',
@@ -92,7 +92,7 @@ function ProcessNodeComponent({ data }: NodeProps<ProcessNodeType>) {
         <Handle key={port.exchange_id} type="target" position={Position.Left} id={port.exchange_id} style={{ top: port.y }} className="!bg-link-stroke" />
       ))}
       <Handle type="source" position={Position.Right} id="out" style={{ top: placement.output }} className="!bg-link-stroke" />
-      <div className={cn('flex gap-2 overflow-hidden px-3 font-semibold leading-snug', detail === 'rows' ? 'h-[40px] items-start py-1' : 'h-full items-start py-3 text-2xl')}>
+      <div style={{ height: detail === 'rows' ? card.header_height : '100%' }} className={cn('flex gap-2 overflow-hidden px-3 font-semibold leading-snug', detail === 'rows' ? 'items-start py-1' : 'items-start py-3 text-2xl')}>
         <Icon name="process" />
         <AppLink to={paths.process(systemId, process.code)} title={process.name} className={cn('min-w-0 hover:underline nodrag nopan', detail === 'rows' ? 'line-clamp-1 break-all' : 'line-clamp-3 [overflow-wrap:anywhere]')}>
           {process.name}
@@ -101,21 +101,21 @@ function ProcessNodeComponent({ data }: NodeProps<ProcessNodeType>) {
       </div>
       {detail === 'rows' ? (
         <>
-          <div className="px-2 py-[6px]">
-            <div className="h-[18px] px-1 text-xs text-muted-foreground">›› Input flows</div>
+          <div style={{ paddingTop: card.section_padding, paddingBottom: card.section_padding }} className="px-2">
+            <div style={{ height: card.section_label }} className="px-1 text-xs text-muted-foreground">›› Input flows</div>
             {listed.map((e) => (
-              <Row key={e.id} exchange={e} systemId={systemId} hot={hotExchanges.includes(e.id)} scaled={placement.scaled} />
+              <Row key={e.id} exchange={e} systemId={systemId} hot={hotExchanges.includes(e.id)} scaled={placement.scaled} card={card} />
             ))}
             {hidden.length > 0 ? (
-              <AppLink to={paths.process(systemId, process.code, 'io')} className="nodrag nopan block h-[22px] w-full rounded-md text-center leading-[22px] text-muted-foreground hover:bg-foreground/8 hover:text-foreground">
+              <AppLink to={paths.process(systemId, process.code, 'io')} style={{ height: card.row_height, lineHeight: `${card.row_height}px` }} className="nodrag nopan block w-full rounded-md text-center text-muted-foreground hover:bg-foreground/8 hover:text-foreground">
                 {foldLabel(hidden)}
               </AppLink>
             ) : null}
           </div>
-          <div className="px-2 py-[6px] shadow-[inset_0_1px_0_rgb(var(--node-border))]">
-            <div className="h-[18px] px-1 text-right text-xs text-muted-foreground">Output flows ››</div>
+          <div style={{ paddingTop: card.section_padding, paddingBottom: card.section_padding }} className="px-2 shadow-[inset_0_1px_0_rgb(var(--node-border))]">
+            <div style={{ height: card.section_label }} className="px-1 text-right text-xs text-muted-foreground">Output flows ››</div>
             {outputs.map((e) => (
-              <Row key={e.id} exchange={e} systemId={systemId} hot={hotExchanges.includes(e.id)} scaled={placement.scaled} />
+              <Row key={e.id} exchange={e} systemId={systemId} hot={hotExchanges.includes(e.id)} scaled={placement.scaled} card={card} />
             ))}
           </div>
         </>

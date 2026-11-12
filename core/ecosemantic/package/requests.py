@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from ecosemantic.errors import Conflict, Invalid, NotFound
-from ecosemantic.package.sidecar import read_lines, write_lines
+from ecosemantic.package.sidecar import SIDECAR_DIR, parsed_lines, write_lines
 from ecosemantic.ports.types import Outcome, Request, RequestDraft
 
 REQUESTS_FILE = "requests.jsonl"
@@ -52,4 +52,5 @@ def write_requests(root: Path, requests: list[Request]) -> None:
 
 def read_requests(root: Path) -> list[Request]:
     """The queue under root/ecosemantic/, or an empty list when the file does not exist."""
-    return [Request.model_validate_json(line) for line in read_lines(root, REQUESTS_FILE)]
+    path = root / SIDECAR_DIR / REQUESTS_FILE
+    return parsed_lines(path, Request, f"remove {path} to drop the product system's requests")

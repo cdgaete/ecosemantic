@@ -18,6 +18,7 @@ from ecosemantic.backends.native.inventory import NativeInventory
 from ecosemantic.backends.native.search import NativeSearch
 from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.compute.accounts import held_accounts
+from ecosemantic.engine.solver import DEFAULT_SOLVER, SolverName
 from ecosemantic.errors import Unavailable
 from ecosemantic.events import EventBus, NotifyingStorage
 from ecosemantic.installs.supervisor import LocalInstaller
@@ -71,7 +72,7 @@ def build_context(
     actor: Actor | None = None,
     view_url: str | None = None,
     agent: str | None = None,
-    solver: str = "superlu",
+    solver: SolverName = DEFAULT_SOLVER,
     environ: Mapping[str, str] | None = None,
 ) -> ServerContext:
     """Bind one data directory and one product systems directory to the ports, calculating

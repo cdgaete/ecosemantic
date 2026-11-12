@@ -9,6 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast, get_args
 
+import olca_schema as o
+from olca_schema.zipio import ZipReader
+
 from ecosemantic.errors import Invalid
 from ecosemantic.package.background import Import
 
@@ -117,12 +120,20 @@ def process_ids(imported: Import) -> set[str]:
     return {code.split("_", 1)[0] for _, code in imported.datasets}
 
 
-def flow_categories(imported: Import) -> dict[str, str]:
-    """The top category of every elementary flow the import holds, by flow id."""
-    return {
-        code: next(iter(cast(tuple[str, ...], dataset["categories"])), "")
-        for (_, code), dataset in imported.flows.items()
-    }
+def top_category(flow: o.Flow) -> str:
+    """The first segment of a flow's category path, and nothing for a flow with none."""
+    return (flow.category or "").split("/")[0]
+
+
+def top_categories(*packages: Path) -> dict[str, str]:
+    """The top category of every flow the openLCA packages hold, by flow id, the earlier package's
+    record of a flow they share."""
+    found: dict[str, str] = {}
+    for path in packages:
+        with ZipReader(str(path)) as reader:
+            for flow in reader.read_each(o.Flow):
+                found.setdefault(flow.id, top_category(flow))
+    return found
 
 
 def distinct_unlinked(imported: Import, categories: Mapping[str, str]) -> tuple[UnlinkedRow, ...]:

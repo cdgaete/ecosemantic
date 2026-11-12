@@ -1,6 +1,7 @@
 import { useRerun } from '@/api/queries'
 import type { Call, Json } from '@/api/types'
 import { formatAmount } from '@/lib/format'
+import { movedSince } from '@/lib/hashes'
 import { AppLink } from '@/lib/router'
 import { paths } from '@/lib/paths'
 import { cn } from '@/lib/utils'
@@ -69,7 +70,7 @@ export function TrailItem({ call, chosen }: { call: Call; chosen: Set<string> })
       {rerun.error ? <p className="pl-3 text-destructive">{rerun.error.message}</p> : null}
       {again ? (
         <div className="pl-3">
-          {again.at_hash !== null && again.at_hash !== again.hash_now ? <p className="text-warning">As of now: the system changed since this call.</p> : null}
+          {movedSince(again.at_hash, again.hash_now) ? <p className="text-warning">As of now: the system changed since this call.</p> : null}
           <pre className="max-h-48 overflow-auto rounded-sm bg-muted p-1 text-xs">{JSON.stringify(again.result, null, 2)}</pre>
         </div>
       ) : null}

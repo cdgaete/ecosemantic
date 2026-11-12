@@ -7,37 +7,14 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Protocol
 
 from lca_data_interface import Downloaded
 from lca_data_interface import Pack as NexusPack
-from lca_data_interface.errors import (
-    CredentialsMissing,
-    LcaDataInterfaceError,
-    LicenceNotAccepted,
-    LoginRefused,
-    MissingField,
-    NotInCatalog,
-    NotOnServer,
-    ServiceError,
-    ShortDownload,
-    TokenRequired,
-)
+from lca_data_interface.errors import LcaDataInterfaceError
 
+from ecosemantic.databases import downloads
 from ecosemantic.databases.bafu.profile import Pack, Profile
-from ecosemantic.errors import Conflict, EcoSemanticError, Invalid, NotFound, Unavailable
-
-_TRANSLATIONS: Final[dict[type[LcaDataInterfaceError], type[EcoSemanticError]]] = {
-    CredentialsMissing: Unavailable,
-    LoginRefused: Unavailable,
-    TokenRequired: Unavailable,
-    ShortDownload: Unavailable,
-    ServiceError: Unavailable,
-    NotInCatalog: NotFound,
-    NotOnServer: NotFound,
-    MissingField: Invalid,
-    LicenceNotAccepted: Invalid,
-}
 
 
 class Nexus(Protocol):
@@ -84,7 +61,7 @@ def translating() -> Iterator[None]:
     try:
         yield
     except LcaDataInterfaceError as error:
-        raise _translated(error) from error
+        raise downloads.translated(error) from error
 
 
 def download(
@@ -109,8 +86,12 @@ def download(
         )
         results_file = _fetched(profile.results, session) if results else None
     return Downloads(
-        inventory=_checked(profile.inventory, inventory),
-        results=None if results_file is None else _checked(profile.results, results_file),
+        inventory=downloads.checked(inventory, profile.inventory.sha256),
+        results=(
+            None
+            if results_file is None
+            else downloads.checked(results_file, profile.results.sha256)
+        ),
         licence=licence,
         citation=profile.citation,
     )
@@ -124,19 +105,3 @@ def _fetched(pinned: Pack, session: Nexus) -> Downloaded:
         file_format=pinned.format,
         accept_licence=True,
     )
-
-
-def _checked(pinned: Pack, downloaded: Downloaded) -> Path:
-    """The path of a file whose SHA-256 is the one the profile pins; a different hash is a conflict
-    naming the file and both hashes."""
-    if downloaded.sha256 != pinned.sha256:
-        raise Conflict(
-            f"{downloaded.path.name} hashes to {downloaded.sha256}, the profile pins "
-            f"{pinned.sha256}"
-        )
-    return downloaded.path
-
-
-def _translated(error: LcaDataInterfaceError) -> EcoSemanticError:
-    """The core's error for one the client raised."""
-    return _TRANSLATIONS[type(error)](str(error))

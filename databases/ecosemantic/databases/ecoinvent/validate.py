@@ -17,10 +17,11 @@ from scipy.sparse import csr_matrix, diags, lil_matrix
 from ecosemantic.databases.ecoinvent.masterdata import unit_name
 from ecosemantic.databases.ecoinvent.profile import database_name
 from ecosemantic.databases.ecoinvent.release import Release
+from ecosemantic.databases.scores import relative
 from ecosemantic.databases.stopwatch import Stopwatch
 from ecosemantic.engine.background import Background
 from ecosemantic.engine.calculation import Calculation
-from ecosemantic.engine.solver import Solver
+from ecosemantic.engine.solver import DEFAULT_SOLVER, Solver
 from ecosemantic.errors import Invalid
 from ecosemantic.model.entities import Method
 from ecosemantic.model.refs import Database
@@ -113,12 +114,8 @@ def _differences(
     differences."""
     mine = ours[:, reference]
     scale = float(np.abs(theirs).max())
-    denominator = np.maximum(np.maximum(np.abs(mine), np.abs(theirs)), 1e-12 * scale)
     difference = np.abs(mine - theirs)
-    relative = np.divide(
-        difference, denominator, out=np.zeros_like(difference), where=denominator > 0
-    )
-    return mine, difference, relative
+    return mine, difference, relative(mine, theirs, scale)
 
 
 def _matrix_export_scores(export: _Export, labels: Sequence[str]) -> dict[str, np.ndarray]:
@@ -144,7 +141,7 @@ def _matrix_export_scores(export: _Export, labels: Sequence[str]) -> dict[str, n
     rows = np.array([position for position, _label_ in wanted])
     amounts = np.asarray(export.A.diagonal()).ravel()
     characterised = np.asarray((export.C.tocsr()[rows] @ export.B).toarray())
-    solved = Solver("superlu", export.A).adjoint(characterised.T)
+    solved = Solver(DEFAULT_SOLVER, export.A).adjoint(characterised.T)
     return {label: amounts * solved[:, index] for index, (_, label) in enumerate(wanted)}
 
 
@@ -639,16 +636,16 @@ def _compare_matrix(
     """Compare two sparse matrices entry for entry, naming every position that differs."""
     theirs = _entries(expected)
     mine = _entries(actual)
-    for position in theirs.keys() | mine.keys():
-        e = theirs.get(position, 0.0)
-        a = mine.get(position, 0.0)
-        scale = max(abs(e), abs(a))
-        relative = abs(e - a) / scale if scale else 0.0
+    positions = list(theirs.keys() | mine.keys())
+    e = [theirs.get(position, 0.0) for position in positions]
+    a = [mine.get(position, 0.0) for position in positions]
+    relatives = relative(np.array(e, dtype=float), np.array(a, dtype=float), 0.0)
+    for at, position in enumerate(positions):
         report.entry(
             kind,
-            relative,
+            float(relatives[at]),
             f"{kind}[{row_labels[position[0]]}, {column_labels[position[1]]}]: "
-            f"ecoinvent says {e!r}, the bundle {a!r}",
+            f"ecoinvent says {e[at]!r}, the bundle {a[at]!r}",
         )
 
 

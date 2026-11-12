@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ecosemantic.compute.parameters import materialize, refuse_zero_production
 from ecosemantic.errors import Invalid, StaleScenario
-from ecosemantic.model.canonical import base_pin
+from ecosemantic.model.canonical import base_pin, stale
 from ecosemantic.model.entities import (
     Case,
     ExchangeOverride,
@@ -36,9 +36,12 @@ def case_pin(product_system: ProductSystem, case: Case) -> str:
     return base_pin(apply_case(product_system, case))
 
 
-def stale(product_system: ProductSystem, scenario: Scenario) -> bool:
-    """Whether the scenario is pinned to a base other than the product system's as it stands."""
-    return scenario.base_hash != base_pin(product_system)
+def pin_under(product_system: ProductSystem, case: str | None) -> str:
+    """The pin of the document a case resolves to: the base pin under no case, the case's own
+    pin otherwise."""
+    if case is None:
+        return base_pin(product_system)
+    return case_pin(product_system, product_system.case(case))
 
 
 def apply_variant(product_system: ProductSystem, name: str) -> ProductSystem:

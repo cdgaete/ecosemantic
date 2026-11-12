@@ -21,7 +21,7 @@ if sys.platform == "win32":
 
     from ecosemantic.settings.handover import BridgeHealth
     from ecosemantic.tray import windows
-    from tests.tray.fakes import FakeLauncher, FakeStore, health_of
+    from tests.tray.fakes import FakeLauncher, health_of
 
     windows.kernel32.TerminateProcess.argtypes = (wintypes.HANDLE, wintypes.UINT)
     windows.kernel32.TerminateProcess.restype = wintypes.BOOL
@@ -106,7 +106,7 @@ def a_windows_tray(tmp_path: Path) -> tuple[Tray, windows.WindowsPlatform]:
             platform=platform,
             home=home,
             python=python,
-            store=FakeStore(),
+            environ={"ECOSEMANTIC_BRIDGE_CREDENTIAL_FILE": str(tmp_path / "credential.json")},
         ),
         platform,
     )

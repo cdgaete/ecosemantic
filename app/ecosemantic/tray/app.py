@@ -6,12 +6,14 @@ from __future__ import annotations
 import dataclasses
 import threading
 import traceback
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, assert_never
 
-from ecosemantic.bridge.credentials import CredentialStore
+from ecosemantic.bridge.credentials import status
 from ecosemantic.errors import Conflict, Invalid, Unavailable
+from ecosemantic.settings import bridge_address, credential_file
 from ecosemantic.settings.handover import SIGNED_OUT_STATES
 from ecosemantic.tray.engine import (
     LOG_FILE,
@@ -69,10 +71,11 @@ class Pending:
 
 class Tray:
     """What a person's menu does: it opens and copies the engine's addresses, signs this folder in
-    or out of the bridge, turns the bridge on or off, signing this folder in where no credential is
-    kept so no engine serves bridged without one, starts the engine, sets Windows' start-at-login
-    value, opens the logs, quits, and notifies once each time the bridge signs out or the engine
-    fails. One lock serialises a menu action and a poll, which come from two threads."""
+    or out of the bridge, turns the bridge on or off, signing this folder in where no engine token
+    or credential gives it a sign-in so no engine serves bridged without one, starts the engine,
+    sets Windows' start-at-login value, opens the logs, quits, and notifies once each time the
+    bridge signs out or the engine fails. One lock serialises a menu action and a poll, which come
+    from two threads."""
 
     def __init__(
         self,
@@ -81,13 +84,13 @@ class Tray:
         platform: Platform,
         home: Home,
         python: Path,
-        store: CredentialStore,
+        environ: Mapping[str, str],
     ) -> None:
         self.engine = engine
         self.platform = platform
         self.home = home
         self.python = python
-        self.store = store
+        self.environ = environ
         self.quit_requested = False
         self._pending: Pending | None = None
         self._own_sign_in = False
@@ -138,13 +141,13 @@ class Tray:
 
     def start(self) -> EngineState:
         """Start the engine, signing this folder in after it where the person keeps the bridge on
-        and the store holds no credential, under the lock a poll and a menu action share."""
+        and nothing gives it a sign-in, under the lock a poll and a menu action share."""
         with self._lock:
             return self._start()
 
     def _start(self) -> EngineState:
         """Start the engine, signing this folder in after it when the person keeps the bridge on and
-        the store holds no credential: the engine serves this machine without the bridge until that
+        nothing gives it a sign-in: the engine serves this machine without the bridge until that
         sign-in ends 0, which turns the bridge on and starts the engine under it. A start that does
         not finish leaves the person's bridge setting as it was."""
         stored = self._stored()
@@ -278,8 +281,14 @@ class Tray:
         )
 
     def _stored(self) -> bool:
-        """Whether this folder's credential store holds a sign-in."""
-        return self.store.load() is not None
+        """Whether this folder is signed in to the bridge, by its engine token or the credential it
+        keeps, as `ecosemantic bridge status` reads it."""
+        return status(
+            self.environ,
+            self.engine.settings.models,
+            bridge_address(None, self.environ),
+            credential_file(None, self.environ),
+        ).signed_in
 
     def _signing_in(self) -> None:
         """Start the sign-in this folder needs, whose exit 0 turns the bridge on and starts the
@@ -289,8 +298,8 @@ class Tray:
         self._own_sign_in = True
 
     def _connect(self) -> None:
-        """Turn the bridge on, signing in first when this folder holds no credential: the sign-in's
-        exit 0 turns the bridge on, so no engine starts bridged without one."""
+        """Turn the bridge on, signing in first when nothing gives this folder a sign-in: the
+        sign-in's exit 0 turns the bridge on, so no engine starts bridged without one."""
         if self._stored():
             self._bridged(True)
             return

@@ -9,6 +9,7 @@ import yaml
 
 from ecosemantic.compute.results import (
     ContributionResult,
+    Cut,
     ImpactResult,
     InventoryResult,
     VariantScores,
@@ -125,6 +126,31 @@ def test_a_contribution_over_processes_writes_its_own_columns(tmp_path: Path) ->
     assert rows[0]["rank"] == "1" and rows[0]["name"] == "transport"
     schema = yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))
     assert schema["by"] == "process"
+
+
+def test_a_contribution_run_records_the_cut_it_made(tmp_path: Path) -> None:
+    result = ContributionResult(
+        database=FIXTURE_DATABASE,
+        by="process",
+        total=Score(value=4.21, unit="kg CO2-Eq", method=GWP),
+        credit_loops=[],
+        processes=[],
+        cut=Cut(cutoff=0.01, below=2, share=0.004),
+    )
+    folder = write_contribution(tmp_path, key(), result, AT)
+    schema = yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))
+    assert schema["cut"] == {"cutoff": 0.01, "below": 2, "share": 0.004}
+    root = TreeNode(name="battery", location="CH", score=4.21, fraction=1.0, level=0)
+    tree = ContributionResult(
+        database=FIXTURE_DATABASE,
+        by="path",
+        total=Score(value=4.21, unit="kg CO2-Eq", method=GWP),
+        credit_loops=[],
+        root=root,
+        truncated=False,
+    )
+    folder = write_contribution(tmp_path / "tree", key(), tree, AT)
+    assert yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))["cut"] is None
 
 
 def test_a_monte_carlo_block_writes_the_summary_and_the_samples(tmp_path: Path) -> None:

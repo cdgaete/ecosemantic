@@ -152,6 +152,7 @@ export interface Answer<T> { value: T; hint: string | null; view_url: string | n
 export interface Listing<T> { items: T[]; has_more: boolean; next_cursor: string | null; hint: string | null; view_url: string | null }
 export interface InventoryListing extends Listing<InventoryRow> { database: Database; credit_loops: string[][]; linked_credit_loops: LinkedLoop[]; treatments_run_backwards: string[]; floor: number; dropped: number }
 export interface Port { exchange_id: string; y: number }
+export interface CardGeometry { width: number; header_height: number; section_padding: number; section_label: number; row_height: number }
 export interface Placement {
   code: string
   x: number
@@ -160,7 +161,6 @@ export interface Placement {
   height: number
   depth: number
   shown_inputs: number
-  row_height: number
   held: boolean
   inputs: Port[]
   outputs: string[]
@@ -172,7 +172,7 @@ export interface Label { x: number; y: number; width: number; height: number; pe
 export interface Route { provider: string; consumer: string; exchange_id: string; points: [number, number][]; label: Label }
 export type TroubleKind = 'cards_overlap' | 'edge_through_card' | 'edges_overlap' | 'edge_backwards' | 'edges_cross' | 'label_overlap'
 export interface Trouble { kind: TroubleKind; message: string; codes: string[] }
-export interface Arrangement { map: string; cards: Placement[]; edges: Route[]; troubles: Trouble[]; score: number; bounds: Record<string, number>; scaling: string | null }
+export interface Arrangement { map: string; cards: Placement[]; edges: Route[]; troubles: Trouble[]; score: number; bounds: Record<string, number>; scaling: string | null; card: CardGeometry }
 export interface SystemRead extends Answer<ProductSystem> { open_requests: number }
 export interface Method {
   id: string
@@ -187,7 +187,8 @@ export interface Score { value: number; unit: string; method: Method }
 export interface PairedDelta { delta_abs: number; delta_pct: number | null; delta_ci95: [number, number] | null }
 export interface VariantScores { name: string; scores: Score[]; deltas: number[]; credit_loops: string[][]; linked_credit_loops: LinkedLoop[]; treatments_run_backwards: string[]; uncertainty: MonteCarloResult | null; paired_deltas: PairedDelta[] | null }
 export type Scope = 'full' | 'biosphere_only'
-export interface MonteCarloConfig { n_min: number; n_max: number; rel_se_target: number; seed: number; scope: Scope; n: number | null }
+export interface MonteCarloDefaults { n_min: number; n_max: number; rel_se_target: number; seed: number }
+export interface MonteCarloConfig extends MonteCarloDefaults { scope: Scope; n: number | null }
 export interface MonteCarloSummary {
   n: number
   mean: number
@@ -226,6 +227,7 @@ export interface DemandItem { ref: BackgroundRef | ForegroundRef; amount: number
 export type SourceName = 'openlca' | 'uslci' | 'bafu' | 'ecoinvent'
 export type CredentialKind = 'ecoinvent' | 'nexus'
 export type InstallStatus = 'queued' | 'running' | 'terms' | 'done' | 'failed' | 'cancelled'
+export interface AccountName { name: string; phrase: string }
 export interface DatabaseSource {
   name: SourceName
   versions: string[]
@@ -233,6 +235,7 @@ export interface DatabaseSource {
   credential: CredentialKind | null
   terms: boolean
   held: boolean
+  account: AccountName | null
 }
 export interface Credential { username: string; password: string; token?: string }
 export type Reach = 'here' | 'bridge' | 'network'
@@ -291,6 +294,11 @@ export interface TreeNode {
   children: TreeNode[]
 }
 export type Decomposition = 'process' | 'path' | 'flow'
+export interface Cut {
+  cutoff: number
+  below: number
+  share: number
+}
 export interface ContributionResult {
   database: Database
   by: Decomposition
@@ -302,6 +310,7 @@ export interface ContributionResult {
   root: TreeNode | null
   truncated: boolean | null
   flows: FlowHotspot[] | null
+  cut: Cut | null
 }
 export type FlowType = 'emission' | 'natural resource' | 'inventory indicator' | 'economic'
 export type Side = 'input' | 'output'

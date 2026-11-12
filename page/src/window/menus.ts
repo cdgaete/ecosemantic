@@ -110,6 +110,7 @@ export function menus(context: MenuContext): Menu[] {
           key: 'theme',
           label: 'Theme',
           items: [
+            { key: 'theme-cobalt', label: context.theme === 'cobalt' ? '✓ Cobalt' : 'Cobalt', run: () => context.setTheme('cobalt') },
             { key: 'theme-ecosemantic', label: context.theme === 'ecosemantic' ? '✓ EcoSemantic' : 'EcoSemantic', run: () => context.setTheme('ecosemantic') },
             { key: 'theme-openlca', label: context.theme === 'openlca' ? '✓ openLCA' : 'openLCA', run: () => context.setTheme('openlca') },
           ],

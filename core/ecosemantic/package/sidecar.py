@@ -6,14 +6,17 @@ import uuid
 from collections.abc import Iterable
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
 
-from ecosemantic.errors import NotFound
+from ecosemantic.errors import NotFound, unreadable
+from ecosemantic.files import write_whole
 from ecosemantic.model.entities import Scenario
 from ecosemantic.model.refs import BackgroundRef, Database, ElementaryFlowRef, SystemRef
+from ecosemantic.ports.types import Layout
 
 SIDECAR_DIR = "ecosemantic"
 LAYOUT_FILE = "layout.json"
+VERSION_HINT = "open this product system with the version of ecosemantic that wrote it"
 
 
 class ProcessIdentity(BaseModel):
@@ -78,31 +81,36 @@ _FILES: dict[str, str] = {
 
 
 def write_lines(root: Path, filename: str, lines: Iterable[str]) -> None:
-    """Write one file of JSON lines under root/ecosemantic/, each line ended."""
+    """Write one file of JSON lines under root/ecosemantic/, each line ended, whole."""
     folder = root / SIDECAR_DIR
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / filename).write_text(
-        "".join(line + "\n" for line in lines), encoding="utf-8", newline="\n"
-    )
+    write_whole(folder / filename, "".join(line + "\n" for line in lines).encode("utf-8"))
 
 
-def read_lines(root: Path, filename: str) -> list[str]:
-    """The lines of a file under root/ecosemantic/ that carry something, or none when the file
-    does not exist."""
-    path = root / SIDECAR_DIR / filename
+def parsed_lines[M: BaseModel](path: Path, model: type[M], hint: str) -> list[M]:
+    """Each non-blank line of a stored file validated as model, none when the file does not exist;
+    a line this version cannot read raises Unavailable naming the file and the line."""
     if not path.is_file():
         return []
-    return [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    parsed: list[M] = []
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            parsed.append(model.model_validate_json(line))
+        except ValidationError as error:
+            raise unreadable(f"{path.name} line {number}", error, hint) from error
+    return parsed
 
 
 def write_sidecar(root: Path, sidecar: Sidecar) -> None:
-    """Write each part of the sidecar as one JSON file under root/ecosemantic/."""
+    """Write each part of the sidecar as one whole JSON file under root/ecosemantic/."""
     folder = root / SIDECAR_DIR
     folder.mkdir(parents=True, exist_ok=True)
     for attr, filename in _FILES.items():
         value = getattr(sidecar, attr)
         adapter = TypeAdapter(Sidecar.model_fields[attr].annotation)
-        (folder / filename).write_bytes(adapter.dump_json(value, indent=1))
+        write_whole(folder / filename, adapter.dump_json(value, indent=1))
 
 
 def read_sidecar(root: Path) -> Sidecar:
@@ -113,8 +121,29 @@ def read_sidecar(root: Path) -> Sidecar:
     parts = {}
     for attr, filename in _FILES.items():
         adapter = TypeAdapter(Sidecar.model_fields[attr].annotation)
-        parts[attr] = adapter.validate_json((folder / filename).read_bytes())
+        try:
+            parts[attr] = adapter.validate_json((folder / filename).read_bytes())
+        except ValidationError as error:
+            raise unreadable(filename, error, VERSION_HINT) from error
     return Sidecar(**parts)
+
+
+def write_layout(root: Path, layout: Layout) -> None:
+    """Write the layout under root/ecosemantic/ whole."""
+    write_whole(root / SIDECAR_DIR / LAYOUT_FILE, layout.model_dump_json(indent=1).encode("utf-8"))
+
+
+def read_layout(root: Path) -> Layout:
+    """The layout under root/ecosemantic/, empty when the product system holds none."""
+    path = root / SIDECAR_DIR / LAYOUT_FILE
+    if not path.is_file():
+        return Layout()
+    try:
+        return Layout.model_validate_json(path.read_bytes())
+    except ValidationError as error:
+        raise unreadable(
+            path.name, error, f"remove {path}; the drawing places its cards again"
+        ) from error
 
 
 def supplier_key(provider_id: str, flow_id: str) -> str:

@@ -5,9 +5,11 @@ import type {
   BackgroundExchange,
   BackgroundProcess,
   BackgroundRef,
+  CardGeometry,
   Case,
   Change,
   ContributionResult,
+  Cut,
   Database,
   DemandItem,
   ElementaryFlow,
@@ -77,6 +79,7 @@ import byPath from './fixtures/contributions_path.json'
 import inventory from './fixtures/inventory.json'
 import backgroundProcess from './fixtures/background_process.json'
 import notFound from './fixtures/error_not_found.json'
+import monteCarlo from './fixtures/monte_carlo.json'
 import run from './fixtures/run.json'
 import runs from './fixtures/runs.json'
 
@@ -276,7 +279,10 @@ const CONTRIBUTION_RESULT_KEYS = {
   root: true,
   truncated: true,
   flows: true,
+  cut: true,
 } satisfies Record<keyof ContributionResult, true>
+
+const CUT_KEYS = { cutoff: true, below: true, share: true } satisfies Record<keyof Cut, true>
 
 const INVENTORY_ROW_KEYS = {
   flow: true,
@@ -314,7 +320,9 @@ const VALIDATION_REPORT_KEYS = {
   errors: true,
 } satisfies Record<keyof ValidationReport, true>
 
-const ARRANGEMENT_KEYS = { map: true, cards: true, edges: true, troubles: true, score: true, bounds: true, scaling: true } satisfies Record<keyof Arrangement, true>
+const ARRANGEMENT_KEYS = { map: true, cards: true, edges: true, troubles: true, score: true, bounds: true, scaling: true, card: true } satisfies Record<keyof Arrangement, true>
+
+const CARD_GEOMETRY_KEYS = { width: true, header_height: true, section_padding: true, section_label: true, row_height: true } satisfies Record<keyof CardGeometry, true>
 
 const PLACEMENT_KEYS = {
   code: true,
@@ -324,7 +332,6 @@ const PLACEMENT_KEYS = {
   height: true,
   depth: true,
   shown_inputs: true,
-  row_height: true,
   held: true,
   inputs: true,
   outputs: true,
@@ -442,6 +449,7 @@ const typedSystem = systemFixture as SystemRead
 const typedLog = log as Answer<LogEntry[]>
 const typedValidation = validation as Answer<ValidationReport>
 const typedValidationErrors = validationErrors as Answer<ValidationReport>
+const typedMonteCarlo = monteCarlo as unknown as Answer<MonteCarloConfig>
 const typedLayout = layout as unknown as Answer<Arrangement>
 const typedRequests = requests as Answer<Request[]>
 const typedImpact = impact as Answer<ImpactResult>
@@ -546,9 +554,15 @@ describe('recorded response keys match the types field for field', () => {
     typedValidationErrors.value.errors.forEach((e) => expectKeys(e, VALIDATION_ISSUE_KEYS))
   })
 
+  it('the simulation defaults', () => {
+    expectKeys(typedMonteCarlo, ANSWER_KEYS)
+    expectKeys(typedMonteCarlo.value, MONTE_CARLO_CONFIG_KEYS)
+  })
+
   it('the arrangement of the cards', () => {
     expectKeys(typedLayout, ANSWER_KEYS)
     expectKeys(typedLayout.value, ARRANGEMENT_KEYS)
+    expectKeys(typedLayout.value.card, CARD_GEOMETRY_KEYS)
     expect(typedLayout.value.cards.length).toBeGreaterThan(0)
     typedLayout.value.cards.forEach((card) => expectKeys(card, PLACEMENT_KEYS))
   })
@@ -615,6 +629,7 @@ describe('recorded response keys match the types field for field', () => {
     })
     expect(typedByProcess.value.root).toBeNull()
     expect(typedByProcess.value.flows).toBeNull()
+    if (typedByProcess.value.cut) expectKeys(typedByProcess.value.cut, CUT_KEYS)
   })
 
   it('contributions by flow', () => {
@@ -637,6 +652,7 @@ describe('recorded response keys match the types field for field', () => {
     if (typedByPath.value.root) expectTreeNodeKeys(typedByPath.value.root)
     expect(typedByPath.value.processes).toBeNull()
     expect(typedByPath.value.flows).toBeNull()
+    expect(typedByPath.value.cut).toBeNull()
   })
 
   it('inventory', () => {

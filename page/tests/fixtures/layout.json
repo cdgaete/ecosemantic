@@ -6,6 +6,13 @@
       "wasted": 0.0,
       "width": 800.0
     },
+    "card": {
+      "header_height": 40.0,
+      "row_height": 22.0,
+      "section_label": 18.0,
+      "section_padding": 6.0,
+      "width": 300.0
+    },
     "cards": [
       {
         "activity": 0.25,
@@ -23,7 +30,6 @@
         "outputs": [
           "f40b4e96-c10a-563e-a98f-6293424b8c1f"
         ],
-        "row_height": 22.0,
         "scaled": {
           "74c2d4b2-2e8b-5b24-addf-4b6c49069c02": 0.6,
           "f40b4e96-c10a-563e-a98f-6293424b8c1f": 0.25
@@ -58,7 +64,6 @@
           "7d4b50c8-08f6-59d1-a7dc-08f2fa6b4542",
           "2da1fa1f-fede-561a-84a3-9c57c8aaf9b1"
         ],
-        "row_height": 22.0,
         "scaled": {
           "25a8146b-9de6-53b4-801a-9f63ca97e151": 0.5,
           "2da1fa1f-fede-561a-84a3-9c57c8aaf9b1": 0.1,

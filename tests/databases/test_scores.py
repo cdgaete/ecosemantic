@@ -5,9 +5,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 
-from ecosemantic.databases.scores import per_unit, relative_differences, score_every_dataset
+from ecosemantic.databases.scores import (
+    per_unit,
+    relative,
+    relative_differences,
+    score_every_dataset,
+)
 from ecosemantic.engine.background import Background
 from ecosemantic.errors import Invalid, NotFound
 from ecosemantic.package.background import read_background
@@ -47,6 +53,23 @@ def test_the_scale_is_the_reference_s_largest() -> None:
     )
     assert differences[SAME] == pytest.approx((5.0 - 0.002) / 5.0)
     assert differences[SAME] > 0.99
+
+
+def test_one_rule_answers_the_pairs_the_three_comparisons_meet() -> None:
+    pairs = [(0.0, 1e-13), (0.0, 0.0), (2.0, 1.0), (1.0, 1e-13), (1.0, 1.0 + 1e-6)]
+    ours = np.array([pair[0] for pair in pairs])
+    theirs = np.array([pair[1] for pair in pairs])
+    measured = relative(ours, theirs, 1.0)
+    assert measured == pytest.approx([0.0, 0.0, 0.5, 1.0, 1e-6], rel=1e-5)
+    assert relative(np.array([0.0]), np.array([1e-300]), 0.0) == pytest.approx([1.0])
+
+    keys = list(range(len(pairs)))
+    differences = relative_differences(
+        dict(zip(keys, ours.tolist(), strict=True)),
+        dict(zip(keys, theirs.tolist(), strict=True)),
+        group=lambda key: "one group",
+    )
+    assert [differences[key] for key in keys] == pytest.approx(measured.tolist(), rel=1e-5)
 
 
 def test_a_score_converts_between_kilowatt_hours_and_megajoules_by_3_6() -> None:

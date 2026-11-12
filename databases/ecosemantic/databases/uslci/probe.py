@@ -14,11 +14,11 @@ from pathlib import Path
 import olca_schema as o
 from olca_schema.zipio import ZipReader
 
-from ecosemantic.databases.lists import distinct_unlinked
+from ecosemantic.databases.lists import distinct_unlinked, top_categories
 from ecosemantic.databases.uslci.build import build
-from ecosemantic.errors import EcoSemanticError, Invalid, NotSupported
+from ecosemantic.errors import EcoSemanticError, Invalid
 from ecosemantic.model import units
-from ecosemantic.package.background import exchange_refusal, read_background
+from ecosemantic.package.background import exchange_refusal
 from ecosemantic.package.olca import uncertainty_refusal
 
 
@@ -65,15 +65,6 @@ def _schema_version(path: Path) -> int:
         return int(json.loads(archive.read("openlca.json"))["schemaVersion"])
 
 
-def _known(symbol: str) -> bool:
-    """Whether the core's unit table holds a symbol."""
-    try:
-        units.by_symbol(symbol)
-    except NotSupported:
-        return False
-    return True
-
-
 def _exchanges(processes: Sequence[o.Process]) -> list[o.Exchange]:
     """Every exchange of every process."""
     return [exchange for process in processes for exchange in process.exchanges or []]
@@ -109,17 +100,6 @@ def _characterised(reader: ZipReader, method: o.ImpactMethod, used: set[str]) ->
     return found
 
 
-def _top_categories(*packages: Path) -> dict[str, str]:
-    """The top category of each flow the packages hold, the earlier package's record of a flow it
-    shares."""
-    found: dict[str, str] = {}
-    for path in packages:
-        with ZipReader(str(path)) as reader:
-            for flow in reader.read_each(o.Flow):
-                found.setdefault(flow.id, (flow.category or "").split("/")[0])
-    return found
-
-
 def _unlinked(inventory: Path, methods: Sequence[Path], bridged: Sequence[Path]) -> _Unlinked:
     """The inputs a build of the release, its bridged repositories and its methods leaves unlinked,
     by their flow's top category, the units it converts with a repository's own factor, the bridge
@@ -138,8 +118,7 @@ def _unlinked(inventory: Path, methods: Sequence[Path], bridged: Sequence[Path])
                 bridges_unlinked=0,
                 refused=str(error),
             )
-        imported = read_background(built.bundle, "uslci-probe", foreground=frozenset())
-    rows = distinct_unlinked(imported, _top_categories(inventory, *bridged))
+        rows = distinct_unlinked(built.imported, top_categories(inventory, *bridged))
     return _Unlinked(
         by_category=dict(Counter(row.flow_category for row in rows)),
         by_own_factor=built.unit_converted,
@@ -165,7 +144,7 @@ def probe(inventory: Path, methods: Sequence[Path], *, bridged: Sequence[Path] =
             for exchange in _exchanges(processes)
             if exchange.unit is not None
             and exchange.unit.name is not None
-            and not _known(exchange.unit.name)
+            and not units.knows(exchange.unit.name)
         )
         other_property = sum(
             1

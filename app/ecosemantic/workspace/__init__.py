@@ -18,6 +18,7 @@ from pydantic import JsonValue, TypeAdapter
 
 from ecosemantic.compute.edits import ExchangeClearable, ProcessClearable
 from ecosemantic.compute.results import ContributionResult, ImpactResult
+from ecosemantic.engine.solver import DEFAULT_SOLVER, SolverName
 from ecosemantic.local import build_context, default_directories, defaulted
 from ecosemantic.mcp.calculation import (
     ImpactMonteCarlo,
@@ -123,7 +124,7 @@ T = TypeVar("T")
 def open(
     data_dir: Path | None = None,
     systems_dir: Path | None = None,
-    solver: str = "superlu",
+    solver: SolverName = DEFAULT_SOLVER,
     actor: Actor | None = None,
 ) -> Workspace:
     """A workspace over the two directories, this platform's defaults standing for either left

@@ -4,7 +4,6 @@ the base processes it reaches, with its manifest and changelog."""
 from __future__ import annotations
 
 import asyncio
-import os
 import uuid
 import zipfile
 from collections.abc import Mapping
@@ -22,6 +21,7 @@ from ecosemantic.compute.render import (
     render,
 )
 from ecosemantic.errors import Invalid
+from ecosemantic.files import replace
 from ecosemantic.model.entities import Exchange, Process, ProductSystem
 from ecosemantic.model.refs import (
     BackgroundRef,
@@ -240,7 +240,7 @@ def _assemble(
             target.writestr(CHANGELOG, changelog(prior, manifest).model_dump_json(indent=1))
         require_whole(staged)
         write_manifest(staged, manifest)
-        os.replace(staged, destination)
+        replace(staged, destination)
     finally:
         staged.unlink(missing_ok=True)
     return manifest

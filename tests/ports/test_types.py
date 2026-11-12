@@ -44,7 +44,7 @@ from ecosemantic.ports.types import (
     flow_side,
     fraction_of,
     is_open,
-    offset_cursor,
+    page_start,
     patched,
     source_credential,
 )
@@ -120,10 +120,16 @@ def test_method_not_found_carries_suggestions() -> None:
     assert "nothing" in str(error) and spec in str(error)
 
 
-def test_offset_cursor_names_the_start_or_an_offset() -> None:
-    assert offset_cursor(None) == 0 and offset_cursor("40") == 40
+def test_page_start_names_the_start_or_an_offset() -> None:
+    assert page_start(None, 20) == 0 and page_start("40", 20) == 40
     with pytest.raises(Invalid):
-        offset_cursor("next")
+        page_start("next", 20)
+
+
+def test_page_start_refuses_a_limit_below_one() -> None:
+    for limit in (0, -1):
+        with pytest.raises(Invalid, match="limit is at least 1"):
+            page_start(None, limit)
 
 
 def test_page_at_offset_points_at_the_next_page_only_when_there_is_one() -> None:

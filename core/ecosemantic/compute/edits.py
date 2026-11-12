@@ -12,7 +12,7 @@ from pydantic import JsonValue, ValidationError
 from ecosemantic.compute.links import pins
 from ecosemantic.compute.overrides import apply_scenario
 from ecosemantic.compute.parameters import materialize
-from ecosemantic.errors import Conflict, Invalid, error_line
+from ecosemantic.errors import Conflict, Invalid, build_label, error_line
 from ecosemantic.model.canonical import base_pin
 from ecosemantic.model.entities import (
     Case,
@@ -113,7 +113,7 @@ def rebase_database(system: ProductSystem, installed: Database) -> ProductSystem
     that database and its elementary flows. Invalid for the record the document holds already."""
     if system.database == installed:
         raise Invalid(
-            f"{system.name} is on build {str(installed.fingerprint)[:12]} of "
+            f"{system.name} is on {build_label(installed.fingerprint)} of "
             f"{installed.name!r} already"
         )
     moved = system.model_copy(deep=True, update={"database": installed})

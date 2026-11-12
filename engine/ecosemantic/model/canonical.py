@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from pydantic import JsonValue
 
-from ecosemantic.model.entities import Exchange, ProductSystem
+from ecosemantic.model.entities import Exchange, ProductSystem, Scenario
 from ecosemantic.model.refs import ExchangeInput
 
 
@@ -117,3 +117,8 @@ def base_pin(product_system: ProductSystem) -> str:
     no case compute over, so a case written or deleted moves neither."""
     processes, exchanges, parameters, _, reference = canonical(product_system)
     return _digest([processes, exchanges, parameters, reference])
+
+
+def stale(product_system: ProductSystem, scenario: Scenario) -> bool:
+    """Whether the scenario is pinned to a base other than the product system's as it stands."""
+    return scenario.base_hash != base_pin(product_system)

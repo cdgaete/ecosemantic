@@ -57,4 +57,5 @@ def test_account_for_off_a_terminal_without_variables_is_unavailable() -> None:
     assert str(raised.value) == "ecoinvent needs an account"
     assert raised.value.hint == missing("ecoinvent")
     assert "EI_USERNAME and EI_PASSWORD" in (raised.value.hint or "")
-    assert "Databases editor" in (raised.value.hint or "")
+    assert "in a terminal" in (raised.value.hint or "")
+    assert "Databases editor" not in (raised.value.hint or "")

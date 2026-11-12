@@ -9,12 +9,14 @@ import uuid
 from collections.abc import Callable
 from pathlib import Path
 
+import keyring
 import pytest
 from filelock import FileLock
+from keyring.backends.fail import Keyring as FailKeyring
 
-from ecosemantic.bridge.credentials import Credential
-from ecosemantic.bridge.start import DEFAULT_BRIDGE_URL
+from ecosemantic.bridge.credentials import Credential, store_for
 from ecosemantic.errors import Conflict, Invalid, Unavailable
+from ecosemantic.settings import DEFAULT_BRIDGE_URL
 from ecosemantic.settings.handover import BridgeHealth, Health
 from ecosemantic.tray.__main__ import quit_tray
 from ecosemantic.tray.app import SIGNED_OUT_NOTICE, Tray, dispatched
@@ -25,7 +27,6 @@ from tests.tray.fakes import (
     SCREEN,
     FakeLauncher,
     FakePlatform,
-    FakeStore,
     HealthReader,
     Time,
     health_of,
@@ -60,9 +61,11 @@ def a_tray(
     accounts: str | None = SCREEN,
     launcher: FakeLauncher | None = None,
     health: Callable[[int], Health | None] | None = None,
-    store: FakeStore | None = None,
+    signed_in: bool = False,
+    environ: dict[str, str] | None = None,
 ) -> tuple[Tray, FakePlatform, Engine, Home, HealthReader, Time]:
-    """A tray over this folder, its machine, its engine and its credential store the test's."""
+    """A tray over this folder, its machine, its engine and this process's credential store, signed
+    in when the test says so, and reading the environment the test gives it."""
     home = Home(tmp_path / "home")
     home.root.mkdir(parents=True)
     python = tmp_path / "payload" / "python" / "python.exe"
@@ -91,13 +94,15 @@ def a_tray(
         clock=clock.clock,
         sleep=clock.sleep,
     )
+    if signed_in:
+        store_for(DEFAULT_BRIDGE_URL, models, None).save(a_credential(models))
     return (
         Tray(
             engine=engine,
             platform=platform,
             home=home,
             python=python,
-            store=store if store is not None else FakeStore(),
+            environ={} if environ is None else environ,
         ),
         platform,
         engine,
@@ -233,8 +238,7 @@ def test_a_second_bridge_command_is_refused_while_one_runs(tmp_path: Path) -> No
 
 
 def test_connect_and_disconnect_save_the_setting_and_restart(tmp_path: Path) -> None:
-    store = FakeStore(credential=a_credential(tmp_path / "models"))
-    tray, platform, engine, home, health, time = a_tray(tmp_path, bridge=False, store=store)
+    tray, platform, engine, home, health, time = a_tray(tmp_path, bridge=False, signed_in=True)
     engine.start()
     tray.act("connect")
     assert TraySettings.read(home.settings).bridge is True
@@ -391,15 +395,18 @@ def test_a_start_with_the_bridge_off_and_no_credential_starts_the_engine(tmp_pat
 def test_a_sign_out_then_a_connect_signs_in_instead_of_failing_the_engine(
     tmp_path: Path,
 ) -> None:
-    store = FakeStore(credential=a_credential(tmp_path / "models"))
+    store = store_for(DEFAULT_BRIDGE_URL, tmp_path / "models", None)
     tray, platform, engine, home, health, time = a_tray(
-        tmp_path, health_document=CONNECTED, launcher=FakeLauncher(ends_bridge=False), store=store
+        tmp_path,
+        health_document=CONNECTED,
+        launcher=FakeLauncher(ends_bridge=False),
+        signed_in=True,
     )
     engine.start()
     assert tray.state().bridge == "connected"
     tray.act("sign-out")
     platform.launcher.processes[1].ended(0)
-    store.credential = None
+    store.delete()
     tray.state()
     assert TraySettings.read(home.settings).bridge is False
     tray.act("connect")
@@ -435,8 +442,7 @@ def test_a_start_with_the_bridge_on_and_no_credential_serves_then_signs_in(
     assert platform.launcher.processes[-1].command == engine_command(
         tray.python, TraySettings(databases=tmp_path / "databases", models=tmp_path / "models")
     )
-    signed = FakeStore(credential=a_credential(tmp_path / "second" / "models"))
-    tray, platform, engine, home, health, time = a_tray(tmp_path / "second", store=signed)
+    tray, platform, engine, home, health, time = a_tray(tmp_path / "second", signed_in=True)
     tray.start()
     assert not [process for process in platform.launcher.processes if "sign-in" in process.command]
     assert engine.running
@@ -522,6 +528,20 @@ def test_a_second_tray_exits_and_quit_ends_the_first(tmp_path: Path) -> None:
             holder.wait()
 
 
+def test_the_tray_reads_signed_in_as_bridge_status_does(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    token = {"ECOSEMANTIC_BRIDGE_TOKEN": "the-engine-token"}
+    tray, platform, engine, home, health, time = a_tray(tmp_path, bridge=False, environ=token)
+    state = tray.start()
+    assert state.signed_in is True
+
+    monkeypatch.setattr(keyring, "get_keyring", lambda: FailKeyring())
+    tray, platform, engine, home, health, time = a_tray(tmp_path / "no-store", bridge=False)
+    state = tray.start()
+    assert state.signed_in is False
+
+
 def test_signed_out_and_failed_notify_once(tmp_path: Path) -> None:
     tray, platform, engine, home, health, time = a_tray(
         tmp_path / "signed-out", health_document=BridgeHealth(state="signed-out")
@@ -553,8 +573,7 @@ def test_a_page_the_health_does_not_name_is_refused(tmp_path: Path) -> None:
 
 
 def test_start_at_login_opens_the_logs_starts_the_engine_and_quits(tmp_path: Path) -> None:
-    store = FakeStore(credential=a_credential(tmp_path / "models"))
-    tray, platform, engine, home, health, time = a_tray(tmp_path, store=store)
+    tray, platform, engine, home, health, time = a_tray(tmp_path, signed_in=True)
     tray.act("start-at-login")
     assert platform.logins == [True]
     tray.act("open-logs")
@@ -569,9 +588,7 @@ def one_race(root: Path) -> list[object]:
     """One round of a menu action and a poll started together, answering what each of them did: a
     relaunch is already due, so both would start an engine without the tray's lock."""
     launcher = FakeLauncher(slowness=0.05)
-    tray, platform, engine, home, health, time = a_tray(
-        root, launcher=launcher, store=FakeStore(credential=a_credential(root / "models"))
-    )
+    tray, platform, engine, home, health, time = a_tray(root, launcher=launcher, signed_in=True)
     engine.start()
     launcher.processes[-1].ended(1)
     tray.state()

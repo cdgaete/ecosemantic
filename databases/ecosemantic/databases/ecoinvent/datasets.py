@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, get_args
 
-from ecosemantic.databases.ecoinvent.masterdata import text, unit_name
-from ecosemantic.errors import Invalid, NotSupported
+from ecosemantic.databases.ecoinvent.masterdata import exchange_unit, text
+from ecosemantic.errors import Invalid
 from ecosemantic.model.entities import Uncertainty, UncertaintyType
 from ecosemantic.package.base_writer import BaseDataset, BaseExchange
 
@@ -48,16 +48,6 @@ def _required(element: ET.Element, tag: str) -> ET.Element:
     if found is None:
         raise Invalid(f"{element.tag.removeprefix(NS)} holds no {tag}")
     return found
-
-
-def _unit(element: ET.Element, native: str, findings: Findings) -> str:
-    """The core's name for an exchange's unit, or the symbol the core does not know."""
-    symbol = text(element, "unitName")
-    try:
-        return unit_name(symbol)
-    except NotSupported:
-        _append(findings.unknown_units, symbol, native)
-        return symbol
 
 
 def _amount(element: ET.Element) -> float:
@@ -201,7 +191,7 @@ def _exchange(
         if link is None:
             _append(findings.unread, "unlinked input", native)
             return None
-        _unit(child, native, findings)
+        exchange_unit(child, native, findings.unknown_units)
         return BaseExchange(
             kind="technosphere",
             input=f"{link}_{child.attrib['intermediateExchangeId']}",
@@ -213,7 +203,7 @@ def _exchange(
         if group != "4":
             _append(findings.unread, f"elementary group {group}".strip(), native)
             return None
-        _unit(child, native, findings)
+        exchange_unit(child, native, findings.unknown_units)
         return BaseExchange(
             kind="biosphere",
             input=child.attrib["elementaryExchangeId"],
@@ -265,7 +255,7 @@ def _dataset(
         native=native,
         name=text(activity, "activityName"),
         reference_product=text(reference, "name"),
-        unit=_unit(reference, native, findings),
+        unit=exchange_unit(reference, native, findings.unknown_units),
         location=text(geography, "shortname"),
         comment=None,
         url=urls.get(native),

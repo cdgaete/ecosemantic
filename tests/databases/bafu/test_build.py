@@ -120,6 +120,20 @@ def test_the_command_builds_from_the_zolca_it_is_given(
     }
 
 
+def test_the_build_command_leaves_the_import_out(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert (
+        databases_cli.main(
+            ["bafu", "build", "2026-v1", "--out", str(tmp_path), "--zolca", str(ZOLCA)]
+        )
+        == 0
+    )
+    answer = json.loads(capsys.readouterr().out)
+
+    assert set(answer) == {"bundle", "records", "not_carried"}
+
+
 def test_without_a_zolca_the_command_builds_the_pack_its_profile_pins(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

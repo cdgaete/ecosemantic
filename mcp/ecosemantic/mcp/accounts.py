@@ -8,9 +8,9 @@ from typing import Literal
 
 from pydantic import BaseModel, computed_field
 
-from ecosemantic.compute.accounts import VARIABLES
+from ecosemantic.compute.accounts import VARIABLES, account_variables
 from ecosemantic.mcp.context import AccountStart
-from ecosemantic.ports.types import CredentialKind, DatabaseSource
+from ecosemantic.ports.types import DatabaseSource
 
 Reach = Literal["here", "bridge", "network"]
 
@@ -35,21 +35,11 @@ def _setup(source: DatabaseSource) -> str:
     return f"`ecosemantic setup {source.name}`"
 
 
-def _named(kind: CredentialKind) -> str:
-    """The variables one account kind travels in, and the token an account with a second factor
-    takes."""
-    username, password, token = VARIABLES[kind]
-    variables = f"{username} and {password}"
-    if token is None:
-        return variables
-    return f"{variables} (and {token} for an account with a second factor)"
-
-
 def _variables(needed: Sequence[DatabaseSource]) -> str:
     """The variables a server is started with to hold the accounts of the sources named, or of
     every kind where no source is named."""
     kinds = {source.credential for source in needed if source.credential is not None}
-    return "; or ".join(_named(kind) for kind in VARIABLES if not kinds or kind in kinds)
+    return "; or ".join(account_variables(kind) for kind in VARIABLES if not kinds or kind in kinds)
 
 
 def _steps(entry: AccountStart, needed: Sequence[DatabaseSource]) -> str:

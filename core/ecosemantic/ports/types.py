@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import Generic, Literal, Protocol, TypeVar, assert_never, get_args
 
@@ -86,8 +86,10 @@ def flow_side(flow_type: FlowType, sub_compartment: str | None) -> Side:
     raise NotSupported(f"no side for a {flow_type!r} flow in {sub_compartment!r}")
 
 
-def offset_cursor(cursor: str | None) -> int:
-    """The offset a cursor names when the cursor is an offset; none is the start."""
+def page_start(cursor: str | None, limit: int) -> int:
+    """The offset one page starts at, a limit below one refused and a cursor that is no offset."""
+    if limit < 1:
+        raise Invalid("limit is at least 1")
     if cursor is None:
         return 0
     if not cursor.isdigit():
@@ -567,9 +569,23 @@ class Account(BaseModel):
     token: SecretStr | None = None
 
 
+class AccountName(BaseModel):
+    """An account kind's name and the phrase that names one, as Python and the page write them."""
+
+    name: str
+    phrase: str
+
+
+ACCOUNT_NAMES: Mapping[CredentialKind, AccountName] = {
+    "ecoinvent": AccountName(name="ecoinvent", phrase="an ecoinvent account"),
+    "nexus": AccountName(name="Nexus", phrase="a Nexus account"),
+}
+
+
 class DatabaseSource(BaseModel):
     """A source an install comes from: the versions its profiles pin, the system models it holds,
-    the credential it needs, whether it has terms to accept, and whether its credential is held."""
+    the credential it needs, whether it has terms to accept, and whether its credential is held.
+    `account` is that credential's name and phrase, none when its install needs no account."""
 
     name: SourceName
     versions: list[str]
@@ -577,6 +593,12 @@ class DatabaseSource(BaseModel):
     credential: CredentialKind | None
     terms: bool
     held: bool = False
+
+    @computed_field
+    @property
+    def account(self) -> AccountName | None:
+        """The name and phrase of the account this source's install needs."""
+        return None if self.credential is None else ACCOUNT_NAMES[self.credential]
 
 
 class InstallProgress(BaseModel):

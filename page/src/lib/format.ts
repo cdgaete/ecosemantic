@@ -1,4 +1,4 @@
-import type { Method } from '@/api/types'
+import type { Cut, Method } from '@/api/types'
 
 export function formatAmount(value: number): string {
   const magnitude = Math.abs(value)
@@ -11,6 +11,12 @@ export function formatAmount(value: number): string {
 
 export function formatShare(fraction: number): string {
   return `${(100 * fraction).toFixed(1)} %`
+}
+
+export function cutNotice(cut: Cut | null): string | null {
+  if (cut === null || cut.below === 0) return null
+  const count = cut.below === 1 ? '1 item' : `${cut.below} items`
+  return `${count} under the ${formatShare(cut.cutoff)} cut-off ${cut.below === 1 ? 'is' : 'are'} not shown, together ${formatShare(cut.share)} of the total.`
 }
 
 export function shortHash(hash: string | null): string {

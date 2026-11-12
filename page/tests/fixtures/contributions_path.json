@@ -3,6 +3,7 @@
   "value": {
     "by": "path",
     "credit_loops": [],
+    "cut": null,
     "database": {
       "elementary_flows": "fixture-biosphere",
       "fingerprint": "ab4a4851ae4bc8a41d356d0da3b12a8727e59dcd7f46776f7016caa670b616d9",

@@ -46,6 +46,7 @@ describe('palette', () => {
   it('lists every menu item that can run by the path to it, and none that is disabled', () => {
     const all = menus({ systemId: null, resultOpen: false, openRequests: 0, theme: 'ecosemantic', panelMode: 'beside', openNavigation: nothing, importFile: nothing, downloadResult: nothing, setPanelMode: nothing, setTheme: nothing, newRequest: nothing, reorganise: nothing, resetLayout: nothing })
     const labels = leaves(all).map((item) => item.label)
+    expect(labels).toContain('View › Theme › Cobalt')
     expect(labels).toContain('View › Theme › openLCA')
     expect(labels).toContain('View › Navigation')
     expect(labels).not.toContain('View › Activity')

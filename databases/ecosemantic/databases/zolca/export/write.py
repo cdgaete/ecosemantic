@@ -9,7 +9,6 @@ destination as `<name>.partial` and moved into place whole; a destination that e
 from __future__ import annotations
 
 import json
-import os
 import zipfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -19,6 +18,7 @@ from ecosemantic.databases.zolca.derby.database import Database
 from ecosemantic.databases.zolca.export import entities
 from ecosemantic.databases.zolca.export.tables import Tables
 from ecosemantic.errors import Conflict
+from ecosemantic.files import replace
 
 MARKER = "olca-schema.json"
 MARKER_BYTES = '{"version": 2}'
@@ -115,7 +115,7 @@ def export(zolca: Path, destination: Path) -> Exported:
         for row in tables.rows("TBL_PARAMETERS"):
             if row["SCOPE"] == entities.GLOBAL_SCOPE:
                 _write(archive, FOLDERS["Parameter"], entities.parameter(tables, row), records)
-    os.replace(partial, destination)
+    replace(partial, destination)
     return Exported(
         bundle=destination,
         records=records,

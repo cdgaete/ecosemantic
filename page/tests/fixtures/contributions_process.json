@@ -3,6 +3,11 @@
   "value": {
     "by": "process",
     "credit_loops": [],
+    "cut": {
+      "below": 0,
+      "cutoff": 0.001,
+      "share": 0.0
+    },
     "database": {
       "elementary_flows": "fixture-biosphere",
       "fingerprint": "ab4a4851ae4bc8a41d356d0da3b12a8727e59dcd7f46776f7016caa670b616d9",

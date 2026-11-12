@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import json
-import os
 import zipfile
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
@@ -14,9 +13,10 @@ import olca_schema as o
 
 from ecosemantic.databases.lists import LeftOut, LeftOutRow, write_left_out
 from ecosemantic.databases.uslci.profile import database_name
-from ecosemantic.errors import Conflict, Invalid, NotSupported
+from ecosemantic.errors import Conflict, Invalid
+from ecosemantic.files import replace
 from ecosemantic.model import units
-from ecosemantic.package.background import exchange_refusal, read_background
+from ecosemantic.package.background import Import, exchange_refusal, read_background
 from ecosemantic.package.olca import uncertainty_refusal
 from ecosemantic.package.wholeness import require_whole
 
@@ -30,7 +30,7 @@ ELEMENTARY = "ELEMENTARY_FLOW"
 @dataclass(frozen=True)
 class Built:
     """What a build wrote: the bundle, the counts of it, the bridge inputs it linked and could not,
-    and the exchanges it left out."""
+    the exchanges it left out, and the import the core read the staged bundle as."""
 
     bundle: Path
     processes: int
@@ -42,6 +42,7 @@ class Built:
     bridges_linked: int
     bridges_unlinked: int
     left_out: tuple[LeftOutRow, ...]
+    imported: Import = field(repr=False)
 
 
 @dataclass(frozen=True)
@@ -180,13 +181,12 @@ def _differs(unit: Record, reference: Record) -> bool:
     mine = float(cast(float, unit["conversionFactor"])) / float(
         cast(float, reference["conversionFactor"])
     )
-    try:
-        theirs = (
-            units.by_symbol(cast(str, unit["name"])).factor
-            / units.by_symbol(cast(str, reference["name"])).factor
-        )
-    except NotSupported:
+    if not units.knows(cast(str, unit["name"])) or not units.knows(cast(str, reference["name"])):
         return True
+    theirs = (
+        units.by_symbol(cast(str, unit["name"])).factor
+        / units.by_symbol(cast(str, reference["name"])).factor
+    )
     return abs(mine - theirs) > 1e-12 * max(abs(mine), abs(theirs))
 
 
@@ -535,8 +535,8 @@ def build(
             for name, content in written.items():
                 archive.writestr(name, content)
         require_whole(staged, providers=False)
-        read_background(staged, database_name(version), foreground=frozenset())
-        os.replace(staged, destination)
+        imported = read_background(staged, database_name(version), foreground=frozenset())
+        replace(staged, destination)
     finally:
         staged.unlink(missing_ok=True)
     rows = tuple(sorted(left_out, key=lambda row: row.key))
@@ -552,4 +552,5 @@ def build(
         bridges_linked=linked,
         bridges_unlinked=unlinked,
         left_out=rows,
+        imported=imported,
     )

@@ -6,8 +6,10 @@ import csv
 from pathlib import Path
 
 import yaml
+from pydantic import ValidationError
 
 from ecosemantic.compute.parameters import case_matrix
+from ecosemantic.errors import Invalid, field_error
 from ecosemantic.model.canonical import content_hash
 from ecosemantic.model.entities import ProductSystem
 from ecosemantic.model.refs import slug
@@ -143,5 +145,9 @@ def write_folder(root: Path, system: ProductSystem) -> Path:
 
 def read_model(folder: Path) -> ProductSystem:
     """The model the folder carries, without the parameter space the inputs hold."""
-    raw = yaml.safe_load((folder / MODEL_FILE).read_text(encoding="utf-8"))
-    return ProductSystem.model_validate(raw)
+    path = folder / MODEL_FILE
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        return ProductSystem.model_validate(raw)
+    except ValidationError as error:
+        raise Invalid(f"{path} is not a product system: {field_error(error)}") from error

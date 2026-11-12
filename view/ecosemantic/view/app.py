@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import hmac
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from importlib import resources
 from pathlib import Path
@@ -18,6 +17,7 @@ from starlette.routing import BaseRoute, Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Lifespan, Receive, Scope, Send
 
+from ecosemantic.access import secret_matches
 from ecosemantic.errors import NotFound, Unauthorised, Unavailable
 from ecosemantic.events import pump_installs, pump_runs, pump_storage
 from ecosemantic.mcp.context import ServerContext
@@ -78,12 +78,11 @@ class TokenGate:
         await self.app(scope, receive, send)
 
     def _local(self, scope: Scope) -> bool:
-        """Whether the request's query carries the process's token, compared byte for byte so a
-        query of any encoding is answered rather than breaking the gate."""
+        """Whether the request's query carries the process's token."""
         if self.token is None:
             return True
         query = dict(parse_qsl(scope.get("query_string", b"").decode()))
-        return hmac.compare_digest(query.get(GATE_PARAMETER, "").encode(), self.token.encode())
+        return secret_matches(query.get(GATE_PARAMETER, ""), self.token)
 
     async def _refuse(self, scope: Scope, receive: Receive, send: Send, message: str) -> None:
         """Answer the request with the 401 the message states."""

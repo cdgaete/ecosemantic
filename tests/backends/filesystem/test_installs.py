@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import uuid
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
 
 from ecosemantic.backends.filesystem.installs import (
     INSTALL_FILE,
+    INSTALLS_DIR,
     FilesystemInstalls,
     install_dir,
     uploads_dir,
@@ -74,6 +77,27 @@ class TestFilesystemInstalls(InstallConformance):
                 await read()
             assert str(posted.id) in str(caught.value) and "draft" in str(caught.value)
             assert caught.value.hint is not None and str(record.parent) in caught.value.hint
+
+
+async def test_a_path_outside_the_records_folder_or_naming_no_record_announces_nothing(
+    tmp_path: Path,
+) -> None:
+    installs = FilesystemInstalls(tmp_path)
+    queue: asyncio.Queue[uuid.UUID] = asyncio.Queue()
+    elsewhere = tmp_path / "elsewhere" / str(uuid.uuid4())
+    elsewhere.mkdir(parents=True)
+    nameless = [
+        {elsewhere},
+        {tmp_path / INSTALLS_DIR / "not-a-record"},
+        {tmp_path / INSTALLS_DIR},
+    ]
+
+    async def batches() -> AsyncIterator[set[Path]]:
+        for batch in nameless:
+            yield batch
+
+    await installs.records._watch(batches(), queue)
+    assert queue.empty()
 
 
 async def test_an_install_written_by_another_instance_is_announced(tmp_path: Path) -> None:

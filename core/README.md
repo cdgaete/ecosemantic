@@ -11,6 +11,8 @@ The ports of EcoSemantic and the types they carry, the pure computations over a 
 - `ecosemantic.events` — one bus per server process, fed by the storage every write goes through and by the watcher of each run.
 - `ecosemantic.geometry`, `layout`, `routes`, `textmap` and `troubles` — the drawing, in the pixels the page renders it at: each card's rows, where a process sits, every arrow as an orthogonal route, the drawing as characters an agent reads, and what is wrong with it.
 - `ecosemantic.quantity` and `scaling` — a quantity as the canvas writes it, and each card's exchanges scaled to one unit of the functional unit.
+- `ecosemantic.files` — the one replace every writer lands a file through, and the read beside it, each retried while Windows refuses it because another handle holds the file.
+- `ecosemantic.access` — the secret a caller sends compared with the one held, as UTF-8 bytes in constant time and false for anything that is no string.
 - `ecosemantic.backends.filesystem` — product systems, runs, installs and their records in a folder, and the watcher that announces what changes.
 - `ecosemantic.backends.native` — the databases installed under one data directory: their registry entries, their catalogs and their compiled backgrounds, serving the search, inventory and calculation ports.
 

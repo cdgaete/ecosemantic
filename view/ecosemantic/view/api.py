@@ -21,7 +21,7 @@ from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.envelopes import Answer, Listing, as_uuid, envelope_of
 from ecosemantic.mcp.recording import STARTED, VIEW
 from ecosemantic.model.validation import anchors
-from ecosemantic.ports.types import LogEntry, RequestDraft
+from ecosemantic.ports.types import LogEntry, MonteCarloConfig, RequestDraft
 from ecosemantic.view.handling import (
     ToolRefused,
     answering,
@@ -196,6 +196,12 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             {"product_system_id": request.path_params["id"], **args},
         )
 
+    async def monte_carlo(request: Request) -> Response:
+        """What a simulation samples, at the defaults its form starts from."""
+        return JSONResponse(
+            Answer[MonteCarloConfig](value=MonteCarloConfig()).model_dump(mode="json")
+        )
+
     async def server_details(request: Request) -> Response:
         """The client that introduced itself, this package's version and the two directories."""
         return JSONResponse(
@@ -289,6 +295,7 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
     base = "/api/product-systems/{id}"
     return [
         Route("/api/server", server_details),
+        Route("/api/monte-carlo", monte_carlo),
         Route("/api/databases", databases),
         Route("/api/databases/{name}/vocabulary/{kind}", vocabulary),
         Route("/api/databases/{name}/processes", processes),

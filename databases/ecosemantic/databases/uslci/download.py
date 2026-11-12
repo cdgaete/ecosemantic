@@ -8,10 +8,11 @@ from pathlib import Path
 from typing import Protocol
 
 from lca_data_interface import Downloaded, Release
-from lca_data_interface.errors import LcaDataInterfaceError, MissingField, NotOnServer
+from lca_data_interface.errors import LcaDataInterfaceError, NotOnServer
 
+from ecosemantic.databases import downloads
 from ecosemantic.databases.uslci.profile import Pin, Profile
-from ecosemantic.errors import Conflict, EcoSemanticError, Invalid, NotFound, Unavailable
+from ecosemantic.errors import EcoSemanticError, NotFound
 
 
 class Commons(Protocol):
@@ -55,29 +56,22 @@ def _fetched(pin: Pin, *, server: Commons) -> Path:
         downloaded = server.download(group, name, pin.commit)
     except LcaDataInterfaceError as error:
         raise _translated(error, server=server) from error
-    if downloaded.sha256 != pin.sha256:
-        raise Conflict(
-            f"{downloaded.path.name} hashes to {downloaded.sha256}, the profile pins {pin.sha256}"
-        )
-    return downloaded.path
+    return downloads.checked(downloaded, pin.sha256)
 
 
 def _translated(error: LcaDataInterfaceError, *, server: Commons) -> EcoSemanticError:
     """The core's error for one the client raised: a commit the server does not hold is not found
     and names the commits its repository does release, a repository it does not hold is not found,
-    a malformed answer is invalid, and a service that failed or a body that stopped is
-    unavailable."""
-    if isinstance(error, NotOnServer) and error.commit is None:
+    and every other error is the one `downloads.translated` gives it."""
+    if not isinstance(error, NotOnServer):
+        return downloads.translated(error)
+    if error.commit is None:
         return NotFound(f"the server does not hold {error.repository}: {error.detail}")
-    if isinstance(error, NotOnServer):
-        released = _released(error.repository, server=server)
-        return NotFound(
-            f"{error.repository} at commit {error.commit} is not on the server: {error.detail}; "
-            f"the commits it releases are {', '.join(released) or 'none'}"
-        )
-    if isinstance(error, MissingField):
-        return Invalid(str(error))
-    return Unavailable(str(error))
+    released = _released(error.repository, server=server)
+    return NotFound(
+        f"{error.repository} at commit {error.commit} is not on the server: {error.detail}; "
+        f"the commits it releases are {', '.join(released) or 'none'}"
+    )
 
 
 def _released(repository: str, *, server: Commons) -> tuple[str, ...]:

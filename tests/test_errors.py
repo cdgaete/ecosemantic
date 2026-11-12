@@ -8,14 +8,18 @@ from ecosemantic.errors import (
     Conflict,
     ErrorEnvelope,
     Invalid,
+    OtherBuild,
     StaleScenario,
     Unauthorised,
+    Unavailable,
+    build_label,
     error_kind,
     error_line,
     error_payload,
     error_status,
     failure_payload,
     field_error,
+    unreadable,
 )
 
 
@@ -91,3 +95,28 @@ def test_a_validation_error_renders_its_first_field_and_message() -> None:
     assert field_error(caught.value) == (
         "inner.count: Input should be a valid integer, unable to parse string as an integer"
     )
+
+
+def test_a_build_is_labelled_by_its_first_twelve_characters() -> None:
+    assert build_label(None) == "no build"
+    assert build_label("0123456789abcdef") == "build 0123456789ab"
+    assert build_label("0123456789") == "build 0123456789"
+    assert str(OtherBuild("widget", "fixture", "0" * 64, "a" * 64)) == (
+        "'widget' names build 000000000000 of 'fixture'; this store holds build aaaaaaaaaaaa"
+    )
+
+
+def test_a_stored_document_this_version_cannot_read_is_one_sentence() -> None:
+    class Stored(BaseModel):
+        count: int
+
+    with pytest.raises(ValidationError) as caught:
+        Stored.model_validate({"count": "many"})
+    refused = unreadable("requests.jsonl line 3", caught.value, "remove it")
+    assert isinstance(refused, Unavailable)
+    assert str(refused) == (
+        "requests.jsonl line 3 cannot be read by this version: count: Input should be a valid"
+        " integer, unable to parse string as an integer"
+    )
+    assert refused.hint == "remove it"
+    assert error_kind(refused) == "unavailable"

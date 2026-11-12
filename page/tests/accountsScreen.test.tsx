@@ -60,6 +60,17 @@ it('shows one card per kind of account the sources need', async () => {
   expect(document.title).toBe('Database accounts — EcoSemantic')
 })
 
+it('names each card as the sources answer its account', async () => {
+  vi.mocked(api.sources).mockResolvedValue({
+    ...offered,
+    value: offered.value.map((source) => (source.account === null ? source : { ...source, account: { ...source.account, name: `${source.account.name} as answered` } })),
+  })
+  renderAt('/accounts', <Screens />)
+  const nexus = await screen.findByRole('region', { name: 'Nexus as answered' })
+  expect(within(nexus).getByRole('heading', { name: 'Nexus as answered' })).toBeInTheDocument()
+  expect(screen.getByRole('region', { name: 'ecoinvent as answered' })).toBeInTheDocument()
+})
+
 it('saves and removes an account', async () => {
   renderAt('/accounts', <Screens />)
   const card = await screen.findByRole('region', { name: 'Nexus' })

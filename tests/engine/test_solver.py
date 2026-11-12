@@ -1,9 +1,12 @@
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
 import scipy.sparse as sp
 
+import ecosemantic
+from ecosemantic.engine import solver as solver_module
 from ecosemantic.engine.solver import SOLVERS, Solver, require_solver
 from ecosemantic.errors import Invalid, Unavailable
 from tests.conftest import needs_pardiso
@@ -86,3 +89,15 @@ def test_require_solver_refuses_a_solver_before_anything_is_factorised(
 def test_a_singular_technosphere_is_invalid_under_superlu() -> None:
     with pytest.raises(Invalid, match="the technosphere is singular"):
         Solver("superlu", sp.csr_matrix(np.ones((2, 2))))
+
+
+def test_the_default_solver_is_spelled_once() -> None:
+    spelled = sorted(
+        path.relative_to(root).as_posix()
+        for root in map(Path, ecosemantic.__path__)
+        for path in root.rglob("*.py")
+        if path.relative_to(root).as_posix() != "engine/solver.py"
+        and '"superlu"' in path.read_text(encoding="utf-8")
+    )
+    assert spelled == []
+    assert solver_module.DEFAULT_SOLVER == "superlu"

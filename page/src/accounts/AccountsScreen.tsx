@@ -5,29 +5,32 @@ import type { CredentialKind, DatabaseSource } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { AccountAdvice, KEPT } from '@/editors/databases/AccountAdvice'
 import { AccountFields } from '@/editors/databases/AccountFields'
-import { ACCOUNT_NAMES, entered, type AccountInput } from '@/editors/databases/account'
+import { entered, type AccountInput } from '@/editors/databases/account'
 
 const TITLE = 'Database accounts — EcoSemantic'
 const NOT_SAVED = 'Not saved'
 const SAVED = 'Saved until EcoSemantic restarts'
 
-function needed(sources: DatabaseSource[]): { kind: CredentialKind; names: string[] }[] {
-  const kinds = new Map<CredentialKind, string[]>()
+function needed(sources: DatabaseSource[]): { kind: CredentialKind; name: string; names: string[] }[] {
+  const kinds = new Map<CredentialKind, { name: string; names: string[] }>()
   for (const source of sources) {
-    if (source.credential === null) continue
-    kinds.set(source.credential, [...(kinds.get(source.credential) ?? []), source.name])
+    if (source.credential === null || source.account === null) continue
+    const found = kinds.get(source.credential) ?? { name: source.account.name, names: [] }
+    kinds.set(source.credential, { name: found.name, names: [...found.names, source.name] })
   }
-  return [...kinds].map(([kind, names]) => ({ kind, names }))
+  return [...kinds].map(([kind, found]) => ({ kind, ...found }))
 }
 
 function Card({
   kind,
+  name,
   names,
   page,
   held,
   here,
 }: {
   kind: CredentialKind
+  name: string
   names: string[]
   page: string | null
   held: boolean
@@ -38,8 +41,8 @@ function Card({
   const remove = useDeleteCredential()
   const refusal = put.error ?? remove.error
   return (
-    <section aria-label={ACCOUNT_NAMES[kind].name} className="flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-3">
-      <h2 className="text-sm font-semibold break-words">{ACCOUNT_NAMES[kind].name}</h2>
+    <section aria-label={name} className="flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-3">
+      <h2 className="text-sm font-semibold break-words">{name}</h2>
       <p className="text-xs text-muted-foreground">Opens {names.join(' and ')}.</p>
       {here ? <p className="text-xs">{held ? SAVED : NOT_SAVED}</p> : null}
       <AccountFields kind={kind} value={account} onChange={setAccount} disabled={!here} />
@@ -79,10 +82,11 @@ export function AccountsScreen() {
   const here = entry.data?.here === true
   const credentials = useCredentials(here)
   const held = credentials.data?.held ?? []
-  const cards = needed(sources.data?.value ?? []).map(({ kind, names }) => (
+  const cards = needed(sources.data?.value ?? []).map(({ kind, name, names }) => (
     <Card
       key={kind}
       kind={kind}
+      name={name}
       names={names}
       page={entry.data?.page ?? null}
       held={held.includes(kind)}

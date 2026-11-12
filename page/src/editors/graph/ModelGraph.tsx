@@ -55,23 +55,28 @@ function Graph({ system, latest, outlines, calculate }: GraphProps) {
   const lifted = minimap && canvasWidth > 0 && canvasWidth < MINIMAP_LANE + TOOLBAR_FLOOR
   const asVariant = useSystemAs(system.id, variant)
   const drawn = variant !== null && asVariant.data ? asVariant.data.value : system
-  const built = useMemo(() => buildGraph(drawn, hotFrom(latest), reference, outlines), [drawn, latest, reference, outlines])
   const layout = useLayout(system.id, variant)
   const place = usePlaceCards(system.id, variant)
-  const placed = useMemo(() => new Map((layout.data?.value.cards ?? []).map((p) => [p.code, p])), [layout.data])
-  const routes = useMemo(() => new Map((layout.data?.value.edges ?? []).map((r) => [`flow-${r.exchange_id}`, r])), [layout.data])
-  const scaling = layout.data?.value.scaling ?? null
+  const arranged = layout.data?.value ?? null
+  const built = useMemo(
+    () => (arranged === null ? { nodes: [], edges: [] } : buildGraph(drawn, arranged, hotFrom(latest), reference, outlines)),
+    [drawn, arranged, latest, reference, outlines],
+  )
+  const placed = useMemo(() => new Map((arranged?.cards ?? []).map((p) => [p.code, p])), [arranged])
+  const routes = useMemo(() => new Map((arranged?.edges ?? []).map((r) => [`flow-${r.exchange_id}`, r])), [arranged])
+  const scaling = arranged?.scaling ?? null
   const scaledAvailable = scaling === null
   const scaledShown = scaledView && scaledAvailable
   const [nodes, setNodes] = useState<GraphNode[]>([])
   useEffect(() => {
+    if (arranged === null) return
     setNodes(
       built.nodes.flatMap((node): GraphNode[] => {
         const spot = placed.get(node.id)
-        return spot === undefined ? [] : [{ ...node, position: { x: spot.x, y: spot.y }, data: { ...node.data, placement: { ...spot, scaled: scaledShown ? spot.scaled : null } } } as GraphNode]
+        return spot === undefined ? [] : [{ ...node, position: { x: spot.x, y: spot.y }, data: { ...node.data, placement: { ...spot, scaled: scaledShown ? spot.scaled : null }, card: arranged.card } } as GraphNode]
       }),
     )
-  }, [built, placed, scaledShown])
+  }, [built, arranged, placed, scaledShown])
   const edges = useMemo((): Edge[] => {
     const positions = new Map(nodes.map((node) => [node.id, node.position]))
     return built.edges.map((edge) => {

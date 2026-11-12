@@ -53,13 +53,18 @@ def test_the_accounts_the_environment_holds_are_read_by_kind() -> None:
     assert held_accounts({}) == {}
 
 
-def test_a_missing_account_names_the_variables_and_the_page() -> None:
+def test_a_missing_account_names_the_terminal_and_the_kind_s_variables() -> None:
     assert missing("ecoinvent") == (
-        "set EI_USERNAME and EI_PASSWORD, or enter the account on the page's Databases editor"
+        "run this command in a terminal to be asked for it, or set EI_USERNAME and EI_PASSWORD "
+        "before running it"
     )
     assert missing("nexus") == (
-        "set NEXUS_USERNAME and NEXUS_PASSWORD, or enter the account on the page's Databases editor"
+        "run this command in a terminal to be asked for it, or set NEXUS_USERNAME and "
+        "NEXUS_PASSWORD (and NEXUS_TOKEN for an account with a second factor) before running it"
     )
+    assert "NEXUS_TOKEN" in missing("nexus")
+    assert "Databases editor" not in missing("ecoinvent")
+    assert "Databases editor" not in missing("nexus")
 
 
 def test_every_credential_variable_is_named_under_a_dropped_prefix() -> None:

@@ -16,7 +16,7 @@ from ecosemantic.databases.ecoinvent import validate as validate_module
 from ecosemantic.databases.ecoinvent.build import build
 from ecosemantic.databases.ecoinvent.profile import default_profile
 from ecosemantic.databases.ecoinvent.release import Release
-from ecosemantic.databases.ecoinvent.validate import _Comparison, _Export, validate
+from ecosemantic.databases.ecoinvent.validate import _Comparison, _differences, _Export, validate
 from ecosemantic.errors import Invalid
 from tests.databases.spold_fixture import (
     CATEGORY,
@@ -164,9 +164,10 @@ def test_validation_names_a_score_that_differs(tmp_path: Path) -> None:
 def test_a_cancelling_score_is_a_mismatch(tmp_path: Path) -> None:
     release = build_release(tmp_path, cancelling_factor=True)
     written = build(release, default_profile(release), tmp_path / "out", NOW)
-    # electricity's +0.5 CO2 and -0.5 Iron contributions cancel; its magnitude is 1.0, so 1e-13
-    # is roundoff against it and a whole relative difference against a score of zero
-    offset_cumulative(release, ELEC, 1e-13)
+    # electricity's +0.5 CO2 and -0.5 Iron contributions cancel; its magnitude is 1.0, so the
+    # reference's 1e-9 is above the group's negligible 1e-12 and a whole relative difference
+    # against a score of zero
+    offset_cumulative(release, ELEC, 1e-9)
     result = validate(release, written.bundle, tmp_path / "compiled", tolerance=1e-6)
     assert "cancelling_scores" not in result.counts
     assert "scores_against_magnitude" not in result.largest_rel_diff
@@ -316,6 +317,11 @@ def test_a_matrix_reference_score_off_by_five_micro_passes_at_its_own_tolerance(
 def test_a_matrix_reference_score_off_by_five_micro_fails_at_the_command_tolerance() -> None:
     report = _matrix_reference_report(1.000005, 1e-6)
     assert any("dataset" in message for message in report.mismatches)
+
+
+def test_ecoinvent_differences_take_the_shared_rule() -> None:
+    _, _, measured = _differences(np.array([[1.0], [0.0]]), np.array([1.0, 1e-13]), 0)
+    assert measured.tolist() == [0.0, 0.0]
 
 
 def test_validation_names_a_unit_that_differs(tmp_path: Path) -> None:

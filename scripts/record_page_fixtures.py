@@ -190,6 +190,7 @@ def record(client: TestClient, system_id: str, unfinished_id: str) -> dict[str, 
         "installs": client.get("/api/installs").json(),
         "credentials": client.get("/api/credentials").json(),
         "server": client.get("/api/server").json(),
+        "monte_carlo": client.get("/api/monte-carlo").json(),
         "vocabulary_impact_methods": client.get(
             f"/api/databases/{FIXTURE_DB}/vocabulary/impact_methods"
         ).json(),
