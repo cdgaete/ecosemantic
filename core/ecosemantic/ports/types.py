@@ -302,9 +302,36 @@ class Hotspot(BaseModel):
     fraction: float
 
 
+class Cut(BaseModel):
+    """What a flat contribution list leaves out, each share summed in magnitude as the cut-off
+    compares them: the share of the total the cut-off was set at, how many parts fell under it
+    and their share, and how many parts reach it past the list's length and their share."""
+
+    cutoff: float
+    below: int
+    share: float
+    unlisted: int
+    unlisted_share: float
+
+
+def listed(fractions: Sequence[float], top_n: int, cutoff: float) -> tuple[int, Cut]:
+    """How many of the fractions, ranked by falling magnitude, a flat list shows, at most top_n
+    of those that reach cutoff, and what it leaves out."""
+    reaching = sum(1 for fraction in fractions if abs(fraction) >= cutoff)
+    shown = min(top_n, reaching)
+    return shown, Cut(
+        cutoff=cutoff,
+        below=len(fractions) - reaching,
+        share=sum(abs(fraction) for fraction in fractions[reaching:]),
+        unlisted=reaching - shown,
+        unlisted_share=sum(abs(fraction) for fraction in fractions[shown:reaching]),
+    )
+
+
 class Hotspots(BaseModel):
     total: Score
     items: list[Hotspot]
+    cut: Cut
 
 
 class FlowHotspot(BaseModel):
@@ -321,6 +348,7 @@ class FlowHotspot(BaseModel):
 class FlowHotspots(BaseModel):
     total: Score
     items: list[FlowHotspot]
+    cut: Cut
 
 
 class TreeNode(BaseModel):

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from ecosemantic.compute.parameters import case_matrix, evaluate, materialize
+from ecosemantic.compute.parameters import FUNCTIONS, case_matrix, evaluate, materialize
 from ecosemantic.errors import Invalid
 from ecosemantic.model.entities import Case, Parameter, ProductSystem
 
@@ -36,6 +38,71 @@ def test_a_chain_of_parameters_resolves_in_order_and_reads_builtin_functions() -
         {},
     )
     assert values == {"a": 3.0, "b": 9.0, "c": 3.0}
+
+
+def test_a_formula_reads_no_file(tmp_path: Path) -> None:
+    held = tmp_path / "held.txt"
+    held.write_text("seven c", encoding="utf-8")
+    formula = f"len(open({str(held)!r}).read())"
+    with pytest.raises(Invalid, match="calls 'len'"):
+        evaluate([Parameter(name="a", formula=formula)], {})
+    with pytest.raises(Invalid, match="calls 'len'"):
+        evaluate([], {"steel (widget) 1": formula})
+
+
+@pytest.mark.parametrize(
+    ("formula", "held"),
+    [
+        ("open('held.txt')", "calls 'open'"),
+        ("loadtxt('held.txt')", "calls 'loadtxt'"),
+        ("dir()", "calls 'dir'"),
+        ("print(1)", "calls 'print'"),
+        ("(lambda: 1)()", "calls what is no name"),
+        ("max(a, 2, key=abs)", "calls 'max' with a keyword"),
+        ("max(*(a, 2))", "holds a Starred"),
+        ("a.real", "holds an Attribute"),
+        ("(a, 2)[0]", "holds a Subscript"),
+        ("max([n for n in (a, 2)])", "holds a ListComp"),
+        ("'a' * 2", "holds a str"),
+        ("a if a else None", "holds a NoneType"),
+    ],
+)
+def test_a_formula_holding_what_is_not_arithmetic_is_refused(formula: str, held: str) -> None:
+    a = Parameter(name="a", value=3.0)
+    with pytest.raises(Invalid) as on_parameter:
+        evaluate([a, Parameter(name="b", formula=formula)], {})
+    with pytest.raises(Invalid) as on_exchange:
+        evaluate([a], {"steel (widget) 1": formula})
+    assert f"of parameter 'b' {held}; a formula takes" in str(on_parameter.value)
+    assert f"on exchange steel (widget) 1 {held}; a formula takes" in str(on_exchange.value)
+
+
+def test_a_refusal_names_every_function_a_formula_calls() -> None:
+    with pytest.raises(Invalid) as caught:
+        evaluate([Parameter(name="a", formula="dir()")], {})
+    assert str(caught.value).endswith(f"the functions {', '.join(sorted(FUNCTIONS))}")
+
+
+def test_every_listed_function_is_one_a_formula_calls() -> None:
+    two = {"atan2", "hypot", "max", "min", "pow"}
+    formulas = {name: f"{name}(0.5, 0.5)" if name in two else f"{name}(0.5)" for name in FUNCTIONS}
+    _, amounts = evaluate([], formulas)
+    assert amounts.keys() == FUNCTIONS.keys()
+
+
+def test_a_formula_takes_arithmetic_comparisons_a_conditional_and_the_constants() -> None:
+    values, amounts = evaluate(
+        [Parameter(name="a", value=3.0), Parameter(name="b", formula="a // 2 + a % 2 - -a ** 2")],
+        {
+            "first": "b if a > 2 and not a == 4 or a <= 1 else 0",
+            "second": "max(a, 2) + sqrt(4) + abs(-1) + round(2.6)",
+            "third": "pi - e",
+        },
+    )
+    assert values == {"a": 3.0, "b": 11.0}  # 1 + 1 + 9
+    assert amounts["first"] == 11.0
+    assert amounts["second"] == 9.0  # 3 + 2 + 1 + 3
+    assert amounts["third"] == pytest.approx(0.4233108251)
 
 
 def test_a_cycle_of_parameters_is_refused_naming_its_members() -> None:

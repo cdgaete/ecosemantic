@@ -15,7 +15,7 @@ from ecosemantic.compute.edits import (
     patch_product_system,
 )
 from ecosemantic.compute.links import held_pins, pinned_documents, pinning
-from ecosemantic.errors import Invalid, NotFound, build_label
+from ecosemantic.errors import Conflict, Invalid, NotFound, build_label
 from ecosemantic.mcp.calculation import variant_of
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import DELETE, READ, WRITE
@@ -189,11 +189,15 @@ async def export_model(
 
 
 async def export_product_system(
-    context: ServerContext, product_system_id: str, path: str
+    context: ServerContext, product_system_id: str, path: str, replace: bool = False
 ) -> Answer[WrittenPath]:
     destination = Path(path)
     if not destination.parent.is_dir():
         raise Invalid(f"{str(destination.parent)!r} does not exist")
+    if destination.is_dir():
+        raise Invalid(f"{str(destination)!r} is a directory; name the file to write")
+    if destination.exists() and not replace:
+        raise Conflict(f"{str(destination)!r} exists; pass replace to write over it")
     _, entry = await export_model(context, as_uuid(product_system_id), destination)
     return Answer[WrittenPath](value=WrittenPath(path=str(destination), hash=entry.result_hash))
 
@@ -299,7 +303,8 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "ecosemantic/ folder with what openLCA has no field for: the scenarios, the pins, "
             "the identities, the state as a version snapshot, and ecosemantic/log.jsonl, whose "
             "one entry records the export; the stored change log stays in the store. "
-            "Background datasets travel as references, never as records. Example: "
+            "Background datasets travel as references, never as records. A path that holds a "
+            "file is refused unless replace is passed. Example: "
             '{"product_system_id": "…", "path": "/home/person/widget.zip"}.'
         ),
     )(boundary(bound(export_product_system, context)))

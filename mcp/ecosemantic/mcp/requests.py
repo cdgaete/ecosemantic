@@ -9,7 +9,7 @@ from typing import TypeVar
 from fastmcp import FastMCP
 
 from ecosemantic.compute.consequences import consequences
-from ecosemantic.compute.links import link_pin, pinned, pins
+from ecosemantic.compute.links import held_pins, link_pin, pinned, pins
 from ecosemantic.mcp.calls import about
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import READ, WRITE
@@ -56,7 +56,8 @@ async def answer_write(
         if ref.product_system_id == after.id
     }
     treatments = await treatments_in(context.inventory, [after])
-    found = consequences(before, after, linking, at_pins, treatments)
+    held = await held_pins(after, context.storage)
+    found = consequences(before, after, linking, at_pins, treatments, held)
     bare = entry.model_copy(
         update={
             "changes": [

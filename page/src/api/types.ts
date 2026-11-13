@@ -298,6 +298,8 @@ export interface Cut {
   cutoff: number
   below: number
   share: number
+  unlisted: number
+  unlisted_share: number
 }
 export interface ContributionResult {
   database: Database

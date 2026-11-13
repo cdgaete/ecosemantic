@@ -6,7 +6,9 @@
     "cut": {
       "below": 0,
       "cutoff": 0.001,
-      "share": 0.0
+      "share": 0.0,
+      "unlisted": 0,
+      "unlisted_share": 0.0
     },
     "database": {
       "elementary_flows": "fixture-biosphere",

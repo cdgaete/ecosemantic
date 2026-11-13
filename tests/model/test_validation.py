@@ -320,6 +320,24 @@ def test_a_loop_inside_a_linked_system_fails_loops_deliver_naming_that_system(
     assert f"{label.processes[0].code} of {looped.name} uses 2" in issue.message
 
 
+def test_a_linked_system_on_another_database_fails_the_database_case_alone(
+    product_system: ProductSystem,
+) -> None:
+    installed = product_system.database.model_copy(update={"fingerprint": "a" * 64})
+    stamped = product_system.model_copy(update={"database": installed})
+    label = label_system()
+    label = label.model_copy(update={"hash": content_hash(label)})
+    link = SystemRef(product_system_id=label.id, at_hash=label.hash)
+    elsewhere = label.model_copy(
+        update={"database": installed.model_copy(update={"name": "other", "fingerprint": "b" * 64})}
+    )
+    pin = base_pin(label)
+    held = Pin(ref=link, name="label", current=pin, at=pin, document=elsewhere)
+    report = validate(stamped, "tshirt", [held], installed=installed)
+    assert not _case(report, "same_database")
+    assert _case(report, "database_build")
+
+
 def test_a_build_other_than_the_installed_one_is_a_case(product_system: ProductSystem) -> None:
     installed = product_system.database.model_copy(update={"fingerprint": "a" * 64})
     assert "database_build" not in {c.id for c in validate(product_system).cases}

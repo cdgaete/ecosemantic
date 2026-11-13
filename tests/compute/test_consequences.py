@@ -14,7 +14,7 @@ from ecosemantic.model.entities import (
     Scenario,
 )
 from ecosemantic.model.refs import BackgroundRef, SystemRef
-from ecosemantic.model.validation import validate
+from ecosemantic.model.validation import Pin, validate
 from tests.conftest import DATABASE
 
 
@@ -97,6 +97,23 @@ def test_a_write_names_a_positive_input_to_a_treatment_when_the_treatments_are_k
     assert issue.code == "treatment_runs_backwards"
     unknown = consequences(product_system, product_system, [], {})
     assert "treatments_take_waste" not in {i.case for i in unknown.issues}
+
+
+def test_a_write_names_a_link_to_a_system_on_another_database_when_the_pins_are_given(
+    product_system: ProductSystem,
+) -> None:
+    consumer = _linking(product_system, "label")
+    [ref] = pins(consumer)
+    elsewhere = product_system.model_copy(
+        update={"database": product_system.database.model_copy(update={"name": "other"})}
+    )
+    pin = link_pin(product_system, ref)
+    held = [Pin(ref=ref, name=product_system.name, current=pin, at=pin, document=elsewhere)]
+    assert consequences(None, consumer, [], {}).issues == []
+    found = consequences(None, consumer, [], {}, held=held).issues
+    assert [issue.code for issue in found] == ["database_mismatch"]
+    moved = consequences(consumer, consumer, [], {}, held=held).issues
+    assert [issue.code for issue in moved] == ["database_mismatch"]
 
 
 def test_a_write_that_leaves_no_reference_process_names_that_issue(

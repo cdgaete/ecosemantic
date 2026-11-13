@@ -424,9 +424,11 @@ class ProductSystem:
             validate_product_system, product_system_id=str(self.id), target=target
         )
 
-    def export_product_system(self, path: str) -> Answer[WrittenPath]:
+    def export_product_system(self, path: str, replace: bool = False) -> Answer[WrittenPath]:
         """The `export_product_system` tool."""
-        return self.workspace.call(export_product_system, product_system_id=str(self.id), path=path)
+        return self.workspace.call(
+            export_product_system, product_system_id=str(self.id), path=path, replace=replace
+        )
 
     def get_product_system_log(
         self, limit: int = LOG_PAGE, cursor: str | None = None

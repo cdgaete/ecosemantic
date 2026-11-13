@@ -44,6 +44,7 @@ from ecosemantic.ports.types import (
     flow_side,
     fraction_of,
     is_open,
+    listed,
     page_start,
     patched,
     source_credential,
@@ -389,3 +390,15 @@ def test_a_patch_replaces_only_the_fields_it_names_a_none_included() -> None:
     )
     out = patched(run, RunPatch(status="running", pid=None))
     assert out.status == "running" and out.pid is None and out.config == run.config
+
+
+def test_a_flat_list_shows_what_reaches_the_cutoff_up_to_its_length_and_counts_the_rest() -> None:
+    fractions = [0.75, 0.2, -0.03, 0.02, 0.004, -0.002]
+    shown, cut = listed(fractions, top_n=2, cutoff=0.01)
+    assert (shown, cut.cutoff, cut.below, cut.unlisted) == (2, 0.01, 2, 2)
+    assert cut.share == pytest.approx(0.006)
+    assert cut.unlisted_share == pytest.approx(0.05)
+    shown, cut = listed(fractions, top_n=10, cutoff=0.01)
+    assert (shown, cut.below, cut.unlisted, cut.unlisted_share) == (4, 2, 0, 0.0)
+    shown, cut = listed(fractions, top_n=10, cutoff=0.0)
+    assert (shown, cut.below, cut.share, cut.unlisted) == (6, 0, 0.0, 0)

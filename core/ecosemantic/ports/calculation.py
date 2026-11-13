@@ -33,11 +33,21 @@ class CalculationPort(Protocol):
     ) -> list[Score]: ...
 
     async def hotspots(
-        self, system: System, demand: list[DemandItem], method: Method, top_n: int = TOP_N
+        self,
+        system: System,
+        demand: list[DemandItem],
+        method: Method,
+        top_n: int = TOP_N,
+        cutoff: float = CUTOFF,
     ) -> Hotspots: ...
 
     async def flow_hotspots(
-        self, system: System, demand: list[DemandItem], method: Method, top_n: int = TOP_N
+        self,
+        system: System,
+        demand: list[DemandItem],
+        method: Method,
+        top_n: int = TOP_N,
+        cutoff: float = CUTOFF,
     ) -> FlowHotspots: ...
 
     async def contribution_tree(

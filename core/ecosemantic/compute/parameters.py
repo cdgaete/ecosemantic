@@ -7,6 +7,7 @@ import ast
 import math
 from collections.abc import Mapping, Sequence
 from graphlib import CycleError, TopologicalSorter
+from typing import Final
 
 from asteval import Interpreter
 from asteval.astutils import ExceptionHolder
@@ -42,17 +43,104 @@ def case_matrix(cases: Sequence[Case]) -> CaseMatrix:
     )
 
 
-def _interpreter() -> Interpreter:
-    return Interpreter()
+FUNCTIONS: Final[Mapping[str, object]] = {
+    "abs": abs,
+    "acos": math.acos,
+    "asin": math.asin,
+    "atan": math.atan,
+    "atan2": math.atan2,
+    "ceil": math.ceil,
+    "cos": math.cos,
+    "cosh": math.cosh,
+    "degrees": math.degrees,
+    "exp": math.exp,
+    "floor": math.floor,
+    "hypot": math.hypot,
+    "log": math.log,
+    "log10": math.log10,
+    "log2": math.log2,
+    "max": max,
+    "min": min,
+    "pow": math.pow,
+    "radians": math.radians,
+    "round": round,
+    "sin": math.sin,
+    "sinh": math.sinh,
+    "sqrt": math.sqrt,
+    "tan": math.tan,
+    "tanh": math.tanh,
+}
+
+CONSTANTS: Final[Mapping[str, float]] = {"pi": math.pi, "e": math.e}
+
+TAKES: Final = (
+    "a formula takes numbers, parameter names, arithmetic, comparisons, a conditional and the "
+    f"functions {', '.join(sorted(FUNCTIONS))}"
+)
+
+_TAKEN: Final = (
+    ast.Expression,
+    ast.BinOp,
+    ast.UnaryOp,
+    ast.BoolOp,
+    ast.Compare,
+    ast.IfExp,
+    ast.Name,
+    ast.expr_context,
+    ast.operator,
+    ast.unaryop,
+    ast.boolop,
+    ast.cmpop,
+)
+
+
+def _interpreter(values: Mapping[str, float]) -> Interpreter:
+    """An interpreter that knows FUNCTIONS, CONSTANTS and the values given, and evaluates
+    expressions alone: it holds no function that reads a file or looks inside an object."""
+    return Interpreter(
+        symtable={**FUNCTIONS, **CONSTANTS, **values}, minimal=True, config={"ifexp": True}
+    )
+
+
+def _held(kind: str) -> str:
+    return f"holds {'an' if kind[0] in 'AEIOU' else 'a'} {kind}"
+
+
+def _beyond(node: ast.AST) -> str | None:
+    """What a node of a formula holds beyond what a formula takes, or none for one it takes: a
+    call of anything but a name in FUNCTIONS or with a keyword, a constant that is no number,
+    and every node that is not arithmetic, a comparison, a conditional or a name."""
+    if isinstance(node, ast.Call):
+        if not isinstance(node.func, ast.Name):
+            return "calls what is no name"
+        if node.func.id not in FUNCTIONS:
+            return f"calls {node.func.id!r}"
+        return f"calls {node.func.id!r} with a keyword" if node.keywords else None
+    if isinstance(node, ast.Constant):
+        return None if isinstance(node.value, int | float) else _held(type(node.value).__name__)
+    return None if isinstance(node, _TAKEN) else _held(type(node).__name__)
 
 
 def _reads(formula: str, owner: str) -> set[str]:
-    """The names a formula reads; Invalid for a formula that does not parse."""
+    """The names a formula reads; Invalid for a formula that does not parse, and for one that
+    holds more than a formula takes, naming the first such thing it holds."""
     try:
         tree = ast.parse(formula, mode="eval")
     except SyntaxError as error:
         raise Invalid(f"formula {formula!r} {owner} failed: SyntaxError: {error.msg}") from error
+    for node in ast.walk(tree):
+        beyond = _beyond(node)
+        if beyond is not None:
+            raise Invalid(f"formula {formula!r} {owner} {beyond}; {TAKES}")
     return {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+
+
+def _unknown(formula: str, owner: str, missing: list[str]) -> Invalid:
+    """The refusal of a formula naming parameters that do not exist."""
+    return Invalid(
+        f"formula {formula!r} {owner} names parameters {missing} that do not exist; set them "
+        "before the formula"
+    )
 
 
 def _ordered(parameters: Sequence[Parameter], reserved: set[str]) -> list[Parameter]:
@@ -61,14 +149,14 @@ def _ordered(parameters: Sequence[Parameter], reserved: set[str]) -> list[Parame
     named = {parameter.name: parameter for parameter in parameters}
     graph: dict[str, set[str]] = {}
     for parameter in parameters:
+        if parameter.formula is None:
+            graph[parameter.name] = set()
+            continue
         owner = f"of parameter {parameter.name!r}"
-        reads = set() if parameter.formula is None else _reads(parameter.formula, owner)
+        reads = _reads(parameter.formula, owner)
         missing = sorted(reads - named.keys() - reserved)
         if missing:
-            raise Invalid(
-                f"formula {parameter.formula!r} {owner} names parameters {missing} that do not "
-                "exist; set them before the formula"
-            )
+            raise _unknown(parameter.formula, owner, missing)
         graph[parameter.name] = reads & named.keys()
     try:
         order = list(TopologicalSorter(graph).static_order())
@@ -79,12 +167,16 @@ def _ordered(parameters: Sequence[Parameter], reserved: set[str]) -> list[Parame
 
 
 def _value(formula: str, owner: str, values: Mapping[str, float], reserved: set[str]) -> float:
-    """A formula's finite value over the values given."""
-    interp = _interpreter()
-    interp.symtable.update(values)
+    """A formula's finite value over the values given; Invalid for one that holds more than a
+    formula takes, names a parameter that does not exist, or fails."""
+    missing = sorted(_reads(formula, owner) - values.keys() - reserved)
+    if missing:
+        raise _unknown(formula, owner, missing)
+    interp = _interpreter(values)
     result = interp(formula)
     if interp.error:
-        raise Invalid(_failure(formula, owner, interp.error, set(values) | reserved))
+        detail = "; ".join(_plain(err) for err in interp.error)
+        raise Invalid(f"formula {formula!r} {owner} failed: {detail}")
     if not isinstance(result, int | float) or not math.isfinite(float(result)):
         raise Invalid(f"formula {formula!r} {owner} is not a finite number")
     return float(result)
@@ -95,7 +187,7 @@ def evaluate(
 ) -> tuple[dict[str, float], dict[str, float]]:
     """Parameter values in dependency order, then each formula's amount over them, keyed as
     the formulas are: by the name a refusal gives the exchange."""
-    reserved = set(_interpreter().symtable)
+    reserved = set(_interpreter({}).symtable)
     for parameter in parameters:
         if parameter.name in reserved:
             raise Invalid(f"parameter {parameter.name!r} shadows a builtin")
@@ -114,17 +206,6 @@ def evaluate(
         for named, formula in formulas.items()
     }
     return values, amounts
-
-
-def _failure(formula: str, owner: str, errors: list[ExceptionHolder], known: set[str]) -> str:
-    if errors[0].exc is NameError:
-        missing = sorted(_reads(formula, owner) - known)
-        return (
-            f"formula {formula!r} {owner} names parameters {missing} that do not exist; set "
-            "them before the formula"
-        )
-    detail = "; ".join(_plain(err) for err in errors)
-    return f"formula {formula!r} {owner} failed: {detail}"
 
 
 def _plain(error: ExceptionHolder) -> str:

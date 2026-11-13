@@ -12,7 +12,7 @@ from ecosemantic.compute.links import link_pin, pins
 from ecosemantic.model.canonical import stale
 from ecosemantic.model.entities import ProductSystem
 from ecosemantic.model.refs import BackgroundRef, SystemRef
-from ecosemantic.model.validation import Issue, validate
+from ecosemantic.model.validation import Issue, Pin, validate
 
 
 class LinkBehind(BaseModel):
@@ -32,8 +32,10 @@ class Consequences(BaseModel):
     issues: list[Issue] = Field(default_factory=list)
 
 
-def _stated(after: ProductSystem, treatments: frozenset[BackgroundRef] | None) -> list[Issue]:
-    return [issue.stated() for issue in validate(after, treatments=treatments).errors]
+def _stated(
+    after: ProductSystem, treatments: frozenset[BackgroundRef] | None, held: Sequence[Pin]
+) -> list[Issue]:
+    return [issue.stated() for issue in validate(after, pins=held, treatments=treatments).errors]
 
 
 def consequences(
@@ -42,14 +44,16 @@ def consequences(
     linking: Sequence[ProductSystem],
     at_pins: Mapping[SystemRef, str | None],
     treatments: frozenset[BackgroundRef] | None = None,
+    held: Sequence[Pin] = (),
 ) -> Consequences:
     """The consequences of writing `after` over `before`, given the stored systems that link it
     and each of their links' pins at the version it names: the scenarios pinned to the base
     before and not after, the systems a link of which is behind after the write and was not
     before, and the issues of `after`, the case of waste sent to a treatment among them when
-    `treatments` names the background's treatments."""
+    `treatments` names the background's treatments, and the cases of its own links against
+    `held`, what the store holds for each of them."""
     if before is None:
-        return Consequences(issues=_stated(after, treatments))
+        return Consequences(issues=_stated(after, treatments, held))
     staled = sorted(s.name for s in after.scenarios if not stale(before, s) and stale(after, s))
     behind = [
         LinkBehind(product_system_id=system.id, name=system.name)
@@ -61,5 +65,5 @@ def consequences(
         )
     ]
     return Consequences(
-        scenarios_staled=staled, links_behind=behind, issues=_stated(after, treatments)
+        scenarios_staled=staled, links_behind=behind, issues=_stated(after, treatments, held)
     )

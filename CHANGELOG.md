@@ -2,6 +2,15 @@
 
 Each release names what it adds, changes and removes, newest first.
 
+## 0.1.17
+
+- A formula takes numbers, parameter names, arithmetic, comparisons, a conditional and the math functions `abs`, `acos`, `asin`, `atan`, `atan2`, `ceil`, `cos`, `cosh`, `degrees`, `exp`, `floor`, `hypot`, `log`, `log10`, `log2`, `max`, `min`, `pow`, `radians`, `round`, `sin`, `sinh`, `sqrt`, `tan` and `tanh`, with `pi` and `e`; anything else is refused before it is evaluated, naming what the formula holds. A formula in a parameter, an exchange, a table folder or a model package so reads no file and looks inside no object, where one could call `open`, `loadtxt`, `fromfile` and `genfromtxt` and read a file of the computer the engine runs on. Every release before this one evaluates such a formula: update.
+- `contribution_analysis` by process and by flow counts in `cut` every part its list leaves out: `below` and `share` over every part under the cut-off, and `unlisted` and `unlisted_share` for the parts that reach it past `top_n`, where `cut` counted within the `top_n` parts alone. The page says both under each list.
+- `export_product_system` refuses a path that holds a file unless `replace` is passed, and a path that is a directory, where it wrote over the file; `ecosemantic export` writes over the file its command names.
+- A write answers in its `consequences` the issues of the system's own links: a link behind its system, a link that resolves to nothing, and a link to a system on another database, which `rebase_database` onto another database leaves. A calculation refuses such a link as on another database, and `validate_product_system`'s `database_build` names the systems on the installed database alone, where both named the linked system as on another build of the wrong database.
+- `create_product_system`, `update_product_system`, `create_process` and `update_process` refuse a blank name, and the two process tools a blank reference product.
+- `import_product_system` answers `invalid` for a file that is no zip, and `import_tables` for a folder that holds no `model.yaml`, where each failed with the library's own error.
+
 ## 0.1.16
 
 - The page opens in the Cobalt theme, drawn in Source Sans 3 and JetBrains Mono, which it carries under the OFL-1.1 and lists in its third-party notices; the `Theme` menu offers Cobalt beside the two others, and a browser that kept another theme moves to Cobalt once.

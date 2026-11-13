@@ -176,6 +176,23 @@ async def test_a_list_by_process_or_by_flow_drops_what_is_under_the_cutoff_and_s
     assert path["cut"] is None
 
 
+async def test_a_list_top_n_cuts_short_says_what_it_leaves_unlisted(
+    server: FastMCP, widget: uuid.UUID
+) -> None:
+    args = {
+        "product_system_id": str(widget),
+        "method_id": GWP_ID,
+        "by": "process",
+        "top_n": 1,
+        "cutoff": 0.0,
+    }
+    async with Client(server) as client:
+        out = (await client.call_tool("contribution_analysis", args)).structured_content["value"]
+    assert [p["name"] for p in out["processes"]] == ["electricity production"]
+    assert (out["cut"]["below"], out["cut"]["unlisted"]) == (0, 2)
+    assert out["cut"]["unlisted_share"] == pytest.approx(1 - out["processes"][0]["fraction"])
+
+
 async def test_inventory_rows_name_their_source(server: FastMCP, widget: uuid.UUID) -> None:
     async with Client(server) as client:
         listing = (

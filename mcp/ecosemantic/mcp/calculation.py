@@ -18,7 +18,6 @@ from ecosemantic.compute.results import (
     InventoryResult,
     PinBehind,
     VariantScores,
-    cut_below,
 )
 from ecosemantic.errors import Invalid, NotFound, StaleScenario
 from ecosemantic.mcp.context import ServerContext
@@ -299,34 +298,32 @@ async def contributions_of(
     cutoff: float = CUTOFF,
 ) -> ContributionResult:
     """One score of a materialised product system, decomposed along `by`, with the loops holding
-    a credit and the exchanges running a treatment backwards. A flat list keeps the items whose
-    fraction reaches `cutoff` and says what it dropped."""
+    a credit and the exchanges running a treatment backwards. A flat list keeps the `top_n`
+    largest items whose fraction reaches `cutoff` and says what it leaves out."""
     system = System.of(base, linked)
     named = credit_loops(base)
     inside = linked_credit_loops(linked.values())
     backwards = named_backwards(base, linked, treatments)
     if by == "process":
-        found = await calculation.hotspots(system, items, method, top_n)
-        processes, cut = cut_below(found.items, cutoff)
+        found = await calculation.hotspots(system, items, method, top_n, cutoff)
         value = ContributionResult(
             database=base.database,
             by=by,
             total=found.total,
-            processes=processes,
-            cut=cut,
+            processes=found.items,
+            cut=found.cut,
             credit_loops=named,
             linked_credit_loops=inside,
             treatments_run_backwards=backwards,
         )
     elif by == "flow":
-        flows = await calculation.flow_hotspots(system, items, method, top_n)
-        kept, cut = cut_below(flows.items, cutoff)
+        flows = await calculation.flow_hotspots(system, items, method, top_n, cutoff)
         value = ContributionResult(
             database=base.database,
             by=by,
             total=flows.total,
-            flows=kept,
-            cut=cut,
+            flows=flows.items,
+            cut=flows.cut,
             credit_loops=named,
             linked_credit_loops=inside,
             treatments_run_backwards=backwards,
@@ -472,8 +469,9 @@ def register(server: FastMCP, context: ServerContext) -> None:
             f"total every way. by='path' stops at max_level (default {MAX_LEVEL}) and "
             f"max_nodes (default {MAX_NODES}) and folds a branch below cutoff (default "
             f"{CUTOFF}) of the total into a remainder; by='process' and by='flow' answer the "
-            f"top_n (default {TOP_N}) largest parts that reach cutoff, and cut says how many "
-            "parts fell below it and their share of the total. Example: "
+            f"top_n (default {TOP_N}) largest parts that reach cutoff, and cut says what the "
+            "list leaves out: below, the parts under the cut-off, with their share of the total, "
+            "and unlisted, the parts that reach it past top_n, with their unlisted_share. Example: "
             '{"product_system_id": '
             '"…", "by": "path", "method_id": "m_…", "max_level": 4}.'
         ),

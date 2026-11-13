@@ -66,6 +66,28 @@ def test_an_invalid_document_names_every_field_that_failed() -> None:
     )
 
 
+def test_a_product_system_takes_no_blank_name(product_system: ProductSystem) -> None:
+    with pytest.raises(Invalid, match="the name of a product system is blank"):
+        new_product_system(name=" ", database=DATABASE, description="", notes="")
+    with pytest.raises(Invalid, match="the name of a product system is blank"):
+        patch_product_system(product_system, name="")
+
+
+def test_a_process_takes_no_blank_name_and_no_blank_reference_product(
+    product_system: ProductSystem,
+) -> None:
+    with pytest.raises(Invalid, match="the name of process 'dye' is blank"):
+        add_process(product_system, code="dye", name="", unit="kilogram", reference_product="dye")
+    with pytest.raises(Invalid, match="the reference product of process 'dye' is blank"):
+        add_process(
+            product_system, code="dye", name="dyeing", unit="kilogram", reference_product="  "
+        )
+    with pytest.raises(Invalid, match="the name of process 'tshirt' is blank"):
+        patch_process(product_system, "tshirt", name="")
+    with pytest.raises(Invalid, match="the reference product of process 'tshirt' is blank"):
+        patch_process(product_system, "tshirt", reference_product="\t")
+
+
 def test_patch_product_system_needs_a_field(product_system: ProductSystem) -> None:
     with pytest.raises(Invalid):
         patch_product_system(product_system)

@@ -14,9 +14,16 @@ export function formatShare(fraction: number): string {
 }
 
 export function cutNotice(cut: Cut | null): string | null {
-  if (cut === null || cut.below === 0) return null
-  const count = cut.below === 1 ? '1 item' : `${cut.below} items`
-  return `${count} under the ${formatShare(cut.cutoff)} cut-off ${cut.below === 1 ? 'is' : 'are'} not shown, together ${formatShare(cut.share)} of the total.`
+  if (cut === null) return null
+  const items = (count: number) => (count === 1 ? '1 item' : `${count} items`)
+  const cutoff = `the ${formatShare(cut.cutoff)} cut-off`
+  const said: string[] = []
+  if (cut.below > 0) said.push(`${items(cut.below)} under ${cutoff} ${cut.below === 1 ? 'is' : 'are'} not shown, together ${formatShare(cut.share)} of the total.`)
+  if (cut.unlisted > 0)
+    said.push(
+      `${items(cut.unlisted)} that ${cut.unlisted === 1 ? 'reaches' : 'reach'} ${cutoff} ${cut.unlisted === 1 ? 'is' : 'are'} past the end of the list, together ${formatShare(cut.unlisted_share)} of the total.`,
+    )
+  return said.length === 0 ? null : said.join(' ')
 }
 
 export function shortHash(hash: string | null): string {

@@ -282,7 +282,7 @@ const CONTRIBUTION_RESULT_KEYS = {
   cut: true,
 } satisfies Record<keyof ContributionResult, true>
 
-const CUT_KEYS = { cutoff: true, below: true, share: true } satisfies Record<keyof Cut, true>
+const CUT_KEYS = { cutoff: true, below: true, share: true, unlisted: true, unlisted_share: true } satisfies Record<keyof Cut, true>
 
 const INVENTORY_ROW_KEYS = {
   flow: true,

@@ -42,6 +42,23 @@ class CalculationConformance:
         assert [f.name for f in found.items] == ["Carbon dioxide, fossil", "Methane, fossil"]
         assert found.items[0].amount == pytest.approx(3.85) and found.items[0].rank == 1
 
+    async def test_a_flat_list_accounts_for_every_part_it_does_not_show(
+        self, calculation, fixture_system: System
+    ) -> None:
+        processes = await calculation.hotspots(
+            fixture_system, WIDGET, GWP_METHOD, top_n=1, cutoff=0.1
+        )
+        assert [h.name for h in processes.items] == ["electricity production"]
+        assert (processes.cut.below, processes.cut.unlisted) == (1, 1)
+        accounted = processes.items[0].fraction + processes.cut.share + processes.cut.unlisted_share
+        assert accounted == pytest.approx(1.0)
+        flows = await calculation.flow_hotspots(
+            fixture_system, WIDGET, GWP_METHOD, top_n=1, cutoff=0.0
+        )
+        assert [f.name for f in flows.items] == ["Carbon dioxide, fossil"]
+        assert (flows.cut.below, flows.cut.unlisted) == (0, 1)
+        assert flows.cut.unlisted_share == pytest.approx(0.308 / 4.158)
+
     async def test_inventory_rows(self, calculation, fixture_system: System) -> None:
         found = await calculation.inventory(fixture_system, WIDGET)
         co2 = sum(r.amount for r in found.rows if r.name == "Carbon dioxide, fossil")

@@ -45,12 +45,23 @@ def invalid(error: ValidationError) -> Invalid:
     return Invalid("; ".join(error_line(e["loc"], e["msg"]) for e in error.errors()))
 
 
+def _stated(value: str, what: str) -> str:
+    """The value as given; Invalid for one that holds nothing but space."""
+    if not value.strip():
+        raise Invalid(f"{what} is blank")
+    return value
+
+
 def new_product_system(
     name: str, database: Database, description: str, notes: str
 ) -> ProductSystem:
-    """An empty document on one database, with a fresh id and no hash."""
+    """An empty document on one database, with a fresh id and no hash; its name is not blank."""
     return ProductSystem(
-        id=uuid.uuid4(), name=name, description=description, notes=notes, database=database
+        id=uuid.uuid4(),
+        name=_stated(name, "the name of a product system"),
+        description=description,
+        notes=notes,
+        database=database,
     )
 
 
@@ -61,8 +72,10 @@ def patch_product_system(
     notes: str | None = None,
     reference_process: str | None = None,
 ) -> ProductSystem:
-    """The document with the given fields replaced; at least one must be given, and a reference
-    process must name a process of the document."""
+    """The document with the given fields replaced; at least one must be given, a name is not
+    blank, and a reference process must name a process of the document."""
+    if name is not None:
+        _stated(name, "the name of a product system")
     fields = {
         "name": name,
         "description": description,
@@ -168,9 +181,12 @@ def add_process(
     metadata: dict[str, JsonValue] | None = None,
     production_amount: float = 1.0,
 ) -> tuple[ProductSystem, Process]:
-    """The document with a new process and its production exchange; the code must be free."""
+    """The document with a new process and its production exchange; the code must be free, and
+    neither the name nor the reference product blank."""
     if any(a.code == code for a in system.processes):
         raise Conflict(f"process {code!r} already exists in {system.name!r}")
+    _stated(name, f"the name of process {code!r}")
+    _stated(reference_product, f"the reference product of process {code!r}")
     try:
         process = Process(
             id=uuid.uuid4(),
@@ -210,7 +226,12 @@ def patch_process(
     unit: str | None = None,
     clear: Sequence[ProcessClearable] = (),
 ) -> tuple[ProductSystem, Process]:
-    """The document with a process's fields replaced; the unit only while nothing consumes it."""
+    """The document with a process's fields replaced; the unit only while nothing consumes it,
+    and neither the name nor the reference product with a blank."""
+    if name is not None:
+        _stated(name, f"the name of process {code!r}")
+    if reference_product is not None:
+        _stated(reference_product, f"the reference product of process {code!r}")
     fields = {
         "name": name,
         "location": location,

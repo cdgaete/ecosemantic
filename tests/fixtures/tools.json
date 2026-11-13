@@ -3082,7 +3082,7 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "Decompose one impact. by='process' partitions the total over the processes that emit it, each appearing once. by='path' nests it under the demanded process along the supply chain that caused it, with elementary flows itemised at each node. by='flow' partitions it over the substances emitted or drawn, ranked by characterised score. Same total every way. by='path' stops at max_level (default 3) and max_nodes (default 50) and folds a branch below cutoff (default 0.001) of the total into a remainder; by='process' and by='flow' answer the top_n (default 10) largest parts that reach cutoff, and cut says how many parts fell below it and their share of the total. Example: {\"product_system_id\": \"\u2026\", \"by\": \"path\", \"method_id\": \"m_\u2026\", \"max_level\": 4}.",
+    "description": "Decompose one impact. by='process' partitions the total over the processes that emit it, each appearing once. by='path' nests it under the demanded process along the supply chain that caused it, with elementary flows itemised at each node. by='flow' partitions it over the substances emitted or drawn, ranked by characterised score. Same total every way. by='path' stops at max_level (default 3) and max_nodes (default 50) and folds a branch below cutoff (default 0.001) of the total into a remainder; by='process' and by='flow' answer the top_n (default 10) largest parts that reach cutoff, and cut says what the list leaves out: below, the parts under the cut-off, with their share of the total, and unlisted, the parts that reach it past top_n, with their unlisted_share. Example: {\"product_system_id\": \"\u2026\", \"by\": \"path\", \"method_id\": \"m_\u2026\", \"max_level\": 4}.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -3233,7 +3233,7 @@
           "type": "object"
         },
         "ContributionResult": {
-          "description": "One decomposition of a total over the database build `database` names: flat over\nemitters, nested over paths, or flat over flows, with the processes of each loop holding a\ncredit, whose delivery no check decides, and each exchange sending a positive amount to a\ntreatment, which runs it backwards. `cut` is what the cut-off left out of a flat list, and\na tree holds its own `truncated` beside none.",
+          "description": "One decomposition of a total over the database build `database` names: flat over\nemitters, nested over paths, or flat over flows, with the processes of each loop holding a\ncredit, whose delivery no check decides, and each exchange sending a positive amount to a\ntreatment, which runs it backwards. `cut` is what a flat list leaves out, under its cut-off\nand past its length, and a tree holds its own `truncated` beside none.",
           "properties": {
             "by": {
               "enum": [
@@ -3341,7 +3341,7 @@
           "type": "object"
         },
         "Cut": {
-          "description": "What a cut-off left out of a contribution list: the share of the total it was set at, how\nmany items fell under it, and their share, summed in magnitude as the cut-off compares\nthem.",
+          "description": "What a flat contribution list leaves out, each share summed in magnitude as the cut-off\ncompares them: the share of the total the cut-off was set at, how many parts fell under it\nand their share, and how many parts reach it past the list's length and their share.",
           "properties": {
             "below": {
               "type": "integer"
@@ -3351,12 +3351,20 @@
             },
             "share": {
               "type": "number"
+            },
+            "unlisted": {
+              "type": "integer"
+            },
+            "unlisted_share": {
+              "type": "number"
             }
           },
           "required": [
             "cutoff",
             "below",
-            "share"
+            "share",
+            "unlisted",
+            "unlisted_share"
           ],
           "type": "object"
         },
@@ -6988,7 +6996,7 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "Write a product system as a model package at the given path: one zip holding the openLCA JSON-LD layout, which openLCA opens directly, and the ecosemantic/ folder with what openLCA has no field for: the scenarios, the pins, the identities, the state as a version snapshot, and ecosemantic/log.jsonl, whose one entry records the export; the stored change log stays in the store. Background datasets travel as references, never as records. Example: {\"product_system_id\": \"\u2026\", \"path\": \"/home/person/widget.zip\"}.",
+    "description": "Write a product system as a model package at the given path: one zip holding the openLCA JSON-LD layout, which openLCA opens directly, and the ecosemantic/ folder with what openLCA has no field for: the scenarios, the pins, the identities, the state as a version snapshot, and ecosemantic/log.jsonl, whose one entry records the export; the stored change log stays in the store. Background datasets travel as references, never as records. A path that holds a file is refused unless replace is passed. Example: {\"product_system_id\": \"\u2026\", \"path\": \"/home/person/widget.zip\"}.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -6997,6 +7005,10 @@
         },
         "product_system_id": {
           "type": "string"
+        },
+        "replace": {
+          "default": false,
+          "type": "boolean"
         }
       },
       "required": [

@@ -144,8 +144,11 @@ def write_folder(root: Path, system: ProductSystem) -> Path:
 
 
 def read_model(folder: Path) -> ProductSystem:
-    """The model the folder carries, without the parameter space the inputs hold."""
+    """The model the folder carries, without the parameter space the inputs hold; Invalid for a
+    folder that holds no model and for a model that is no product system."""
     path = folder / MODEL_FILE
+    if not path.is_file():
+        raise Invalid(f"{str(folder)!r} holds no {MODEL_FILE}")
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     try:
         return ProductSystem.model_validate(raw)

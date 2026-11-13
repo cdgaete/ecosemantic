@@ -563,7 +563,7 @@ def _context(args: argparse.Namespace) -> ServerContext:
 def _export(context: ServerContext, product_system_id: str, target: Path) -> None:
     from ecosemantic.mcp.systems import export_product_system
 
-    asyncio.run(export_product_system(context, product_system_id, str(target)))
+    asyncio.run(export_product_system(context, product_system_id, str(target), replace=True))
 
 
 def _import(context: ServerContext, source: Path) -> None:

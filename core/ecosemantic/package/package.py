@@ -167,6 +167,9 @@ def zip_package(root: Path, zip_path: Path) -> None:
 
 
 def unzip_package(zip_path: Path, root: Path) -> None:
-    """A zip file as a package directory."""
-    with zipfile.ZipFile(zip_path) as zipped:
-        zipped.extractall(root)
+    """A zip file as a package directory; Invalid for a file that is no zip."""
+    try:
+        with zipfile.ZipFile(zip_path) as zipped:
+            zipped.extractall(root)
+    except zipfile.BadZipFile as error:
+        raise Invalid(f"{str(zip_path)!r} is not a zip file") from error

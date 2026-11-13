@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
-from typing import Protocol
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -12,6 +10,7 @@ from ecosemantic.compute.montecarlo import PairedDelta
 from ecosemantic.model.refs import Database
 from ecosemantic.model.summary import Summary
 from ecosemantic.ports.types import (
+    Cut,
     Decomposition,
     FlowHotspot,
     Hotspot,
@@ -87,41 +86,12 @@ class InventoryResult(BaseModel):
     treatments_run_backwards: list[str] = Field(default_factory=list)
 
 
-class Fractioned(Protocol):
-    """An item of a contribution list, whose `fraction` is its share of the total."""
-
-    fraction: float
-
-
-class Cut(BaseModel):
-    """What a cut-off left out of a contribution list: the share of the total it was set at, how
-    many items fell under it, and their share, summed in magnitude as the cut-off compares
-    them."""
-
-    cutoff: float
-    below: int
-    share: float
-
-
-def cut_below[I: Fractioned](items: Sequence[I], cutoff: float) -> tuple[list[I], Cut]:
-    """The items whose fraction reaches `cutoff` in magnitude, in their order, and what the
-    cut-off dropped."""
-    kept: list[I] = []
-    share = 0.0
-    for item in items:
-        if abs(item.fraction) >= cutoff:
-            kept.append(item)
-        else:
-            share += abs(item.fraction)
-    return kept, Cut(cutoff=cutoff, below=len(items) - len(kept), share=share)
-
-
 class ContributionResult(BaseModel):
     """One decomposition of a total over the database build `database` names: flat over
     emitters, nested over paths, or flat over flows, with the processes of each loop holding a
     credit, whose delivery no check decides, and each exchange sending a positive amount to a
-    treatment, which runs it backwards. `cut` is what the cut-off left out of a flat list, and
-    a tree holds its own `truncated` beside none."""
+    treatment, which runs it backwards. `cut` is what a flat list leaves out, under its cut-off
+    and past its length, and a tree holds its own `truncated` beside none."""
 
     database: Database
     by: Decomposition

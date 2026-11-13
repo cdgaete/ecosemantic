@@ -5,9 +5,9 @@ A score is one number; reading it means saying where it comes from. Decompose it
 ## Checklist
 
 1. `calculate_impact` gives the score under a method (`method_id` from `search_methods`) or a whole family (`impact_method` from `list_vocabulary`).
-2. `contribution_analysis` with `by="process"` ranks the processes whose own exchanges carry the score; `top_n` bounds the list.
+2. `contribution_analysis` with `by="process"` ranks the processes whose own exchanges carry the score; the list holds the `top_n` largest that reach `cutoff`, and `cut` says what it leaves out: the parts under the cut-off and the parts past `top_n`, each with its share of the total.
 3. `contribution_analysis` with `by="path"` follows the supply chain from the functional unit; `max_level`, `max_nodes` and `cutoff` bound the tree. A credit is a child with a negative score.
-4. `contribution_analysis` with `by="flow"` ranks the elementary flows behind the score.
+4. `contribution_analysis` with `by="flow"` ranks the elementary flows behind the score, its list bounded and accounted for as the one by process.
 5. `calculate_inventory` pages every elementary flow of the system, filtered by `compartment` or `query`. Amounts at or below the answer's `floor` are float64 residue, set aside and counted in `dropped`.
 6. State each claim with the decomposition that shows it: a share is a process's or a flow's score over the total, under the method named.
 

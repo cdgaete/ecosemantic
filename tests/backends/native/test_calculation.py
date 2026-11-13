@@ -80,6 +80,24 @@ async def test_a_linked_system_on_another_build_is_refused(
         await calculation.supply(system.model_copy(update={"linked": linked}), WIDGET)
 
 
+async def test_a_linked_system_on_another_database_is_refused_naming_both_databases(
+    calculation: NativeCalculation,
+) -> None:
+    system = split_system()
+    linked = {
+        key: frame.model_copy(
+            update={
+                "database": frame.database.model_copy(
+                    update={"name": LOOP_DB, "fingerprint": LOOP_FINGERPRINT}
+                )
+            }
+        )
+        for key, frame in system.linked.items()
+    }
+    with pytest.raises(Invalid, match="frame is on 'looped', the background is 'fixture'"):
+        await calculation.supply(system.model_copy(update={"linked": linked}), WIDGET)
+
+
 async def test_a_background_demand_has_no_supply_and_no_foreground_source(
     calculation: NativeCalculation,
 ) -> None:

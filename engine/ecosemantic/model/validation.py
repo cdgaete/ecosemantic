@@ -249,9 +249,14 @@ def linked_reference(linked: ProductSystem, owner: str) -> Process:
 
 
 def off_build(documents: Sequence[ProductSystem], installed: Database) -> list[ProductSystem]:
-    """The documents that name a build of their database other than the installed one, or
-    none: a calculation over the installed build refuses them."""
-    return [d for d in documents if d.database.fingerprint != installed.fingerprint]
+    """The documents on the installed database that name a build of it other than the installed
+    one, or none: a calculation over the installed build refuses them. A document on another
+    database is on no build of this one."""
+    return [
+        d
+        for d in documents
+        if d.database.name == installed.name and d.database.fingerprint != installed.fingerprint
+    ]
 
 
 class Backwards(BaseModel):

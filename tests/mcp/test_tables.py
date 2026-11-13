@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import uuid
 from pathlib import Path
 
@@ -82,6 +83,17 @@ async def test_import_tables_refuses_a_system_the_store_does_not_hold(
         )
         with pytest.raises(ToolError, match="not_found"):
             await client.call_tool("import_tables", {"path": str(folder)})
+
+
+async def test_import_tables_refuses_a_folder_that_holds_no_model(
+    full_server: FastMCP, tmp_path: Path
+) -> None:
+    async with Client(full_server) as client:
+        with pytest.raises(ToolError) as caught:
+            await client.call_tool("import_tables", {"path": str(tmp_path)})
+    refused = json.loads(str(caught.value))
+    assert refused["error"] == "invalid"
+    assert refused["message"] == f"{str(tmp_path)!r} holds no model.yaml"
 
 
 async def test_export_tables_refuses_a_directory_that_does_not_exist(

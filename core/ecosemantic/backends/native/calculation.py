@@ -41,6 +41,7 @@ from ecosemantic.ports.types import (
     TreeKind,
     TreeNode,
     fraction_of,
+    listed,
 )
 
 T = TypeVar("T")
@@ -163,7 +164,12 @@ class NativeCalculation:
         return await self._run(system, run)
 
     async def hotspots(
-        self, system: System, demand: list[DemandItem], method: Method, top_n: int = TOP_N
+        self,
+        system: System,
+        demand: list[DemandItem],
+        method: Method,
+        top_n: int = TOP_N,
+        cutoff: float = CUTOFF,
     ) -> Hotspots:
         def run(calculation: Calculation) -> Hotspots:
             foreground = self._foreground(calculation, system)
@@ -174,7 +180,10 @@ class NativeCalculation:
             ranked = [(float(background[i]), False, int(i)) for i in np.flatnonzero(background)]
             ranked += [(float(own[j]), True, int(j)) for j in np.flatnonzero(own)]
             ranked.sort(key=lambda entry: -abs(entry[0]))
-            top = ranked[:top_n]
+            shown, cut = listed(
+                [fraction_of(value, total) for value, _, _ in ranked], top_n, cutoff
+            )
+            top = ranked[:shown]
             labels = calculation.background.coords["activity"].labels
             named = self._activities(
                 system.database, (str(labels[i]) for _, fg, i in top if not fg)
@@ -199,18 +208,29 @@ class NativeCalculation:
                         fraction=fraction_of(value, total),
                     )
                 )
-            return Hotspots(total=Score(value=total, unit=method.unit, method=method), items=items)
+            return Hotspots(
+                total=Score(value=total, unit=method.unit, method=method), items=items, cut=cut
+            )
 
         return await self._run(system, run)
 
     async def flow_hotspots(
-        self, system: System, demand: list[DemandItem], method: Method, top_n: int = TOP_N
+        self,
+        system: System,
+        demand: list[DemandItem],
+        method: Method,
+        top_n: int = TOP_N,
+        cutoff: float = CUTOFF,
     ) -> FlowHotspots:
         def run(calculation: Calculation) -> FlowHotspots:
             solution = calculation.solve(self._foreground(calculation, system), demand)
             scores = calculation.by_flow(solution, method).data
             total = float(scores.sum())
-            ranked = sorted(np.flatnonzero(scores), key=lambda row: -abs(scores[row]))[:top_n]
+            every = sorted(np.flatnonzero(scores), key=lambda row: -abs(scores[row]))
+            shown, cut = listed(
+                [fraction_of(float(scores[row]), total) for row in every], top_n, cutoff
+            )
+            ranked = every[:shown]
             labels = calculation.background.coords["flow"].labels
             flows = self._flows(system.database, (str(labels[row]) for row in ranked))
             elementary_flows = self.store.elementary_flows_of(system.database)
@@ -230,7 +250,7 @@ class NativeCalculation:
                     )
                 )
             return FlowHotspots(
-                total=Score(value=total, unit=method.unit, method=method), items=items
+                total=Score(value=total, unit=method.unit, method=method), items=items, cut=cut
             )
 
         return await self._run(system, run)

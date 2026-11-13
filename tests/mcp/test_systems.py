@@ -313,6 +313,90 @@ async def test_import_of_a_missing_file_is_invalid(server: FastMCP, tmp_path: Pa
         assert json.loads(str(caught.value))["error"] == "invalid"
 
 
+async def test_import_of_a_file_that_is_no_zip_is_invalid_naming_it(
+    server: FastMCP, tmp_path: Path
+) -> None:
+    held = tmp_path / "notes.txt"
+    held.write_text("no package", encoding="utf-8")
+    async with Client(server) as client:
+        with pytest.raises(ToolError) as caught:
+            await client.call_tool("import_product_system", {"path": str(held)})
+    refused = json.loads(str(caught.value))
+    assert (refused["error"], refused["message"]) == ("invalid", f"{str(held)!r} is not a zip file")
+
+
+async def test_an_export_refuses_a_path_that_holds_a_file_unless_it_replaces(
+    server: FastMCP, stored: uuid.UUID, tmp_path: Path
+) -> None:
+    held = tmp_path / "notes.txt"
+    held.write_text("kept", encoding="utf-8")
+    call = {"product_system_id": str(stored), "path": str(held)}
+    async with Client(server) as client:
+        with pytest.raises(ToolError) as caught:
+            await client.call_tool("export_product_system", call)
+        assert json.loads(str(caught.value))["error"] == "conflict"
+        assert held.read_text(encoding="utf-8") == "kept"
+        await client.call_tool("export_product_system", {**call, "replace": True})
+    assert zipfile.is_zipfile(held)
+
+
+async def test_an_export_onto_a_directory_is_invalid_whether_or_not_it_replaces(
+    server: FastMCP, stored: uuid.UUID, tmp_path: Path
+) -> None:
+    call = {"product_system_id": str(stored), "path": str(tmp_path)}
+    async with Client(server) as client:
+        for replace in (False, True):
+            with pytest.raises(ToolError) as caught:
+                await client.call_tool("export_product_system", {**call, "replace": replace})
+            refused = json.loads(str(caught.value))
+            assert refused["error"] == "invalid" and "is a directory" in refused["message"]
+
+
+async def test_a_move_onto_another_database_names_the_link_it_leaves_across_databases(
+    full_server: FastMCP,
+) -> None:
+    async with Client(full_server) as client:
+
+        async def made(name: str) -> str:
+            system = (
+                await client.call_tool(
+                    "create_product_system", {"name": name, "database": FIXTURE_DB}
+                )
+            ).structured_content["value"]["id"]
+            await client.call_tool(
+                "create_process",
+                {
+                    "product_system_id": system,
+                    "code": "p",
+                    "name": name,
+                    "unit": "kilogram",
+                    "reference_product": name,
+                },
+            )
+            await client.call_tool(
+                "update_product_system", {"product_system_id": system, "reference_process": "p"}
+            )
+            return system
+
+        part, whole = await made("part"), await made("whole")
+        await client.call_tool(
+            "create_exchange",
+            {
+                "product_system_id": whole,
+                "code": "p",
+                "type": "product",
+                "amount": 1.0,
+                "input": {"kind": "system", "product_system_id": part},
+            },
+        )
+        moved = (
+            await client.call_tool(
+                "rebase_database", {"product_system_id": whole, "database": LOOP_DB}
+            )
+        ).structured_content
+    assert [issue["code"] for issue in moved["consequences"]["issues"]] == ["database_mismatch"]
+
+
 async def test_validate_without_a_target_fails_while_no_reference_is_set(
     server: FastMCP, bottle: str
 ) -> None:
