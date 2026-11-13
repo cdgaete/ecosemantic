@@ -2,7 +2,7 @@
 
 Each release names what it adds, changes and removes, newest first.
 
-## 0.1.19
+## 0.1.20
 
 - An impact answer names each method once, in `methods`, and each score, each variant's score and each Monte Carlo category names its method by `method_id`, as `gating_method` does; a contribution answer names its method in `method`, and its `total` names it by `method_id`. A score carried its method's whole record, which a family of 25 categories with two variants answered 75 times. The page, the in-chat panel and a result folder read a method from the answer that lists it, and a run stored by an earlier release reads as it did.
 - `calculate_impact` and `get_run` answer each Monte Carlo category with its summary and a histogram of twenty bins, and take `samples` to answer every draw in the histogram's place, as the Python API's two methods do, where an answer carried every draw of every category. The page asks for the draws and draws its histograms from them.

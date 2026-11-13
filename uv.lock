@@ -760,7 +760,7 @@ wheels = [
 
 [[package]]
 name = "ecosemantic"
-version = "0.1.19"
+version = "0.1.20"
 source = { editable = "app" }
 dependencies = [
     { name = "ecosemantic-core" },
@@ -824,7 +824,7 @@ provides-extras = ["mkl", "tray"]
 
 [[package]]
 name = "ecosemantic-core"
-version = "0.1.19"
+version = "0.1.20"
 source = { editable = "core" }
 dependencies = [
     { name = "asteval" },
@@ -855,7 +855,7 @@ requires-dist = [
 
 [[package]]
 name = "ecosemantic-databases"
-version = "0.1.19"
+version = "0.1.20"
 source = { editable = "databases" }
 dependencies = [
     { name = "ecosemantic-core" },
@@ -891,7 +891,7 @@ provides-extras = ["ecoinvent"]
 
 [[package]]
 name = "ecosemantic-engine"
-version = "0.1.19"
+version = "0.1.20"
 source = { editable = "engine" }
 dependencies = [
     { name = "nimblend" },
@@ -917,7 +917,7 @@ provides-extras = ["mkl"]
 
 [[package]]
 name = "ecosemantic-mcp"
-version = "0.1.19"
+version = "0.1.20"
 source = { editable = "mcp" }
 dependencies = [
     { name = "ecosemantic-core" },
@@ -942,7 +942,7 @@ requires-dist = [
 
 [[package]]
 name = "ecosemantic-relay"
-version = "0.1.19"
+version = "0.1.20"
 source = { editable = "relay" }
 dependencies = [
     { name = "cryptography" },
@@ -959,7 +959,7 @@ requires-dist = [
 
 [[package]]
 name = "ecosemantic-view"
-version = "0.1.19"
+version = "0.1.20"
 source = { editable = "view" }
 dependencies = [
     { name = "ecosemantic-core" },

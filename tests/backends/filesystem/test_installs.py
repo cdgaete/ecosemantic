@@ -62,11 +62,13 @@ class TestFilesystemInstalls(InstallConformance):
         orphan.write_text("", encoding="utf-8")
         for kept in ("post.lock", "slot.lock"):
             (folder / kept).write_text("", encoding="utf-8")
+        # Windows removes a lock's file when the lock is released, so it may be absent there
+        held = (folder / f"{posted.id}.lock").is_file()
 
         installs.sweep()
 
         assert not orphan.exists()
-        assert (folder / f"{posted.id}.lock").is_file()
+        assert (folder / f"{posted.id}.lock").is_file() == held
         assert install_dir(tmp_path, posted.id).is_dir()
         assert (folder / "post.lock").is_file() and (folder / "slot.lock").is_file()
 

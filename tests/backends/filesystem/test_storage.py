@@ -184,11 +184,13 @@ class TestFilesystemStorage(StorageConformance):
         orphan.write_text("", encoding="utf-8")
         notes = storage.root / "notes.lock"
         notes.write_text("", encoding="utf-8")
+        # Windows removes a lock's file when the lock is released, so it may be absent there
+        held = stored.is_file()
 
         storage.sweep()
 
         assert not orphan.exists()
-        assert (storage.root / str(product_system.id)).is_dir() and stored.is_file()
+        assert (storage.root / str(product_system.id)).is_dir() and stored.is_file() == held
         assert notes.is_file()
 
     async def test_a_sweep_waits_for_the_lock_of_an_orphan_another_process_holds(
