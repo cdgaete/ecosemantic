@@ -7,7 +7,7 @@ from collections.abc import Collection, Sequence
 from ecosemantic.errors import NotFound
 from ecosemantic.model.entities import Method, method_named
 from ecosemantic.model.refs import BackgroundRef, Database, ElementaryFlowRef
-from ecosemantic.ports.search import Phrase, phrases
+from ecosemantic.ports.search import Phrase, phrases, spellings
 from ecosemantic.ports.terms import tokens
 from ecosemantic.ports.types import (
     BackgroundExchange,
@@ -62,7 +62,7 @@ def _holds(phrase: Phrase, text: str) -> bool:
         if phrase.prefix:
             if window[:-1] == list(phrase.tokens[:-1]) and window[-1].startswith(phrase.tokens[-1]):
                 return True
-        elif window == list(phrase.tokens):
+        elif window[0] in spellings(phrase) and window[1:] == list(phrase.tokens[1:]):
             return True
     return False
 

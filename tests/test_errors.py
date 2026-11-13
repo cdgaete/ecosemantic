@@ -19,6 +19,7 @@ from ecosemantic.errors import (
     error_status,
     failure_payload,
     field_error,
+    said,
     unreadable,
 )
 
@@ -75,6 +76,12 @@ def test_an_error_line_joins_its_location_with_dots_before_its_message() -> None
     assert error_line(("processes", 0, "code"), "Field required") == (
         "processes.0.code: Field required"
     )
+
+
+def test_an_error_line_carries_a_validator_s_refusal_without_pydantic_s_prefix() -> None:
+    assert error_line(("name",), "Value error, a name is not blank") == "name: a name is not blank"
+    assert said("Value error, scale must be > 0") == "scale must be > 0"
+    assert said("Field required") == "Field required"
 
 
 def test_an_error_line_at_the_input_itself_is_its_message_alone() -> None:

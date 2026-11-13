@@ -243,6 +243,7 @@ class NativeCalculation:
                         flow=ElementaryFlowRef(database=elementary_flows, id=str(labels[row])),
                         name=flow.name,
                         compartment=flow.compartment,
+                        sub_compartment=flow.sub_compartment,
                         amount=float(solution.inventory.data[row]),
                         unit=flow.unit,
                         score=float(scores[row]),

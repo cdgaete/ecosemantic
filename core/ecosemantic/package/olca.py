@@ -7,7 +7,7 @@ import math
 import olca_schema as o
 from pydantic import ValidationError
 
-from ecosemantic.errors import Invalid, NotSupported
+from ecosemantic.errors import Invalid, NotSupported, said
 from ecosemantic.model.entities import Uncertainty, UncertaintyType
 
 
@@ -89,7 +89,7 @@ def _model_reason(type: UncertaintyType, params: dict[str, float | bool | None])
     try:
         Uncertainty(type=type, params=params)
     except ValidationError as error:
-        return error.errors()[0]["msg"].removeprefix("Value error, ")
+        return said(error.errors()[0]["msg"])
     return None
 
 

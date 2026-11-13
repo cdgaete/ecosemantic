@@ -31,6 +31,7 @@ import type {
   RequestDraft,
   Rerun,
   Run,
+  RunState,
   ServerInfo,
   StartRunArguments,
   SystemCard,
@@ -164,7 +165,7 @@ export const api = {
   contributions: (id: string, body: ContributionArguments) =>
     call<Answer<ContributionResult>>(`${systems}/${id}/contributions`, { method: 'POST', body: JSON.stringify(body) }),
   inventory: (id: string, body: InventoryArguments) => call<InventoryListing>(`${systems}/${id}/inventory`, { method: 'POST', body: JSON.stringify(body) }),
-  runs: (id: string) => call<Answer<Run[]>>(`${systems}/${id}/runs`),
+  runs: (id: string) => call<Answer<RunState[]>>(`${systems}/${id}/runs`),
   startRun: (id: string, body: StartRunArguments) => call<Answer<Run>>(`${systems}/${id}/runs?started=true`, { method: 'POST', body: JSON.stringify(body) }),
   run: (runId: string) => call<Answer<Run>>(`/api/runs/${runId}`),
   cancelRun: (runId: string) => call<Answer<Run>>(`/api/runs/${runId}/cancel`, { method: 'POST' }),

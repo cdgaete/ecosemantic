@@ -31,6 +31,7 @@
         "name": "Carbon dioxide, fossil",
         "rank": 1,
         "score": 3.85,
+        "sub_compartment": null,
         "unit": "kilogram"
       },
       {
@@ -45,6 +46,7 @@
         "name": "Methane, fossil",
         "rank": 2,
         "score": 0.30800000000000005,
+        "sub_compartment": null,
         "unit": "kilogram"
       }
     ],

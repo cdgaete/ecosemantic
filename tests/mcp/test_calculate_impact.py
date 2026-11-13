@@ -111,6 +111,26 @@ async def test_a_wrong_specification_returns_suggestions(
         assert GWP_ID in [s["id"] for s in payload["details"]["suggestions"]]
 
 
+async def test_an_impact_method_that_is_no_family_names_the_nearest_or_the_vocabulary(
+    server: FastMCP, widget: uuid.UUID
+) -> None:
+    async with Client(server) as client:
+        said = []
+        for name in ("GWP", "zzz"):
+            with pytest.raises(ToolError) as caught:
+                await client.call_tool(
+                    "calculate_impact", {"product_system_id": str(widget), "impact_method": name}
+                )
+            payload = json.loads(str(caught.value))
+            assert payload["error"] == "not_found"
+            said.append(payload["message"])
+    assert said == [
+        "no impact method 'GWP' in 'fixture'; the nearest are 'gwp'",
+        "no impact method 'zzz' in 'fixture'; list_vocabulary with kind 'impact_methods' lists "
+        "them",
+    ]
+
+
 async def test_an_impact_method_scores_every_category(server: FastMCP, widget: uuid.UUID) -> None:
     async with Client(server) as client:
         out = (

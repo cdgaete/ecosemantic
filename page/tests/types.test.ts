@@ -43,6 +43,7 @@ import type {
   ProductSystem,
   Request,
   Run,
+  RunState,
   RunProgress,
   Scenario,
   Score,
@@ -216,7 +217,7 @@ const IMPACT_RESULT_KEYS = { product_system: true, database: true, scores: true,
 const MONTE_CARLO_CONFIG_KEYS = { n_min: true, n_max: true, rel_se_target: true, seed: true, scope: true, n: true } satisfies Record<keyof MonteCarloConfig, true>
 const DEMAND_ITEM_KEYS = { ref: true, amount: true } satisfies Record<keyof DemandItem, true>
 const RUN_PROGRESS_KEYS = { iterations: true, worst_rel_se: true } satisfies Record<keyof RunProgress, true>
-const RUN_KEYS = {
+const RUN_STATE_KEYS = {
   id: true,
   product_system_id: true,
   at_hash: true,
@@ -226,7 +227,6 @@ const RUN_KEYS = {
   treatments_run_backwards: true,
   status: true,
   progress: true,
-  result: true,
   error: true,
   posted_at: true,
   started_at: true,
@@ -234,7 +234,8 @@ const RUN_KEYS = {
   cancel_requested: true,
   pid: true,
   open: true,
-} satisfies Record<keyof Run, true>
+} satisfies Record<keyof RunState, true>
+const RUN_KEYS = { ...RUN_STATE_KEYS, result: true } satisfies Record<keyof Run, true>
 
 const HOTSPOT_KEYS = {
   rank: true,
@@ -251,6 +252,7 @@ const FLOW_HOTSPOT_KEYS = {
   flow: true,
   name: true,
   compartment: true,
+  sub_compartment: true,
   amount: true,
   unit: true,
   score: true,
@@ -425,8 +427,8 @@ function expectTreeNodeKeys(node: TreeNode): void {
   node.children.forEach(expectTreeNodeKeys)
 }
 
-function expectRunKeys(run: Run): void {
-  expectKeys(run, RUN_KEYS)
+function expectRunStateKeys(run: RunState, keys: Record<string, true> = RUN_STATE_KEYS): void {
+  expectKeys(run, keys)
   expectKeys(run.progress, RUN_PROGRESS_KEYS)
   expectKeys(run.config, MONTE_CARLO_CONFIG_KEYS)
   run.demand.forEach((item) => {
@@ -434,6 +436,10 @@ function expectRunKeys(run: Run): void {
     expectRefKeys(item.ref)
   })
   run.methods.forEach((method) => expectKeys(method, METHOD_KEYS))
+}
+
+function expectRunKeys(run: Run): void {
+  expectRunStateKeys(run, RUN_KEYS)
   if (run.result) expectKeys(run.result, MONTE_CARLO_RESULT_KEYS)
 }
 
@@ -461,7 +467,7 @@ const typedInventory = inventory as InventoryListing
 const typedBackgroundProcess = backgroundProcess as Answer<BackgroundProcess>
 const typedNotFound = notFound as ErrorEnvelope
 const typedRun = run as unknown as Answer<Run>
-const typedRuns = runs as unknown as Answer<Run[]>
+const typedRuns = runs as unknown as Answer<RunState[]>
 
 describe('recorded responses', () => {
   it('carry the fields the page reads', () => {
@@ -680,7 +686,7 @@ describe('recorded response keys match the types field for field', () => {
     expectKeys(typedRun, ANSWER_KEYS)
     expectRunKeys(typedRun.value)
     expectKeys(typedRuns, ANSWER_KEYS)
-    typedRuns.value.forEach(expectRunKeys)
+    typedRuns.value.forEach((listed) => expectRunStateKeys(listed))
   })
 
   it('the not-found error envelope', () => {

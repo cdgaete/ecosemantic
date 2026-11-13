@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from fastmcp import FastMCP
 from pydantic import ValidationError
 
-from ecosemantic.errors import Conflict, Invalid, NotFound, Unavailable
+from ecosemantic.errors import Conflict, Invalid, NotFound, Unavailable, said
 from ecosemantic.mcp.accounts import account_advice
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import READ, WRITE
@@ -123,8 +123,7 @@ async def install_database(
             drop_unlinked=drop_unlinked,
         )
     except ValidationError as exc:
-        said = [str(error["msg"]).removeprefix("Value error, ") for error in exc.errors()]
-        raise Invalid("; ".join(said)) from exc
+        raise Invalid("; ".join(said(error["msg"]) for error in exc.errors())) from exc
     if not replace:
         database = context.installer.database(draft)
         if database in {served.name for served in await context.inventory.list_databases()}:

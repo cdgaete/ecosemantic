@@ -17,7 +17,7 @@ from ecosemantic.mcp.treatments import named_backwards, treatments_of
 from ecosemantic.mcp.watcher import reap, watch
 from ecosemantic.model.canonical import content_hash
 from ecosemantic.model.entities import DemandItem
-from ecosemantic.ports.types import MonteCarloConfig, Run, RunDraft, RunPatch
+from ecosemantic.ports.types import MonteCarloConfig, Run, RunDraft, RunPatch, RunState
 
 
 def simulation_link(context: ServerContext, run: Run) -> str | None:
@@ -70,13 +70,12 @@ async def get_run(context: ServerContext, run_id: str) -> Answer[Run]:
 
 async def list_runs(
     context: ServerContext, product_system_id: str | None = None
-) -> Answer[list[Run]]:
+) -> Answer[list[RunState]]:
     found = await context.runs.list_runs(
         as_uuid(product_system_id) if product_system_id is not None else None
     )
-    return Answer[list[Run]](
-        value=[await reap(context.runs, context.launcher, run) for run in found]
-    )
+    reaped = [await reap(context.runs, context.launcher, run) for run in found]
+    return Answer[list[RunState]](value=[run.state() for run in reaped])
 
 
 async def cancel_run(context: ServerContext, run_id: str) -> Answer[Run]:
@@ -109,8 +108,8 @@ def register(server: FastMCP, context: ServerContext) -> None:
         name="list_runs",
         annotations=READ,
         description=(
-            "The runs of a product system, newest first, or every run without one. "
-            "start_monte_carlo makes them."
+            "The runs of a product system, newest first, or every run without one, each "
+            "without its result, which get_run answers. start_monte_carlo makes them."
         ),
     )(boundary(bound(list_runs, context)))
     server.tool(

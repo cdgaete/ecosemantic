@@ -35,6 +35,7 @@ from ecosemantic.errors import Invalid, Unavailable
 from ecosemantic.events import EventBus
 from ecosemantic.mcp.context import AccountStart, ServerContext
 from ecosemantic.mcp.server import ROSTER, build_server
+from ecosemantic.model.entities import ProductSystem
 from ecosemantic.serve import (
     OPEN_WAIT_SECONDS,
     STOP_NONCE_FILE,
@@ -409,7 +410,7 @@ def test_a_bridged_engine_announces_its_page_address_without_the_token() -> None
 
 
 async def test_every_link_a_tool_hands_out_descends_from_the_bridged_address(
-    context: ServerContext, systems_dir: Path
+    context: ServerContext, systems_dir: Path, fixture_system_stored: ProductSystem
 ) -> None:
     listener = listener_for(
         context,
@@ -419,7 +420,7 @@ async def test_every_link_a_tool_hands_out_descends_from_the_bridged_address(
     )
     listener.socket.close()
     assert listener.url == "https://ana.bridge.ecosemantic.com"
-    system = uuid.uuid4()
+    system = fixture_system_stored.id
     async with Client(listener.server) as client:
         whole = await client.call_tool("view_link", {})
         one = await client.call_tool("view_link", {"product_system_id": str(system)})

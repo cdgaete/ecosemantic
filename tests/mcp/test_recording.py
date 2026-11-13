@@ -105,10 +105,10 @@ async def test_a_call_about_a_system_nobody_stored_is_recorded_without_a_hash(
     served = build_server(dataclasses.replace(context, view_url="http://127.0.0.1:1"))
     unstored = uuid.uuid4()
     async with named(served, "linker-one") as client:
-        linked = await client.call_tool("view_link", {"product_system_id": str(unstored)})
-    assert str(unstored) in linked.structured_content["value"]
+        with pytest.raises(ToolError, match="not_found"):
+            await client.call_tool("view_link", {"product_system_id": str(unstored)})
     (call,) = await context.activity.list_calls(agent="linker-one")
-    assert (call.outcome, call.product_system_id, call.at_hash) == ("ok", unstored, None)
+    assert (call.outcome, call.product_system_id, call.at_hash) == ("error", unstored, None)
 
 
 async def test_two_agents_keep_their_trails_apart(

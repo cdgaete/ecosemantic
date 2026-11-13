@@ -18,6 +18,7 @@ from ecosemantic.mcp.envelopes import (
     empty_methods_hint,
     empty_search_hint,
     listing,
+    stranger,
 )
 from ecosemantic.model.entities import Method
 from ecosemantic.model.refs import BackgroundRef, Database, ElementaryFlowRef
@@ -53,6 +54,22 @@ async def list_databases(context: ServerContext) -> Answer[list[Database]]:
     return Answer[list[Database]](value=databases, hint=None if databases else NO_DATABASE)
 
 
+async def strange_compartments(
+    context: ServerContext, database: str, compartment: str | None, sub_compartment: str | None
+) -> list[str]:
+    """What a search is told of a compartment and a sub-compartment the database's flows are not
+    filed under, each when it is given."""
+    held = await context.inventory.list_compartments(database)
+    found = []
+    if compartment is not None and compartment not in {c.name for c in held}:
+        found.append(stranger("compartment", compartment, database, "compartments"))
+    if sub_compartment is not None and sub_compartment not in {
+        sub for c in held for sub in c.sub_compartments
+    }:
+        found.append(stranger("sub_compartment", sub_compartment, database, "compartments"))
+    return found
+
+
 async def search_processes(
     context: ServerContext,
     database: str,
@@ -65,6 +82,13 @@ async def search_processes(
     page = await context.search.processes(database, query, location, unit, limit, cursor)
     if page.items:
         return listing(page)
+    strangers = []
+    if location is not None and location not in await context.inventory.list_locations(database):
+        strangers.append(stranger("location", location, database, "locations"))
+    if unit is not None and unit not in await context.inventory.list_units(database):
+        strangers.append(stranger("unit", unit, database, "units"))
+    if strangers:
+        return listing(page, "; ".join(strangers))
     filters = {"location": location, "unit": unit}
     words = bool(applied_filters(filters)) and bool(
         (await context.search.processes(database, query, None, None, 1, None)).items
@@ -89,6 +113,9 @@ async def search_elementary_flows(
     )
     if page.items:
         return listing(page)
+    strangers = await strange_compartments(context, database, compartment, sub_compartment)
+    if strangers:
+        return listing(page, "; ".join(strangers))
     filters = {
         "compartment": compartment,
         "sub_compartment": sub_compartment,

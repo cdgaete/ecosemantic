@@ -96,6 +96,23 @@ async def test_import_tables_refuses_a_folder_that_holds_no_model(
     assert refused["message"] == f"{str(tmp_path)!r} holds no model.yaml"
 
 
+async def test_export_tables_refuses_a_folder_an_earlier_export_made_unless_it_replaces(
+    full_server: FastMCP, spaced_bottle: str, tmp_path: Path
+) -> None:
+    call = {"product_system_id": spaced_bottle, "path": str(tmp_path)}
+    async with Client(full_server) as client:
+        first = await client.call_tool("export_tables", call)
+        folder = Path(first.structured_content["value"]["path"])
+        edited = folder / "inputs" / "input_parameters.csv"
+        edited.write_text(edited.read_text(encoding="utf-8") + "note,1.0,,\n", encoding="utf-8")
+        with pytest.raises(ToolError) as caught:
+            await client.call_tool("export_tables", call)
+        assert json.loads(str(caught.value))["error"] == "conflict"
+        assert "note,1.0,," in edited.read_text(encoding="utf-8")
+        await client.call_tool("export_tables", {**call, "replace": True})
+    assert "note,1.0,," not in edited.read_text(encoding="utf-8")
+
+
 async def test_export_tables_refuses_a_directory_that_does_not_exist(
     full_server: FastMCP, spaced_bottle: str, tmp_path: Path
 ) -> None:

@@ -58,6 +58,7 @@ FLOW_ROWS = [
     ("Particulate Matter, < 2.5 um", ("air", "urban air close to ground"), None),
     ("Copper, Cu 0.38%, in mixed ore", ("Resource", "in ground"), "7440-50-8"),
     ("Sulfur dioxide", ("air",), "7446-09-5"),
+    ("Dinitrogen monoxide", ("air",), "010024-97-2"),
 ]
 METHOD_KEYS = [
     (NAME, "IPCC 2021", "climate change: fossil > global warming potential (GWP100)"),
@@ -259,3 +260,15 @@ async def test_a_query_of_terms_without_tokens_matches_nothing_as_in_fts5(
 ) -> None:
     assert (await search.processes(NAME, "- —")).items == []
     assert referee(fts5, "processes", "code", ", 5.0, 3.0", "- —") == []
+
+
+async def test_a_cas_number_finds_its_flow_whether_its_first_group_is_padded_with_zeros(
+    search: NativeSearch,
+) -> None:
+    padded = await search.elementary_flows(NAME, "10024-97-2")
+    assert [hit.name for hit in padded.items] == ["Dinitrogen monoxide"]
+    as_stored = await search.elementary_flows(NAME, "010024-97-2")
+    assert [hit.name for hit in as_stored.items] == ["Dinitrogen monoxide"]
+    bare = await search.elementary_flows(NAME, "000124-38-9")
+    assert {hit.name for hit in bare.items} == {"Carbon dioxide, fossil"}
+    assert (await search.elementary_flows(NAME, "24-97-2")).items == []

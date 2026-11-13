@@ -217,6 +217,7 @@ def test_a_contribution_over_flows_writes_its_own_columns(tmp_path: Path) -> Non
                 flow=ElementaryFlowRef(database="bio", id="co2"),
                 name="carbon dioxide",
                 compartment="air",
+                sub_compartment="urban air close to ground",
                 amount=3.0,
                 unit="kg",
                 score=3.0,
@@ -227,6 +228,7 @@ def test_a_contribution_over_flows_writes_its_own_columns(tmp_path: Path) -> Non
     folder = write_contribution(tmp_path, key(), result, AT)
     rows = list(csv.DictReader((folder / "contributions.csv").open(encoding="utf-8")))
     assert rows[0]["compartment"] == "air" and rows[0]["amount"] == "3.0"
+    assert rows[0]["sub_compartment"] == "urban air close to ground"
     assert yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))["by"] == "flow"
 
 

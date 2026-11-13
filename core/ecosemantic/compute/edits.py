@@ -13,7 +13,7 @@ from ecosemantic.compute.links import pins
 from ecosemantic.compute.overrides import apply_scenario
 from ecosemantic.compute.parameters import materialize
 from ecosemantic.errors import Conflict, Invalid, build_label, error_line
-from ecosemantic.model.canonical import base_pin
+from ecosemantic.model.canonical import base_pin, stale
 from ecosemantic.model.entities import (
     Case,
     Exchange,
@@ -573,9 +573,12 @@ def remove_scenario(system: ProductSystem, name: str) -> ProductSystem:
 
 
 def rebase_scenario(system: ProductSystem, name: str) -> tuple[ProductSystem, Scenario]:
-    """The document with the scenario applied once more and pinned to the base pin."""
+    """The document with the scenario applied once more and pinned to the base pin; Invalid for
+    a scenario that is at the base already."""
     out = system.model_copy(deep=True)
     scenario = out.scenario(name)
+    if not stale(out, scenario):
+        raise Invalid(f"scenario {name!r} is at the base of {system.name} already")
     apply_scenario(out, scenario)
     scenario.base_hash = base_pin(out)
     return out, scenario

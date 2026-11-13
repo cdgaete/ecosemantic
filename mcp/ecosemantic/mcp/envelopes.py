@@ -28,6 +28,7 @@ from ecosemantic.errors import (
     Remedies,
     StaleScenario,
     error_payload,
+    said,
 )
 from ecosemantic.mcp.calls import note
 from ecosemantic.model.summary import Summarising, Summary, listed
@@ -148,6 +149,15 @@ def envelope_of(error: Exception) -> ErrorEnvelope:
 def applied_filters(filters: Mapping[str, object]) -> list[str]:
     """The names of the filters a search was given a value for."""
     return sorted(name for name, value in filters.items() if value is not None)
+
+
+def stranger(name: str, value: str, database: str, kind: str) -> str:
+    """What a search is told of a filter value the database's vocabulary lacks: the value, and the
+    vocabulary that lists the ones the filter takes."""
+    return (
+        f"{name} {value!r} is not one {database!r} names: list_vocabulary with kind {kind!r} "
+        "lists them"
+    )
 
 
 def empty_search_hint(filters: Mapping[str, object], words_match: bool) -> str:
@@ -272,10 +282,10 @@ def _refused(name: str, problem: Mapping[str, object]) -> str:
     field = ".".join(str(p) for p in loc) if isinstance(loc, tuple) else str(loc)
     if problem["type"] in UNKNOWN_ARGUMENT:
         remedy = UNKNOWN_REMEDIES.get((name, field))
-        return f"{name} does not take {field!r}: {problem['msg']}" + (
+        return f"{name} does not take {field!r}: {said(problem['msg'])}" + (
             f"; {remedy}" if remedy else ""
         )
-    return f"{name}: {field!r}: {problem['msg']}{_sent(problem['input'])}"
+    return f"{name}: {field!r}: {said(problem['msg'])}{_sent(problem['input'])}"
 
 
 class ArgumentRefusal(Middleware):

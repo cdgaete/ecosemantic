@@ -281,6 +281,9 @@ class Scenario(BaseModel):
     base_hash: str | None = None
 
 
+_ID = re.compile(r"m_[0-9a-f]{10}")
+
+
 def method_id(spec: str) -> str:
     """The opaque id calculation tools take: 'm_' and ten hex characters of the spec's SHA-256."""
     return "m_" + hashlib.sha256(spec.encode("utf-8")).hexdigest()[:10]
@@ -346,12 +349,24 @@ def nearest_methods(methods: list[Method], reference: str, limit: int = 5) -> li
     )[:limit]
 
 
+def nearest_names(names: Sequence[str], reference: str, limit: int = 3) -> list[str]:
+    """The names that read like the reference, case and punctuation aside, the nearest first, and
+    none when none does."""
+    target = _normalised(reference)
+    alike = {name: _normalised(name) for name in names}
+    found = difflib.get_close_matches(target, sorted(set(alike.values())), n=limit, cutoff=0.6)
+    return [name for near in found for name in names if alike[name] == near]
+
+
 def method_named(methods: list[Method], database: str, reference: str) -> Method:
     """The method of a database a reference names by its id or its specification;
-    MethodNotFound carries the nearest ones when it names none."""
+    MethodNotFound carries the nearest ones when a specification names none, and none when an
+    id does, since an id reads like no other."""
     for method in methods:
         if reference in (method.id, method.spec):
             return method
+    if _ID.fullmatch(reference):
+        raise MethodNotFound(database, reference, [])
     raise MethodNotFound(database, reference, nearest_methods(methods, reference))
 
 

@@ -31,13 +31,14 @@ from ecosemantic.mcp.envelopes import (
     boundary,
     empty_search_hint,
     listing,
+    stranger,
     suggestion_hint,
 )
 from ecosemantic.mcp.linking import moved_by
 from ecosemantic.mcp.panels import panel
 from ecosemantic.mcp.treatments import named_backwards, treatments_of
 from ecosemantic.model.canonical import base_pin, stale
-from ecosemantic.model.entities import DemandItem, Method, ProductSystem
+from ecosemantic.model.entities import DemandItem, Method, ProductSystem, nearest_names
 from ecosemantic.model.refs import BackgroundRef, Database, ForegroundRef
 from ecosemantic.model.validation import credit_loops, reference_of
 from ecosemantic.ports.calculation import CUTOFF, MAX_LEVEL, MAX_NODES, TOP_N, CalculationPort
@@ -117,7 +118,16 @@ async def methods_for(
             raise Invalid("name exactly one of method_id or impact_method")
         found = await inventory.list_methods(database, impact_method)
         if not found:
-            raise NotFound(f"no impact method {impact_method!r} in {database!r}")
+            families = sorted({m.impact_method for m in await inventory.list_methods(database)})
+            nearest = ", ".join(repr(name) for name in nearest_names(families, impact_method))
+            raise NotFound(
+                f"no impact method {impact_method!r} in {database!r}; "
+                + (
+                    f"the nearest are {nearest}"
+                    if nearest
+                    else "list_vocabulary with kind 'impact_methods' lists them"
+                )
+            )
         return found, None
     if impact_method is not None:
         raise Invalid("name exactly one of method_id or impact_method")
@@ -418,9 +428,19 @@ async def calculate_inventory(
     treatments = await treatments_of(context.inventory, base, linked)
     result, rows = await inventory_of(context.calculation, treatments, base, linked, items)
     page = inventory_page(rows, compartment, query, limit, page_start(cursor, limit))
-    filters = {"compartment": compartment}
-    words = bool(applied_filters(filters)) and bool(inventory_page(rows, None, query, 1, 0).items)
-    out = listing(page, empty_search_hint(filters, words)) if not page.items else listing(page)
+    out = listing(page)
+    if not page.items:
+        held = {c.name for c in await context.inventory.list_compartments(base.database.name)}
+        filters = {"compartment": compartment}
+        words = bool(applied_filters(filters)) and bool(
+            inventory_page(rows, None, query, 1, 0).items
+        )
+        out = listing(
+            page,
+            stranger("compartment", compartment, base.database.name, "compartments")
+            if compartment is not None and compartment not in held
+            else empty_search_hint(filters, words),
+        )
     return InventoryListing(
         database=result.database,
         items=out.items,

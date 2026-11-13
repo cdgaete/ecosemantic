@@ -495,6 +495,8 @@ def test_remove_and_rebase_a_scenario(product_system: ProductSystem) -> None:
     rebased, scenario = rebase_scenario(changed, "organic")
     assert scenario.base_hash == base_pin(changed)
     assert product_system.scenarios[0].base_hash == base_pin(product_system)
+    with pytest.raises(Invalid, match="scenario 'organic' is at the base of cotton_tshirt already"):
+        rebase_scenario(rebased, "organic")
 
 
 def test_a_link_takes_the_unit_and_product_of_the_linked_reference_process() -> None:

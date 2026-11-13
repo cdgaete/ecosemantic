@@ -1,5 +1,5 @@
 import { useRuns } from '@/api/queries'
-import type { Run } from '@/api/types'
+import type { RunState } from '@/api/types'
 import { formatAmount, shortHash } from '@/lib/format'
 import { movedSince } from '@/lib/hashes'
 import { paths } from '@/lib/paths'
@@ -12,7 +12,7 @@ import type { SystemView } from './SystemEditor'
 
 export function SimulationsPage({ view }: { view: SystemView }) {
   const runs = useRuns(view.id)
-  const columns: Column<Run>[] = [
+  const columns: Column<RunState>[] = [
     {
       key: 'status',
       header: 'Status',

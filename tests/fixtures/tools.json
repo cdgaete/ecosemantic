@@ -2427,7 +2427,7 @@
           "default": null
         },
         "value": {
-          "description": "One sampling run: the key it was computed on, each exchange at that key sending a positive\namount to a treatment, which runs it backwards, where it got to, and what it answered.",
+          "description": "One sampling run, with what it answered.",
           "properties": {
             "at_hash": {
               "type": "string"
@@ -3455,6 +3455,16 @@
             "score": {
               "type": "number"
             },
+            "sub_compartment": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "unit": {
               "type": "string"
             }
@@ -3464,6 +3474,7 @@
             "flow",
             "name",
             "compartment",
+            "sub_compartment",
             "amount",
             "unit",
             "score",
@@ -7073,7 +7084,7 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "Write a product system as a folder of text under the given directory: model.yaml, and inputs/ holding the parameter space as CSV with a schema. import_tables reads an edited folder back.",
+    "description": "Write a product system as a folder of text under the given directory: model.yaml, and inputs/ holding the parameter space as CSV with a schema. import_tables reads an edited folder back. The folder an earlier export of the system made there is refused unless replace is passed, since writing over it replaces a person's edits.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -7082,6 +7093,10 @@
         },
         "product_system_id": {
           "type": "string"
+        },
+        "replace": {
+          "default": false,
+          "type": "boolean"
         }
       },
       "required": [
@@ -9080,7 +9095,7 @@
           "default": null
         },
         "value": {
-          "description": "One sampling run: the key it was computed on, each exchange at that key sending a positive\namount to a treatment, which runs it backwards, where it got to, and what it answered.",
+          "description": "One sampling run, with what it answered.",
           "properties": {
             "at_hash": {
               "type": "string"
@@ -11974,7 +11989,7 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "The runs of a product system, newest first, or every run without one. start_monte_carlo makes them.",
+    "description": "The runs of a product system, newest first, or every run without one, each without its result, which get_run answers. start_monte_carlo makes them.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -12008,7 +12023,7 @@
         },
         "value": {
           "items": {
-            "description": "One sampling run: the key it was computed on, each exchange at that key sending a positive\namount to a treatment, which runs it backwards, where it got to, and what it answered.",
+            "description": "One sampling run without what it answered: the key it was computed on, each exchange at\nthat key sending a positive amount to a treatment, which runs it backwards, and where it got\nto. A listing answers runs so.",
             "properties": {
               "at_hash": {
                 "type": "string"
@@ -12257,345 +12272,6 @@
                   }
                 },
                 "type": "object"
-              },
-              "result": {
-                "anyOf": [
-                  {
-                    "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median, at the ceiling `n_max`, at a\nstated count, or cancelled.\n`gating_method` is the category whose median's relative standard error is the largest, or\nthe first whose is undefined. `normals_at_amount` counts the background normal distributions\nsampled at their amount because their standard deviation exceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order.",
-                    "properties": {
-                      "categories": {
-                        "items": {
-                          "properties": {
-                            "method": {
-                              "description": "An impact assessment method as the background database names it, with its opaque id.",
-                              "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "impact_category": {
-                                  "type": "string"
-                                },
-                                "impact_method": {
-                                  "type": "string"
-                                },
-                                "indicator": {
-                                  "type": "string"
-                                },
-                                "spec": {
-                                  "type": "string"
-                                },
-                                "tuple": {
-                                  "items": {
-                                    "type": "string"
-                                  },
-                                  "type": "array"
-                                },
-                                "unit": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "id",
-                                "tuple",
-                                "spec",
-                                "unit",
-                                "impact_method",
-                                "impact_category",
-                                "indicator"
-                              ],
-                              "type": "object"
-                            },
-                            "samples": {
-                              "items": {
-                                "type": "number"
-                              },
-                              "type": "array"
-                            },
-                            "summary": {
-                              "description": "One category's samples in short. `median_ci95` is the median's 95 % interval, two of the\nsamples that bound it whatever the distribution, which narrows as samples grow, and `rel_se`\nits half-width over 1.96, relative to the median: the stop rule judges it. Both are None below\nsix samples, and `rel_se` for a median of zero. `percentiles` are the 2.5th and 97.5th\npercentiles of the samples, the spread of the result itself. `mean` is reported and judged by\nnothing: a loop close to using as much of its products as it makes gives draws whose mean\nneed not exist.",
-                              "properties": {
-                                "mean": {
-                                  "type": "number"
-                                },
-                                "median": {
-                                  "type": "number"
-                                },
-                                "median_ci95": {
-                                  "anyOf": [
-                                    {
-                                      "maxItems": 2,
-                                      "minItems": 2,
-                                      "prefixItems": [
-                                        {
-                                          "type": "number"
-                                        },
-                                        {
-                                          "type": "number"
-                                        }
-                                      ],
-                                      "type": "array"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                },
-                                "n": {
-                                  "type": "integer"
-                                },
-                                "percentiles": {
-                                  "maxItems": 2,
-                                  "minItems": 2,
-                                  "prefixItems": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "number"
-                                    }
-                                  ],
-                                  "type": "array"
-                                },
-                                "rel_se": {
-                                  "anyOf": [
-                                    {
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "n",
-                                "mean",
-                                "median",
-                                "median_ci95",
-                                "percentiles",
-                                "rel_se"
-                              ],
-                              "type": "object"
-                            }
-                          },
-                          "required": [
-                            "method",
-                            "summary",
-                            "samples"
-                          ],
-                          "type": "object"
-                        },
-                        "type": "array"
-                      },
-                      "credit_loops": {
-                        "items": {
-                          "items": {
-                            "type": "string"
-                          },
-                          "type": "array"
-                        },
-                        "type": "array"
-                      },
-                      "database": {
-                        "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one.",
-                        "properties": {
-                          "elementary_flows": {
-                            "type": "string"
-                          },
-                          "fingerprint": {
-                            "anyOf": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "null"
-                              }
-                            ],
-                            "default": null
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "scheme": {
-                            "enum": [
-                              "ecoinvent",
-                              "olca"
-                            ],
-                            "type": "string"
-                          },
-                          "system_model": {
-                            "type": "string"
-                          },
-                          "version": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "elementary_flows",
-                          "scheme",
-                          "version",
-                          "system_model"
-                        ],
-                        "type": "object"
-                      },
-                      "dropped_background": {
-                        "items": {
-                          "type": "string"
-                        },
-                        "type": "array"
-                      },
-                      "dropped_draws": {
-                        "items": {
-                          "type": "integer"
-                        },
-                        "type": "array"
-                      },
-                      "dropped_linked_loops": {
-                        "items": {
-                          "description": "A loop among the processes of a linked product system, with the system and its pin.",
-                          "properties": {
-                            "at_hash": {
-                              "type": "string"
-                            },
-                            "codes": {
-                              "items": {
-                                "type": "string"
-                              },
-                              "type": "array"
-                            },
-                            "product_system_id": {
-                              "format": "uuid",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "product_system_id",
-                            "at_hash",
-                            "codes"
-                          ],
-                          "type": "object"
-                        },
-                        "type": "array"
-                      },
-                      "dropped_loops": {
-                        "items": {
-                          "items": {
-                            "type": "string"
-                          },
-                          "type": "array"
-                        },
-                        "type": "array"
-                      },
-                      "gating_method": {
-                        "description": "An impact assessment method as the background database names it, with its opaque id.",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "impact_category": {
-                            "type": "string"
-                          },
-                          "impact_method": {
-                            "type": "string"
-                          },
-                          "indicator": {
-                            "type": "string"
-                          },
-                          "spec": {
-                            "type": "string"
-                          },
-                          "tuple": {
-                            "items": {
-                              "type": "string"
-                            },
-                            "type": "array"
-                          },
-                          "unit": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "tuple",
-                          "spec",
-                          "unit",
-                          "impact_method",
-                          "impact_category",
-                          "indicator"
-                        ],
-                        "type": "object"
-                      },
-                      "linked_credit_loops": {
-                        "items": {
-                          "description": "A loop among the processes of a linked product system, with the system and its pin.",
-                          "properties": {
-                            "at_hash": {
-                              "type": "string"
-                            },
-                            "codes": {
-                              "items": {
-                                "type": "string"
-                              },
-                              "type": "array"
-                            },
-                            "product_system_id": {
-                              "format": "uuid",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "product_system_id",
-                            "at_hash",
-                            "codes"
-                          ],
-                          "type": "object"
-                        },
-                        "type": "array"
-                      },
-                      "n": {
-                        "type": "integer"
-                      },
-                      "normals_at_amount": {
-                        "type": "integer"
-                      },
-                      "scope": {
-                        "enum": [
-                          "full",
-                          "biosphere_only"
-                        ],
-                        "type": "string"
-                      },
-                      "stopped": {
-                        "enum": [
-                          "target",
-                          "ceiling",
-                          "fixed",
-                          "cancelled"
-                        ],
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "database",
-                      "n",
-                      "stopped",
-                      "gating_method",
-                      "scope",
-                      "normals_at_amount",
-                      "credit_loops",
-                      "dropped_draws",
-                      "dropped_loops",
-                      "dropped_background",
-                      "categories"
-                    ],
-                    "type": "object"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null
               },
               "started_at": {
                 "anyOf": [
@@ -15491,7 +15167,7 @@
           "default": null
         },
         "value": {
-          "description": "One sampling run: the key it was computed on, each exchange at that key sending a positive\namount to a treatment, which runs it backwards, where it got to, and what it answered.",
+          "description": "One sampling run, with what it answered.",
           "properties": {
             "at_hash": {
               "type": "string"
@@ -17885,7 +17561,7 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "The link to the page the person watches the model in, or the page of one product system when given its id.",
+    "description": "The link to the page the person watches the model in, or the page of one stored product system when given its id.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {

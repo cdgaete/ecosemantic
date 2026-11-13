@@ -61,7 +61,7 @@ def agent_named(on_url: str | None, configured: str | None, client: str) -> str:
 
 async def current_hash(storage: StoragePort, product_system_id: uuid.UUID) -> str | None:
     """The hash of a product system as it is stored now, or none when no such system is stored:
-    a call may name one nobody stored, and one a call named may since be deleted."""
+    the call that deleted one names it, and one a call named may since be deleted."""
     try:
         log = await storage.log(product_system_id)
     except NotFound:

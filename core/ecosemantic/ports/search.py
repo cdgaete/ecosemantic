@@ -20,6 +20,23 @@ class Phrase:
     prefix: bool
 
 
+CAS_PADDED = 6
+"""The digits ecoinvent writes a CAS number's first group in, zeros leading it."""
+
+
+def spellings(phrase: Phrase) -> tuple[str, ...]:
+    """Every spelling a phrase's first token is matched under: the token itself, and for a CAS
+    number, three groups of two to seven digits, two digits and one, its first group bare and
+    padded with zeros to six digits, so the number finds its flow however a source writes it."""
+    first = phrase.tokens[0]
+    if phrase.prefix or [len(token) for token in phrase.tokens[1:]] != [2, 1]:
+        return (first,)
+    bare = first.lstrip("0")
+    if not all(token.isdecimal() for token in phrase.tokens) or not 2 <= len(bare) <= 7:
+        return (first,)
+    return tuple(dict.fromkeys((first, bare, bare.zfill(CAS_PADDED))))
+
+
 def phrases(query: str) -> list[Phrase]:
     """The phrases of a query: terms split on whitespace with double quotes dropped, a term
     ending in `*` a prefix, a term that is only `*` dropped; Invalid when no term is left. A term

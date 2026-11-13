@@ -24,11 +24,17 @@ class Invalid(EcoSemanticError):
     """The input is well-formed but wrong for the operation."""
 
 
+def said(message: object) -> str:
+    """A validation message as a caller reads it, without the prefix pydantic gives the refusal
+    a validator raises."""
+    return str(message).removeprefix("Value error, ")
+
+
 def error_line(location: tuple[int | str, ...], message: str) -> str:
     """One validation error as `field: message`, the field its location joined by dots; an error at
     the input itself is its message alone."""
     field = ".".join(str(part) for part in location)
-    return f"{field}: {message}" if field else message
+    return f"{field}: {said(message)}" if field else said(message)
 
 
 def field_error(error: ValidationError) -> str:
@@ -145,14 +151,22 @@ class Unauthorised(EcoSemanticError):
 
 
 class MethodNotFound(NotFound):
-    """No method matched the reference; carries the nearest methods so the caller can correct."""
+    """No method matched the reference; carries the nearest methods so the caller can correct,
+    and none for a reference no method reads like."""
 
     def __init__(self, database: str, reference: str, suggestions: list[Method]) -> None:
         self.database = database
         self.reference = reference
         self.suggestions = suggestions
         nearest = "; ".join(f"{s.id} {s.spec}" for s in suggestions)
-        super().__init__(f"no method {reference!r} in {database!r}; nearest: {nearest}")
+        super().__init__(
+            f"no method {reference!r} in {database!r}; "
+            + (
+                f"nearest: {nearest}"
+                if suggestions
+                else "search_methods answers the ids of its methods"
+            )
+        )
 
 
 _KIND: dict[type[EcoSemanticError], tuple[str, int]] = {

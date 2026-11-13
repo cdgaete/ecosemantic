@@ -339,6 +339,7 @@ class FlowHotspot(BaseModel):
     flow: ElementaryFlowRef
     name: str
     compartment: str
+    sub_compartment: str | None
     amount: float
     unit: str
     score: float
@@ -514,9 +515,10 @@ class RunDraft(BaseModel):
     treatments_run_backwards: list[str] = Field(default_factory=list)
 
 
-class Run(BaseModel):
-    """One sampling run: the key it was computed on, each exchange at that key sending a positive
-    amount to a treatment, which runs it backwards, where it got to, and what it answered."""
+class RunState(BaseModel):
+    """One sampling run without what it answered: the key it was computed on, each exchange at
+    that key sending a positive amount to a treatment, which runs it backwards, and where it got
+    to. A listing answers runs so."""
 
     id: uuid.UUID
     product_system_id: uuid.UUID
@@ -527,7 +529,6 @@ class Run(BaseModel):
     treatments_run_backwards: list[str] = Field(default_factory=list)
     status: RunStatus = "queued"
     progress: RunProgress = Field(default_factory=RunProgress)
-    result: MonteCarloResult | None = None
     error: ErrorEnvelope | None = None
     posted_at: datetime
     started_at: datetime | None = None
@@ -546,6 +547,16 @@ class Run(BaseModel):
         if not self.open:
             raise Conflict(f"run {self.id} cannot be cancelled after it has finished")
         return RunPatch(cancel_requested=True)
+
+
+class Run(RunState):
+    """One sampling run, with what it answered."""
+
+    result: MonteCarloResult | None = None
+
+    def state(self) -> RunState:
+        """The run without what it answered."""
+        return RunState(**{name: getattr(self, name) for name in RunState.model_fields})
 
 
 def is_open(status: RunStatus | InstallStatus) -> bool:

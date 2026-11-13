@@ -223,6 +223,7 @@ export interface Run {
   pid: number | null
   open: boolean
 }
+export type RunState = Omit<Run, 'result'>
 export interface DemandItem { ref: BackgroundRef | ForegroundRef; amount: number }
 export type SourceName = 'openlca' | 'uslci' | 'bafu' | 'ecoinvent'
 export type CredentialKind = 'ecoinvent' | 'nexus'
@@ -281,7 +282,7 @@ export interface ServerInfo {
   systems_dir: string
 }
 export interface Hotspot { rank: number; ref: BackgroundRef | ForegroundRef | LinkedProcessRef; name: string; location: string | null; reference_product: string; score: number; fraction: number }
-export interface FlowHotspot { rank: number; flow: ElementaryFlowRef; name: string; compartment: string; amount: number; unit: string; score: number; fraction: number }
+export interface FlowHotspot { rank: number; flow: ElementaryFlowRef; name: string; compartment: string; sub_compartment: string | null; amount: number; unit: string; score: number; fraction: number }
 export type TreeKind = 'process' | 'elementary_flow' | 'remainder'
 export interface TreeNode {
   kind: TreeKind

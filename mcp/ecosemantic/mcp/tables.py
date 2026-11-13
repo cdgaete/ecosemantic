@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fastmcp import FastMCP
 
-from ecosemantic.errors import Invalid
+from ecosemantic.errors import Conflict, Invalid
 from ecosemantic.mcp.calculation import demand_of
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import READ, WRITE
@@ -20,7 +20,7 @@ from ecosemantic.mcp.requests import answer_write
 from ecosemantic.model.canonical import content_hash
 from ecosemantic.model.entities import Actor, DemandItem, ProductSystem
 from ecosemantic.ports.types import LogEntry
-from ecosemantic.tables.folder import read_model, write_folder
+from ecosemantic.tables.folder import folder_name, read_model, write_folder
 from ecosemantic.tables.reader import apply_inputs
 from ecosemantic.tables.results import ResultKey, method_label
 
@@ -73,12 +73,16 @@ async def write_tables(
 
 
 async def export_tables(
-    context: ServerContext, product_system_id: str, path: str
+    context: ServerContext, product_system_id: str, path: str, replace: bool = False
 ) -> Answer[WrittenPath]:
     root = Path(path)
     if not root.is_dir():
         raise Invalid(f"{path!r} is not a directory")
-    folder, stored = await write_tables(context, as_uuid(product_system_id), root)
+    stored = await context.storage.get_product_system(as_uuid(product_system_id))
+    folder = root / folder_name(stored)
+    if folder.exists() and not replace:
+        raise Conflict(f"{str(folder)!r} exists; pass replace to write over it")
+    await asyncio.to_thread(write_folder, root, stored)
     return Answer[WrittenPath](value=WrittenPath(path=str(folder), hash=content_hash(stored)))
 
 
@@ -101,7 +105,8 @@ def register(server: FastMCP, context: ServerContext) -> None:
         description=(
             "Write a product system as a folder of text under the given directory: model.yaml, "
             "and inputs/ holding the parameter space as CSV with a schema. import_tables reads "
-            "an edited folder back."
+            "an edited folder back. The folder an earlier export of the system made there is "
+            "refused unless replace is passed, since writing over it replaces a person's edits."
         ),
     )(boundary(bound(export_tables, context)))
     server.tool(

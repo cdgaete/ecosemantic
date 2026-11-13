@@ -19,7 +19,7 @@ function Children({ result, score, by, cutoff }: { result: Result; score: Score;
   const parts = useContributions(result.id, result.hash, { by, method_id: score.method.id, top_n: 20, cutoff: cutoff / 100, demand: demandOf(result.params!, result.root) }, !result.stale)
   if (parts.error) return <tr><td colSpan={99} className="px-2 text-destructive">{parts.error.message}</td></tr>
   if (!parts.data) return <tr><td colSpan={99} className="px-2 text-muted-foreground">{result.waiting}</td></tr>
-  const rows = by === 'process' ? (parts.data.value.processes ?? []).map((h) => ({ key: `${h.ref.kind === 'background' ? h.ref.id : h.ref.code}`, icon: h.ref.kind === 'foreground' ? ('process' as const) : ('product' as const), name: h.location ? `${h.name} · ${h.location}` : h.name, share: h.fraction, score: h.score })) : (parts.data.value.flows ?? []).map((f) => ({ key: f.flow.id, icon: 'elementary' as const, name: `${f.name} (${f.compartment})`, share: f.fraction, score: f.score }))
+  const rows = by === 'process' ? (parts.data.value.processes ?? []).map((h) => ({ key: `${h.ref.kind === 'background' ? h.ref.id : h.ref.code}`, icon: h.ref.kind === 'foreground' ? ('process' as const) : ('product' as const), name: h.location ? `${h.name} · ${h.location}` : h.name, share: h.fraction, score: h.score })) : (parts.data.value.flows ?? []).map((f) => ({ key: f.flow.id, icon: 'elementary' as const, name: `${f.name} (${f.sub_compartment ? `${f.compartment} / ${f.sub_compartment}` : f.compartment})`, share: f.fraction, score: f.score }))
   const cut = cutNotice(parts.data.value.cut)
   return (
     <>

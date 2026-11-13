@@ -15,7 +15,8 @@ async def view_link(context: ServerContext, product_system_id: str | None = None
         raise NotSupported("this server serves no view")
     if product_system_id is None:
         return Answer[str](value=context.view_url)
-    link = context.deep_link(as_uuid(product_system_id))
+    held = await context.storage.get_product_system(as_uuid(product_system_id))
+    link = context.deep_link(held.id)
     if link is None:
         raise NotSupported("this server serves no view")
     return Answer[str](value=link)
@@ -27,7 +28,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
         name="view_link",
         annotations=READ,
         description=(
-            "The link to the page the person watches the model in, or the page of one "
+            "The link to the page the person watches the model in, or the page of one stored "
             "product system when given its id."
         ),
     )(boundary(bound(view_link, context)))

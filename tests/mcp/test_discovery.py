@@ -194,11 +194,11 @@ async def test_a_filtered_search_whose_words_match_blames_the_filter(server: Fas
         out = (
             await client.call_tool(
                 "search_processes",
-                {"database": FIXTURE_DB, "query": "production", "location": "CH"},
+                {"database": FIXTURE_DB, "query": "steel", "unit": "kilowatt hour"},
             )
         ).structured_content
         assert out["items"] == []
-        assert "location" in out["hint"] and "the words alone match" in out["hint"]
+        assert "unit" in out["hint"] and "the words alone match" in out["hint"]
 
 
 async def test_a_filtered_search_whose_words_match_nothing_says_to_name_fewer_words(
@@ -208,12 +208,46 @@ async def test_a_filtered_search_whose_words_match_nothing_says_to_name_fewer_wo
         out = (
             await client.call_tool(
                 "search_processes",
-                {"database": FIXTURE_DB, "query": "unobtainium", "location": "CH"},
+                {"database": FIXTURE_DB, "query": "unobtainium", "unit": "kilogram"},
             )
         ).structured_content
         assert out["items"] == []
-        assert "location" not in out["hint"]
+        assert "unit" not in out["hint"]
         assert "name fewer words" in out["hint"]
+
+
+async def test_a_filter_value_the_vocabulary_lacks_is_named_with_the_vocabulary_that_lists_it(
+    server: FastMCP,
+) -> None:
+    async with Client(server) as client:
+        processes = (
+            await client.call_tool(
+                "search_processes",
+                {"database": FIXTURE_DB, "query": "steel", "unit": "kg", "location": "Chile"},
+            )
+        ).structured_content
+        flows = (
+            await client.call_tool(
+                "search_elementary_flows",
+                {
+                    "database": FIXTURE_DB,
+                    "query": "water",
+                    "compartment": "Emission to air",
+                    "sub_compartment": "nowhere",
+                },
+            )
+        ).structured_content
+    lists = "list_vocabulary with kind"
+    assert processes["items"] == [] and flows["items"] == []
+    assert processes["hint"] == (
+        f"location 'Chile' is not one 'fixture' names: {lists} 'locations' lists them; "
+        f"unit 'kg' is not one 'fixture' names: {lists} 'units' lists them"
+    )
+    assert flows["hint"] == (
+        f"compartment 'Emission to air' is not one 'fixture' names: {lists} 'compartments' "
+        f"lists them; sub_compartment 'nowhere' is not one 'fixture' names: {lists} "
+        "'compartments' lists them"
+    )
 
 
 async def test_an_unfiltered_search_that_matches_nothing_says_to_name_fewer_words(

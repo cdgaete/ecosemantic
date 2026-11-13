@@ -12,6 +12,7 @@ from tests.fixture_data import CODES, FIXTURE_DB
 
 # the fixture's method as its bundle keys it: the category and the indicator in one name
 GWP_METHOD = Method.of(("fixture", "gwp", "climate change > GWP100"), "kg CO2-Eq")
+WATER_METHOD = Method.of(("fixture", "water", "water use > m3"), "m3")
 WIDGET = [DemandItem(ref=ForegroundRef(code="widget"), amount=1.0)]
 
 
@@ -41,6 +42,13 @@ class CalculationConformance:
         assert sum(f.score for f in found.items) == pytest.approx(4.158)
         assert [f.name for f in found.items] == ["Carbon dioxide, fossil", "Methane, fossil"]
         assert found.items[0].amount == pytest.approx(3.85) and found.items[0].rank == 1
+        assert [(f.compartment, f.sub_compartment) for f in found.items] == [("air", None)] * 2
+        tap = [DemandItem(ref=BackgroundRef(database=FIXTURE_DB, id=CODES["water"]), amount=1.0)]
+        drawn = await calculation.flow_hotspots(System(database=FIXTURE_DB), tap, WATER_METHOD)
+        # a bundle files a natural resource under openLCA's "Resource"
+        assert [(f.name, f.compartment, f.sub_compartment) for f in drawn.items] == [
+            ("Water, river", "Resource", "in water")
+        ]
 
     async def test_a_flat_list_accounts_for_every_part_it_does_not_show(
         self, calculation, fixture_system: System

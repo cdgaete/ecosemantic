@@ -47,6 +47,19 @@ def test_an_unbuilt_page_says_so(client: TestClient) -> None:
     assert response.status_code == 200 and "not built" in response.text
 
 
+def test_a_built_page_is_revalidated_and_its_assets_are_not(
+    context: ServerContext, full_server: FastMCP, tmp_path: Path
+) -> None:
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "index.html").write_text("<html>built</html>", encoding="utf-8")
+    (tmp_path / "assets" / "app-0a1b.js").write_text("console.log(1)", encoding="utf-8")
+    with TestClient(build_view(context, full_server, static=tmp_path)) as built:
+        page = built.get("/systems/anything")
+        asset = built.get("/assets/app-0a1b.js")
+    assert page.text == "<html>built</html>" and page.headers["cache-control"] == "no-cache"
+    assert asset.status_code == 200 and "cache-control" not in asset.headers
+
+
 def test_list_get_log_and_versions(
     client: TestClient, context: ServerContext, fixture_system_stored: ProductSystem
 ) -> None:

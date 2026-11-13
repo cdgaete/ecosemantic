@@ -4,7 +4,13 @@ import pytest
 from pydantic import ValidationError
 
 from ecosemantic.errors import MethodNotFound
-from ecosemantic.model.entities import Method, method_id, method_named, nearest_methods
+from ecosemantic.model.entities import (
+    Method,
+    method_id,
+    method_named,
+    nearest_methods,
+    nearest_names,
+)
 
 SPEC = (
     "ecoinvent-3.11 > IPCC 2021 > climate change: total (excl. biogenic CO2)"
@@ -82,3 +88,20 @@ def test_a_method_is_named_by_its_id_or_its_specification_and_a_miss_carries_the
     with pytest.raises(MethodNotFound) as caught:
         method_named([water, gwp], "db", "db > GWP > climate change")
     assert caught.value.suggestions[0] == gwp
+
+
+def test_an_id_no_method_carries_suggests_no_method_and_names_the_search() -> None:
+    gwp = Method.of(("db", "gwp", "climate change", "GWP100"), "kg CO2-Eq")
+    with pytest.raises(MethodNotFound) as caught:
+        method_named([gwp], "db", "m_0123456789")
+    assert caught.value.suggestions == []
+    assert str(caught.value) == (
+        "no method 'm_0123456789' in 'db'; search_methods answers the ids of its methods"
+    )
+
+
+def test_the_nearest_names_are_the_ones_that_read_alike_and_none_when_none_does() -> None:
+    families = ["AWARE", "IPCC 2021", "IPCC 2021 (ISO 14067)", "ReCiPe 2016 Midpoint (H)"]
+    assert nearest_names(families, "ipcc 2021") == ["IPCC 2021", "IPCC 2021 (ISO 14067)"]
+    assert nearest_names(families, "recipe midpoint") == ["ReCiPe 2016 Midpoint (H)"]
+    assert nearest_names(families, "zzz") == []

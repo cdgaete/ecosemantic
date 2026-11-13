@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from ecosemantic.compute.edits import set_parameter_space
 from ecosemantic.compute.parameters import materialize
-from ecosemantic.errors import Conflict, Invalid, NotFound, Refusal, Refused
+from ecosemantic.errors import Conflict, Invalid, NotFound, Refusal, Refused, said
 from ecosemantic.model.canonical import canonical_model, content_hash
 from ecosemantic.model.entities import Case, Parameter, ProductSystem
 from ecosemantic.tables.folder import (
@@ -108,7 +108,7 @@ def _parameter(
                 row=row,
                 column="name",
                 found=name,
-                reason=str(error.errors()[0]["msg"]),
+                reason=said(error.errors()[0]["msg"]),
             )
         )
         return None

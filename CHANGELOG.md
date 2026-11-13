@@ -2,6 +2,18 @@
 
 Each release names what it adds, changes and removes, newest first.
 
+## 0.1.18
+
+- `list_runs` answers each run without its result, which `get_run` answers, where a listing carried every sample of every run.
+- A row of `contribution_analysis` by flow carries its `sub_compartment`, on the page and in a contribution run's `contributions.csv` as well, so two flows of one name and compartment read apart.
+- `search_elementary_flows` finds a flow by its CAS number whether the number's first group is written bare or padded with zeros to six digits, as ecoinvent writes it: `124-38-9` and `000124-38-9` find the same flows.
+- A search that finds nothing under a filter value the database's vocabulary lacks says so and names the vocabulary that lists the values the filter takes: a `location` or a `unit` of `search_processes`, a `compartment` or a `sub_compartment` of `search_elementary_flows`, and a `compartment` of `calculate_inventory`.
+- An `impact_method` no family carries is refused with the nearest families, or with the vocabulary that lists them when none reads alike; a `method_id` no method carries is refused naming `search_methods`, where it suggested the methods whose specification read most like the id.
+- `export_tables` refuses the folder an earlier export of the system made unless `replace` is passed, where it wrote over a person's edits.
+- `view_link` answers `not_found` for a product system the store does not hold, and `rebase_scenario` refuses a scenario that is at the base already, where it appended an empty entry to the log.
+- A validator's refusal is said without pydantic's `Value error, ` in every tool's answer.
+- The built page is answered with `Cache-Control: no-cache`, so a browser asks for it again after a build, and its assets stay cacheable.
+
 ## 0.1.17
 
 - A formula takes numbers, parameter names, arithmetic, comparisons, a conditional and the math functions `abs`, `acos`, `asin`, `atan`, `atan2`, `ceil`, `cos`, `cosh`, `degrees`, `exp`, `floor`, `hypot`, `log`, `log10`, `log2`, `max`, `min`, `pow`, `radians`, `round`, `sin`, `sinh`, `sqrt`, `tan` and `tanh`, with `pi` and `e`; anything else is refused before it is evaluated, naming what the formula holds. A formula in a parameter, an exchange, a table folder or a model package so reads no file and looks inside no object, where one could call `open`, `loadtxt`, `fromfile` and `genfromtxt` and read a file of the computer the engine runs on. Every release before this one evaluates such a formula: update.

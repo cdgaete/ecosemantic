@@ -242,13 +242,24 @@ def write_contribution(
     elif result.flows is not None:
         write_csv(
             folder / CONTRIBUTIONS,
-            ["rank", "flow", "name", "compartment", "amount", "unit", "score", "fraction"],
+            [
+                "rank",
+                "flow",
+                "name",
+                "compartment",
+                "sub_compartment",
+                "amount",
+                "unit",
+                "score",
+                "fraction",
+            ],
             [
                 {
                     "rank": str(item.rank),
                     "flow": item.flow.model_dump_json(),
                     "name": item.name,
                     "compartment": item.compartment,
+                    "sub_compartment": item.sub_compartment or "",
                     "amount": number(item.amount),
                     "unit": item.unit,
                     "score": number(item.score),

@@ -95,11 +95,13 @@ def static_dir() -> Path:
 
 
 def page_routes(static: Path) -> list[BaseRoute]:
-    """The built page with its assets, or the one line that says there is none."""
+    """The built page with its assets, or the one line that says there is none. A browser asks
+    again for the page each time, since a build replaces it under one name, and keeps the assets,
+    which a build names by their content."""
     if (static / "index.html").is_file():
 
         async def page(request: Request) -> Response:
-            return FileResponse(static / "index.html")
+            return FileResponse(static / "index.html", headers={"Cache-Control": "no-cache"})
 
         return [
             Mount("/assets", app=StaticFiles(directory=static / "assets", check_dir=False)),

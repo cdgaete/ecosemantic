@@ -271,6 +271,26 @@ async def test_runs_are_listed_newest_first_for_one_product_system(
     assert posted == sorted(posted, reverse=True)
 
 
+async def test_the_listing_answers_each_run_without_its_result_which_get_run_answers(
+    full_server: FastMCP, fixture_system_stored: ProductSystem
+) -> None:
+    async with Client(full_server) as client:
+        started = await client.call_tool(
+            "start_monte_carlo", starting(fixture_system_stored, n=2, n_min=1, seed=12345)
+        )
+        run_id = started.structured_content["value"]["id"]
+        await finished(client, run_id)
+        listed = (
+            await client.call_tool(
+                "list_runs", {"product_system_id": str(fixture_system_stored.id)}
+            )
+        ).structured_content["value"]
+        one = (await client.call_tool("get_run", {"run_id": run_id})).structured_content["value"]
+    [mine] = [run for run in listed if run["id"] == run_id]
+    assert one["result"]["n"] == 2
+    assert mine == {key: value for key, value in one.items() if key != "result"}
+
+
 async def test_an_unknown_run_is_not_found(full_server: FastMCP) -> None:
     async with Client(full_server) as client:
         with pytest.raises(ToolError) as caught:

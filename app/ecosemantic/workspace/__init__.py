@@ -115,6 +115,7 @@ from ecosemantic.ports.types import (
     Request,
     Resolution,
     Run,
+    RunState,
     SourceName,
 )
 
@@ -459,9 +460,11 @@ class ProductSystem:
             variant=variant,
         )
 
-    def export_tables(self, path: str) -> Answer[WrittenPath]:
+    def export_tables(self, path: str, replace: bool = False) -> Answer[WrittenPath]:
         """The `export_tables` tool."""
-        return self.workspace.call(export_tables, product_system_id=str(self.id), path=path)
+        return self.workspace.call(
+            export_tables, product_system_id=str(self.id), path=path, replace=replace
+        )
 
     def list_requests(self, open_only: bool = True) -> Answer[list[Request]]:
         """The `list_requests` tool."""
@@ -667,7 +670,7 @@ class ProductSystem:
             monte_carlo=monte_carlo,
         )
 
-    def list_runs(self) -> Answer[list[Run]]:
+    def list_runs(self) -> Answer[list[RunState]]:
         """The `list_runs` tool."""
         return self.workspace.call(list_runs, product_system_id=str(self.id))
 

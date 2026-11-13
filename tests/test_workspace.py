@@ -364,6 +364,9 @@ def test_every_method_answers_on_the_fixture_database(
         "half", overrides=[{"kind": "exchange", "exchange_id": exchange, "multiplier": 0.5}]
     )
     ps.update_product_system(description="a widget")
+    with pytest.raises(Invalid, match="scenario 'half' is at the base of widget already"):
+        ps.rebase_scenario("half")
+    ps.update_exchange(exchange, formula="frame_mass * 1.5")
     assert ps.rebase_scenario("half").value.name == "half"
     assert ps.calculate_impact(method_id=GWP_ID, variants=["light", "half"]).value.scores
     assert ps.contribution_analysis(method_id=GWP_ID).value

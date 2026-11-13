@@ -7,7 +7,7 @@ from ecosemantic.backends.native.catalog import Kind
 from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.model.entities import Method
 from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef
-from ecosemantic.ports.search import Phrase, phrases
+from ecosemantic.ports.search import Phrase, phrases, spellings
 from ecosemantic.ports.types import ElementaryFlowHit, FlowType, Page, ProcessHit, page_start
 
 WEIGHTS: dict[Kind, list[float]] = {
@@ -27,8 +27,12 @@ def _phrase(at: int, phrase: Phrase, parameters: dict[str, object]) -> str:
     )
     matches = []
     for k, token in enumerate(phrase.tokens):
-        parameters[f"p{at}t{k}"] = token
         last = k == len(phrase.tokens) - 1
+        if k == 0 and not (phrase.prefix and last):
+            parameters[f"p{at}t{k}"] = list(spellings(phrase))
+            matches.append(f"list_contains($p{at}t{k}, t{k}.term)")
+            continue
+        parameters[f"p{at}t{k}"] = token
         matches.append(
             f"starts_with(t{k}.term, $p{at}t{k})"
             if phrase.prefix and last
