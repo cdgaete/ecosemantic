@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useContributions } from '@/api/queries'
 import { useCategory } from '@/lib/address'
 import type { Hotspot } from '@/api/types'
-import { categoryLabel, cutNotice, formatAmount, formatShare } from '@/lib/format'
+import { categoryLabel, cutNotice, formatAmount, formatShare, methodById } from '@/lib/format'
 import { RequestAction } from '@/requests/RequestAction'
 import { DataTable, type Column } from '@/window/DataTable'
 import { EditorHeader } from '@/window/EditorHeader'
@@ -14,9 +14,10 @@ import type { Result } from './ResultsEditor'
 export function ProcessResultsPage({ result }: { result: Result }) {
   const { id, params, system, impact } = result
   const scores = impact.data?.value.scores ?? []
+  const methods = impact.data?.value.methods ?? []
   const { chosen, choose } = useCategory(scores)
   const [cutoff, setCutoff] = useState(1)
-  const parts = useContributions(id, result.hash, { by: 'process', method_id: chosen?.method.id, top_n: 50, cutoff: cutoff / 100, demand: demandOf(params!, result.root) }, chosen !== undefined && !result.stale)
+  const parts = useContributions(id, result.hash, { by: 'process', method_id: chosen?.method_id, top_n: 50, cutoff: cutoff / 100, demand: demandOf(params!, result.root) }, chosen !== undefined && !result.stale)
   const columns: Column<Hotspot>[] = [
     { key: 'share', header: 'Contribution', align: 'right', render: (h) => formatShare(h.fraction) },
     { key: 'process', header: 'Process', render: (h) => h.name },
@@ -32,10 +33,10 @@ export function ProcessResultsPage({ result }: { result: Result }) {
         <div className="flex flex-wrap items-center gap-3 pb-2 text-xs">
           <label className="flex min-w-0 max-w-full items-center gap-1">
             Impact category
-            <select id="processes-category" className="min-w-0 max-w-full rounded-sm border bg-background px-1" value={chosen?.method.id ?? ''} onChange={(e) => choose(e.target.value)}>
+            <select id="processes-category" className="min-w-0 max-w-full rounded-sm border bg-background px-1" value={chosen?.method_id ?? ''} onChange={(e) => choose(e.target.value)}>
               {scores.map((s) => (
-                <option key={s.method.id} value={s.method.id}>
-                  {categoryLabel(s.method)}
+                <option key={s.method_id} value={s.method_id}>
+                  {categoryLabel(methodById(methods, s.method_id))}
                 </option>
               ))}
             </select>

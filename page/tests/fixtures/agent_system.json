@@ -13,7 +13,7 @@
     },
     "description": "",
     "hash": "f91e47f3ae08c28e8c522a058e430636b15174362a6981b055c38026a107c05d",
-    "id": "1e5c1bfa-dfa9-4879-b217-0cafec4d1811",
+    "id": "64aa77ed-8244-410a-b8c0-6fdf25602a6d",
     "name": "bottle",
     "notes": "",
     "parameters": [],
@@ -26,7 +26,7 @@
             "amount": 1.0,
             "comment": null,
             "formula": null,
-            "id": "ea4cdf80-041f-4f98-8a18-62c26ace2fcb",
+            "id": "0c8f5724-d39a-4938-9154-3d28e778e5d0",
             "input": null,
             "name": "bottle",
             "type": "production",
@@ -37,7 +37,7 @@
             "amount": 0.6,
             "comment": null,
             "formula": null,
-            "id": "26e7ffd8-30b5-4403-bfdb-52e6b4e67f48",
+            "id": "00cb2312-c3ba-4ca8-a4a4-a259d9f56df5",
             "input": {
               "database": "fixture",
               "id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c",
@@ -49,7 +49,7 @@
             "unit": "kilogram"
           }
         ],
-        "id": "0feed099-fff4-4e7d-a79b-406e66ddf27d",
+        "id": "792097a7-6092-43a5-81b2-925b535c031a",
         "location": "GLO",
         "metadata": {
           "hierarchy_level": null,

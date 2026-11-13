@@ -8,7 +8,7 @@ import system from './fixtures/system.json'
 import systems from './fixtures/systems.json'
 import validation from './fixtures/validation.json'
 import { renderAt } from './render'
-
+import { firstMethodOf } from './method'
 vi.mock('@/api/client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/api/client')>()
   return {
@@ -27,7 +27,7 @@ vi.mock('@/api/client', async (importOriginal) => {
   }
 })
 
-const url = `/systems/${system.value.id}/results/tree?impact_method=${encodeURIComponent(impact.value.scores[0].method.impact_method)}`
+const url = `/systems/${system.value.id}/results/tree?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`
 const search = url.slice(url.indexOf('?'))
 
 it('keeps every impact category select within its container', async () => {
@@ -56,7 +56,7 @@ it('shows the path tree with a row per node and the total result unit', async ()
 })
 
 it('draws the Sankey vertically with a node table beside it', async () => {
-  renderAt(`/systems/${system.value.id}/results/sankey?impact_method=${encodeURIComponent(impact.value.scores[0].method.impact_method)}`, <App router={false} />)
+  renderAt(`/systems/${system.value.id}/results/sankey?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`, <App router={false} />)
   await waitFor(() => expect(screen.getByRole('heading', { name: /Sankey diagram/ })).toBeInTheDocument())
   const figure = await waitFor(() => screen.getByRole('figure', { name: /Sankey diagram/ }))
   expect(figure).toBeInTheDocument()
@@ -67,7 +67,7 @@ it('draws the Sankey vertically with a node table beside it', async () => {
 })
 
 it('associates each Sankey control with its caption', async () => {
-  renderAt(`/systems/${system.value.id}/results/sankey?impact_method=${encodeURIComponent(impact.value.scores[0].method.impact_method)}`, <App router={false} />)
+  renderAt(`/systems/${system.value.id}/results/sankey?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`, <App router={false} />)
   await waitFor(() => expect(screen.getByRole('heading', { name: /Sankey diagram/ })).toBeInTheDocument())
   expect(screen.getByLabelText(/Impact category/)).toBe(document.getElementById('sankey-category'))
   expect(screen.getByLabelText(/Min\. contribution share/)).toBe(document.getElementById('sankey-share'))
@@ -75,7 +75,7 @@ it('associates each Sankey control with its caption', async () => {
 })
 
 it('has the six result pages and no Simulation page', async () => {
-  renderAt(`/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(impact.value.scores[0].method.impact_method)}`, <App router={false} />)
+  renderAt(`/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`, <App router={false} />)
   await waitFor(() => expect(screen.getByRole('navigation', { name: 'Pages' })).toBeInTheDocument())
   const nav = screen.getByRole('navigation', { name: 'Pages' })
   expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['General information', 'Inventory results', 'Impact analysis', 'Process results', 'Contribution tree', 'Sankey diagram'])

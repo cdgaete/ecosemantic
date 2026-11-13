@@ -27,6 +27,7 @@ from ecosemantic.ports.types import (
     ElementaryFlow,
     ElementaryFlowHit,
     FlowType,
+    Limit,
     ProcessHit,
 )
 
@@ -76,7 +77,7 @@ async def search_processes(
     query: str,
     location: str | None = None,
     unit: str | None = None,
-    limit: int = 20,
+    limit: Limit = 20,
     cursor: str | None = None,
 ) -> Listing[ProcessHit]:
     page = await context.search.processes(database, query, location, unit, limit, cursor)
@@ -93,7 +94,7 @@ async def search_processes(
     words = bool(applied_filters(filters)) and bool(
         (await context.search.processes(database, query, None, None, 1, None)).items
     )
-    return listing(page, empty_search_hint(filters, words))
+    return listing(page, empty_search_hint(filters, words, query))
 
 
 async def search_elementary_flows(
@@ -104,7 +105,7 @@ async def search_elementary_flows(
     sub_compartment: str | None = None,
     flow_type: FlowType | None = None,
     unit: str | None = None,
-    limit: int = 20,
+    limit: Limit = 20,
     cursor: str | None = None,
 ) -> Listing[ElementaryFlowHit]:
     database = (await context.inventory.get_database(database)).name
@@ -127,11 +128,15 @@ async def search_elementary_flows(
             await context.search.elementary_flows(database, query, None, None, None, None, 1, None)
         ).items
     )
-    return listing(page, empty_search_hint(filters, words))
+    return listing(page, empty_search_hint(filters, words, query))
 
 
 async def search_methods(
-    context: ServerContext, database: str, query: str, limit: int = 20, cursor: str | None = None
+    context: ServerContext,
+    database: str,
+    query: str,
+    limit: Limit = 20,
+    cursor: str | None = None,
 ) -> Listing[Method]:
     page = await context.search.methods(database, query, limit, cursor)
     if not page.items:

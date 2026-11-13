@@ -24,6 +24,7 @@ from ecosemantic.mcp import discovery
 from ecosemantic.mcp.envelopes import (
     Answer,
     Listing,
+    _sent,
     as_uuid,
     bound,
     boundary,
@@ -82,9 +83,28 @@ def test_tool_error_carries_method_suggestions() -> None:
 
 
 def test_hints_say_what_to_do_next() -> None:
-    assert "location" in empty_search_hint({"location": "CH", "unit": None}, True)
-    assert "name fewer words" in empty_search_hint({}, False)
-    assert "location" not in empty_search_hint({"location": "CH"}, False)
+    assert "location" in empty_search_hint({"location": "CH", "unit": None}, True, "steel")
+    assert "name fewer words" in empty_search_hint({}, False, "electricity supply")
+    assert "location" not in empty_search_hint({"location": "CH"}, False, "steel")
+
+
+def test_one_word_query_naming_nothing_is_told_to_try_another_word() -> None:
+    hint = empty_search_hint({}, False, "electricty")
+    assert hint == (
+        "no entry holds 'electricty'; try another word, or the start of one followed by *"
+    )
+    assert "name fewer words" in empty_search_hint({}, False, "electricty supply")
+    assert "name fewer words" in empty_search_hint({}, False, None)
+
+
+def test_a_refused_string_is_quoted_in_the_refusal() -> None:
+    assert _sent("2bad name") == "; it got '2bad name'"
+
+
+def test_a_refused_string_longer_than_sixty_characters_is_cut_in_the_refusal() -> None:
+    cut = "a" * 60
+    assert _sent(cut) == f"; it got {cut!r}"
+    assert _sent("a" * 61) == f"; it got {(cut + '…')!r}"
     assert "5" in (page_hint(Page[str](items=["a"], has_more=True, next_cursor="5")) or "")
     assert page_hint(Page[str](items=["a"], has_more=False)) is None
     assert "m_" in suggestion_hint("climate change", "m_abc1234567")

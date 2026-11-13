@@ -43,7 +43,7 @@ def sources() -> list[DatabaseSource]:
         DatabaseSource(
             name="ecoinvent",
             versions=["3.11"],
-            system_models=["cut-off"],
+            system_models=["cutoff"],
             credential="ecoinvent",
             terms=False,
         ),
@@ -83,13 +83,13 @@ async def test_install_database_posts_starts_and_answers_the_install(held: Held)
     async with Client(build_server(over)) as client:
         answered = await client.call_tool(
             "install_database",
-            {"source": "ecoinvent", "version": "3.11", "system_model": "cut-off"},
+            {"source": "ecoinvent", "version": "3.11", "system_model": "cutoff"},
         )
         install = value(answered)
         one = value(await client.call_tool("get_install", {"install_id": install["id"]}))
         every = value(await client.call_tool("list_installs", {}))
     assert install["draft"]["source"] == "ecoinvent"
-    assert install["draft"]["version"] == "3.11" and install["draft"]["system_model"] == "cut-off"
+    assert install["draft"]["version"] == "3.11" and install["draft"]["system_model"] == "cutoff"
     assert install["draft"]["actor"]["kind"] == "agent"
     assert install["status"] == "queued" and install["pid"] == 4242
     assert answered.structured_content["view_url"] == PAGE
@@ -105,7 +105,7 @@ async def test_the_started_process_receives_the_held_account(held: Held) -> None
         first = value(
             await client.call_tool(
                 "install_database",
-                {"source": "ecoinvent", "version": "3.11", "system_model": "cut-off"},
+                {"source": "ecoinvent", "version": "3.11", "system_model": "cutoff"},
             )
         )
         await installs.update_install(uuid.UUID(first["id"]), InstallPatch(status="done"))
@@ -174,6 +174,78 @@ async def test_install_database_refuses_with_the_advice_of_the_start(
     assert hint == account_advice(entry, needed=[source("bafu", "nexus")]).said()
     assert "/databases" not in hint
     assert launcher.started == []
+
+
+async def test_a_version_the_source_does_not_offer_is_refused_before_the_account_is_asked(
+    held: Held,
+) -> None:
+    over, installs, launcher = held
+    without = dataclasses.replace(over, credentials={})
+    async with Client(build_server(without)) as client:
+        with pytest.raises(ToolError) as caught:
+            await client.call_tool(
+                "install_database",
+                {"source": "ecoinvent", "version": "9.9", "system_model": "cutoff"},
+            )
+    refused = json.loads(str(caught.value))
+    assert refused["error"] == "invalid"
+    assert refused["message"] == "ecoinvent offers no version '9.9'; it offers 3.11"
+    assert await installs.list_installs() == [] and launcher.started == []
+
+
+async def test_a_system_model_the_source_does_not_offer_is_refused_before_the_account_is_asked(
+    held: Held,
+) -> None:
+    over, installs, launcher = held
+    without = dataclasses.replace(over, credentials={})
+    async with Client(build_server(without)) as client:
+        with pytest.raises(ToolError) as caught:
+            await client.call_tool(
+                "install_database",
+                {"source": "ecoinvent", "version": "3.11", "system_model": "consequential"},
+            )
+    refused = json.loads(str(caught.value))
+    assert refused["error"] == "invalid"
+    assert refused["message"] == (
+        "ecoinvent offers no system model 'consequential'; it offers cutoff"
+    )
+    assert await installs.list_installs() == [] and launcher.started == []
+
+
+async def test_a_draft_that_lacks_what_its_source_needs_is_refused_before_the_account_is_asked(
+    held: Held,
+) -> None:
+    over, installs, launcher = held
+    without = dataclasses.replace(over, credentials={})
+    async with Client(build_server(without)) as client:
+        with pytest.raises(ToolError) as caught:
+            await client.call_tool("install_database", {"source": "ecoinvent"})
+    refused = json.loads(str(caught.value))
+    assert refused["error"] == "invalid"
+    assert refused["message"] == "an ecoinvent draft needs a version and a system model"
+    assert await installs.list_installs() == [] and launcher.started == []
+
+
+async def test_a_version_and_system_model_the_source_offers_still_asks_for_the_account(
+    held: Held,
+) -> None:
+    over, installs, launcher = held
+    entry = AccountStart(start="tray", screen=SCREEN)
+    without = dataclasses.replace(over, credentials={}, accounts=entry)
+    async with Client(build_server(without)) as client:
+        with pytest.raises(ToolError) as caught:
+            await client.call_tool(
+                "install_database",
+                {"source": "ecoinvent", "version": "3.11", "system_model": "cutoff"},
+            )
+    refused = json.loads(str(caught.value))
+    assert refused["error"] == "unavailable"
+    assert refused["message"] == "ecoinvent installs from an account this server does not hold"
+    assert (
+        refused["details"]["hint"]
+        == account_advice(entry, needed=[source("ecoinvent", "ecoinvent")]).said()
+    )
+    assert await installs.list_installs() == [] and launcher.started == []
 
 
 async def test_a_source_this_server_does_not_offer_is_not_found_naming_list_sources(

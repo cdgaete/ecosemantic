@@ -9,7 +9,12 @@ import pytest
 
 from ecosemantic.errors import Invalid, NotSupported
 from ecosemantic.model.entities import Uncertainty
-from ecosemantic.package.olca import from_olca_uncertainty, to_olca_uncertainty, uncertainty_refusal
+from ecosemantic.package.olca import (
+    WrittenLognormal,
+    from_olca_uncertainty,
+    to_olca_uncertainty,
+    uncertainty_refusal,
+)
 
 _OWNER = "'p', exchange of 'f'"
 
@@ -123,6 +128,49 @@ def test_a_lognormals_sign_follows_its_exchanges_amount() -> None:
     assert mirrored.params["scale"] == pytest.approx(math.log(math.sqrt(2)))
     negative = from_olca_uncertainty(_lognormal(4.5946, 1.1), -4.5946, owner=_OWNER)
     assert negative is not None and negative.centre() == pytest.approx(-4.5946)
+
+
+@pytest.mark.parametrize("scale", [0.0488, 0.0953, 0.1398, 0.1823, 0.2624])
+@pytest.mark.parametrize("loc", [-2.3, -0.69, 0.0, 1.5])
+def test_a_written_lognormal_reads_back_as_it_was_written(loc: float, scale: float) -> None:
+    written = WrittenLognormal(loc=loc, scale=scale)
+    held = to_olca_uncertainty(Uncertainty(type="lognormal", params={"loc": loc, "scale": scale}))
+    assert held is not None
+    back = from_olca_uncertainty(held, math.exp(loc), owner=_OWNER, written=written)
+    assert back is not None
+    assert back.params["loc"] == loc
+    assert back.params["scale"] == scale
+
+
+@pytest.mark.parametrize(
+    ("geom_mean", "geom_sd", "loc", "scale"),
+    [
+        (math.exp(-2.3), 1.7, -2.3, math.log(1.7)),
+        (0.4, math.exp(0.1823), math.log(0.4), 0.1823),
+    ],
+    ids=["scale-edited", "loc-edited"],
+)
+def test_a_lognormal_edited_in_openlca_reads_its_edited_parameter(
+    geom_mean: float, geom_sd: float, loc: float, scale: float
+) -> None:
+    held = _lognormal(geom_mean, geom_sd)
+    back = from_olca_uncertainty(
+        held, 0.5, owner=_OWNER, written=WrittenLognormal(loc=-2.3, scale=0.1823)
+    )
+    assert back is not None
+    assert back.params["loc"] == loc
+    assert back.params["scale"] == scale
+
+
+def test_a_lognormal_without_its_written_parameters_answers_what_it_holds() -> None:
+    held = to_olca_uncertainty(Uncertainty(type="lognormal", params={"loc": -2.3, "scale": 0.1823}))
+    assert held is not None
+    back = from_olca_uncertainty(held, math.exp(-2.3), owner=_OWNER)
+    assert back is not None
+    assert back.params["loc"] == math.log(math.exp(-2.3))
+    # measured: exp then log turns 0.1823 into 0.18230000000000007
+    assert back.params["scale"] == math.log(math.exp(0.1823))
+    assert back.params["scale"] != 0.1823
 
 
 def test_a_zero_amount_samples_nothing() -> None:

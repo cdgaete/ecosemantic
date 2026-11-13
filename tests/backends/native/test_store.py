@@ -29,7 +29,7 @@ def test_the_store_serves_every_installed_database_by_name(native_store: NativeS
 def test_names_the_store_does_not_serve_are_not_found(native_store: NativeStore) -> None:
     with pytest.raises(NotFound, match="holds the elementary flows of 'fixture'; name 'fixture'"):
         native_store.registered(FIXTURE_BIO)
-    with pytest.raises(NotFound, match="no database 'nowhere' under"):
+    with pytest.raises(NotFound, match="no database 'nowhere'; this store serves"):
         native_store.registered("nowhere")
     with pytest.raises(NotFound, match="this store serves \\['fixture', 'looped'\\]"):
         native_store.technosphere_of("nowhere")
@@ -40,16 +40,19 @@ def test_names_the_store_does_not_serve_are_not_found(native_store: NativeStore)
 def test_a_database_the_store_does_not_serve_is_named_with_those_it_serves(
     native_store: NativeStore,
 ) -> None:
-    message = (
-        f"no database 'nowhere' under {native_store.directory}; "
-        "this store serves ['fixture', 'looped']"
-    )
+    message = "no database 'nowhere'; this store serves ['fixture', 'looped']"
     with pytest.raises(NotFound) as registered:
         native_store.registered("nowhere")
     with pytest.raises(NotFound) as technosphere:
         native_store.technosphere_of("nowhere")
+    with pytest.raises(NotFound) as flows:
+        native_store.owner_of_elementary_flows("nowhere")
     assert str(registered.value) == message
     assert str(technosphere.value) == message
+    assert str(flows.value) == "no database uses the elementary flows 'nowhere'"
+    for refusal in (registered, technosphere, flows):
+        assert "under" not in str(refusal.value)
+        assert str(native_store.directory) not in str(refusal.value)
 
 
 def test_a_calculation_is_loaded_once_per_database(native_store: NativeStore) -> None:

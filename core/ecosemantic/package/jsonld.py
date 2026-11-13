@@ -35,7 +35,11 @@ from ecosemantic.model.refs import (
     slug,
 )
 from ecosemantic.model.validation import linked_reference
-from ecosemantic.package.olca import from_olca_uncertainty, to_olca_uncertainty
+from ecosemantic.package.olca import (
+    WrittenLognormal,
+    from_olca_uncertainty,
+    to_olca_uncertainty,
+)
 from ecosemantic.package.sidecar import (
     ExchangeIdentity,
     Identities,
@@ -360,6 +364,11 @@ class _Writer:
         self.identities.exchanges[f"{process.id}:{number}"] = ExchangeIdentity(
             id=exchange.id, label=exchange.name
         )
+        uncertainty = exchange.uncertainty
+        if uncertainty is not None and uncertainty.type == "lognormal":
+            self.identities.lognormals[f"{process.id}:{number}"] = WrittenLognormal(
+                loc=float(uncertainty.params["loc"]), scale=float(uncertainty.params["scale"])
+            )
         return out
 
     def reference(self) -> tuple[Process, int] | None:
@@ -495,6 +504,15 @@ def _read_entities(root: Path, entity_type: type) -> list[o.RootEntity]:
     ]
 
 
+def _in_written_order(
+    held: list[tuple[str, o.Parameter]], units: Mapping[str, str]
+) -> list[tuple[str, o.Parameter]]:
+    """The parameters in the order the sidecar's units name them, and those it does not name after
+    them in the order the package's files come in."""
+    order = {name: n for n, name in enumerate(units)}
+    return sorted(held, key=lambda named: order.get(named[0], len(order)))
+
+
 def _unit_name(ref: o.Ref | None) -> str:
     if ref is None or ref.name is None:
         raise Invalid("an exchange without a unit")
@@ -601,6 +619,7 @@ class _Reader:
             exchange.uncertainty,
             exchange.amount,
             owner=f"{process.name!r}, exchange of {flow_name!r}",
+            written=self.ident.lognormals.get(f"{process.id}:{exchange.internal_id}"),
         )
         return Exchange(
             id=known.id if known else uuid.uuid4(),
@@ -643,22 +662,26 @@ class _Reader:
                 )
             )
         prefix = self.ident.parameter_prefix
+        held = [
+            (p.name[len(prefix) :], p)
+            for p in _read_entities(self.root, o.Parameter)
+            if p.parameter_scope == o.ParameterScope.GLOBAL_SCOPE
+            and p.name
+            and p.name.startswith(prefix)
+        ]
         parameters = [
             Parameter(
-                name=p.name[len(prefix) :],
+                name=name,
                 value=p.value if p.is_input_parameter else None,
                 formula=(
                     strip_prefix(p.formula, prefix)
                     if (p.formula and not p.is_input_parameter)
                     else None
                 ),
-                unit=self.ident.parameter_units.get(p.name[len(prefix) :], ""),
+                unit=self.ident.parameter_units.get(name, ""),
                 description=p.description or "",
             )
-            for p in _read_entities(self.root, o.Parameter)
-            if p.parameter_scope == o.ParameterScope.GLOBAL_SCOPE
-            and p.name
-            and p.name.startswith(prefix)
+            for name, p in _in_written_order(held, self.ident.parameter_units)
         ]
         cases = [
             Case(

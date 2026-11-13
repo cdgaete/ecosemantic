@@ -73,6 +73,10 @@ class FilesystemInstalls:
     async def update_install(self, install_id: uuid.UUID, patch: InstallPatch) -> Install:
         return await asyncio.to_thread(self.apply_patch, install_id, patch)
 
+    def sweep(self) -> None:
+        """Remove the lock file of every install this store does not hold."""
+        self.records.sweep()
+
     def slot(self) -> AsyncFileLock:
         """The workspace's one-install slot, which every process over this directory shares."""
         return self.records.slot()

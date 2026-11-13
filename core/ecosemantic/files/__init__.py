@@ -6,7 +6,8 @@ both refused on Windows where Linux allows them. Each operation is retried `REPL
 times, `REPLACE_WAIT_SECONDS` apart, and once the bound is spent the caller is answered with an
 `Unavailable` naming the file and that another process holds it. `write_whole` stages the bytes
 in a sibling beside the file and lands them through that retry, so a reader sees one whole
-version or the other.
+version or the other. `forget` drops the file of a lock whose guard is gone, since POSIX leaves
+it behind at release.
 """
 
 from __future__ import annotations
@@ -18,6 +19,8 @@ import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import TypeVar
+
+from filelock import FileLock
 
 from ecosemantic.errors import Unavailable
 
@@ -76,3 +79,11 @@ def write_whole(path: Path, data: bytes) -> None:
     finally:
         with contextlib.suppress(OSError):
             sibling.unlink(missing_ok=True)
+
+
+def forget(lock: FileLock) -> None:
+    """Remove the file of a lock this process holds, once nothing is left for it to guard. POSIX
+    leaves a lock's file in place at release, so it is unlinked here while the lock is held;
+    Windows refuses to unlink a held file and removes it at release."""
+    if os.name != "nt":
+        Path(lock.lock_file).unlink(missing_ok=True)

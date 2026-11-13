@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Callable
 from pathlib import Path
@@ -11,6 +12,7 @@ from ecosemantic import files
 from ecosemantic.errors import NotFound, Unavailable
 from ecosemantic.model.entities import Actor, ProductSystem
 from ecosemantic.package.log import LOG_FILE, next_entry, read_log, write_log
+from ecosemantic.package.olca import WrittenLognormal
 from ecosemantic.package.requests import (
     REQUESTS_FILE,
     next_request,
@@ -103,6 +105,44 @@ def test_read_sidecar_requires_the_folder(tmp_path: Path) -> None:
 
 def test_identities_default_empty() -> None:
     assert Identities(parameter_prefix="x__").processes == {}
+
+
+def test_a_sidecar_written_without_lognormals_reads_with_no_entry(
+    product_system: ProductSystem, tmp_path: Path
+) -> None:
+    stored(tmp_path, product_system)
+    path = tmp_path / SIDECAR_DIR / "identities.json"
+    written = json.loads(path.read_text(encoding="utf-8"))
+    written.pop("lognormals", None)
+    path.write_text(json.dumps(written), encoding="utf-8")
+    assert read_sidecar(tmp_path).identities.lognormals == {}
+
+
+def test_a_sidecar_keeps_a_lognormals_written_parameters(
+    product_system: ProductSystem, tmp_path: Path
+) -> None:
+    first = product_system.processes[0]
+    written = WrittenLognormal(loc=-2.3, scale=0.1823)
+    sidecar = Sidecar(
+        product_system=ProjectRecord(
+            id=product_system.id,
+            name=product_system.name,
+            description=product_system.description,
+            notes=product_system.notes,
+            database=product_system.database,
+            hash="0" * 64,
+            processes=[ActivityRecord(id=a.id, code=a.code) for a in product_system.processes],
+        ),
+        identities=Identities(
+            lognormals={f"{first.id}:2": written}, parameter_prefix="cotton_tshirt__"
+        ),
+        scenarios=[],
+        metadata={},
+    )
+    write_sidecar(tmp_path, sidecar)
+    back = read_sidecar(tmp_path).identities.lognormals
+    assert back == {f"{first.id}:2": written}
+    assert (back[f"{first.id}:2"].loc, back[f"{first.id}:2"].scale) == (-2.3, 0.1823)
 
 
 def test_parsed_lines_reads_each_line_as_its_model_and_a_missing_file_reads_as_none(

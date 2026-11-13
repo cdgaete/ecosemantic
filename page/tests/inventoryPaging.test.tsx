@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { App } from '@/App'
 import { api } from '@/api/client'
 import { renderAt } from './render'
+import { firstMethodOf } from './method'
 import databases from './fixtures/databases.json'
 import impact from './fixtures/impact.json'
 import inventory from './fixtures/inventory.json'
@@ -29,7 +30,7 @@ vi.mock('@/api/client', async (importOriginal) => {
   }
 })
 
-const search = `?impact_method=${encodeURIComponent(impact.value.scores[0].method.impact_method)}`
+const search = `?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`
 
 it('pages the inventory forward and back, with its pager rather than the cursor hint', async () => {
   renderAt(`/systems/${system.value.id}/results/inventory${search}`, <App router={false} />)

@@ -9,7 +9,7 @@ import system from './fixtures/system.json'
 import systems from './fixtures/systems.json'
 import validation from './fixtures/validation.json'
 import { renderAt } from './render'
-
+import { firstMethodOf } from './method'
 vi.mock('@/api/client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/api/client')>()
   return {
@@ -27,7 +27,7 @@ vi.mock('@/api/client', async (importOriginal) => {
 })
 
 const recorded = byProcess as Answer<ContributionResult>
-const search = `?impact_method=${encodeURIComponent(impact.value.scores[0].method.impact_method)}`
+const search = `?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`
 const answered = (cut: ContributionResult['cut']): Answer<ContributionResult> => ({ ...recorded, value: { ...recorded.value, cut } })
 const last = () => vi.mocked(api.contributions).mock.calls.at(-1)![1]
 

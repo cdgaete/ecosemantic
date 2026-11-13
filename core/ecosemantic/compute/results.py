@@ -7,8 +7,9 @@ import uuid
 from pydantic import BaseModel, Field, model_validator
 
 from ecosemantic.compute.montecarlo import PairedDelta
+from ecosemantic.model.entities import Method, method_by_id
 from ecosemantic.model.refs import Database
-from ecosemantic.model.summary import Summary
+from ecosemantic.model.summary import Summary, SummaryScore
 from ecosemantic.ports.types import (
     Cut,
     Decomposition,
@@ -55,10 +56,13 @@ class ImpactResult(BaseModel):
     with variants and uncertainty, the processes of each loop holding a credit, whose delivery
     no check decides, the links the score was taken behind, and each exchange sending a
     positive amount to a treatment, which runs it backwards and scores its emissions as
-    credits."""
+    credits. `methods` lists every method scored once, in the order `scores`, each variant's
+    `scores` and each Monte Carlo category follow, and a score names its method by
+    `method_id`."""
 
     product_system: str
     database: Database
+    methods: list[Method]
     scores: list[Score]
     credit_loops: list[list[str]]
     linked_credit_loops: list[LinkedLoop] = Field(default_factory=list)
@@ -69,7 +73,16 @@ class ImpactResult(BaseModel):
 
     def summarise(self) -> Summary:
         """The base scores, one per method."""
-        return Summary(scores=[score.summary_score() for score in self.scores])
+        return Summary(
+            scores=[
+                SummaryScore(
+                    method=method_by_id(self.methods, score.method_id).spec,
+                    value=score.value,
+                    unit=score.unit,
+                )
+                for score in self.scores
+            ]
+        )
 
 
 class InventoryResult(BaseModel):
@@ -91,10 +104,12 @@ class ContributionResult(BaseModel):
     emitters, nested over paths, or flat over flows, with the processes of each loop holding a
     credit, whose delivery no check decides, and each exchange sending a positive amount to a
     treatment, which runs it backwards. `cut` is what a flat list leaves out, under its cut-off
-    and past its length, and a tree holds its own `truncated` beside none."""
+    and past its length, and a tree holds its own `truncated` beside none. `method` is the
+    method of `total`, which names it by `method_id`."""
 
     database: Database
     by: Decomposition
+    method: Method
     total: Score
     credit_loops: list[list[str]]
     linked_credit_loops: list[LinkedLoop] = Field(default_factory=list)
@@ -107,7 +122,11 @@ class ContributionResult(BaseModel):
 
     def summarise(self) -> Summary:
         """The total the decomposition divides."""
-        return Summary(scores=[self.total.summary_score()])
+        return Summary(
+            scores=[
+                SummaryScore(method=self.method.spec, value=self.total.value, unit=self.total.unit)
+            ]
+        )
 
     @model_validator(mode="after")
     def _carried(self) -> ContributionResult:

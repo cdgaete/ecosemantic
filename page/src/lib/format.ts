@@ -45,6 +45,12 @@ export function categoryLabel(method: Method): string {
   return method.indicator ? `${method.impact_category} · ${method.indicator}` : method.impact_category
 }
 
+export function methodById(methods: Method[], id: string): Method {
+  const found = methods.find((method) => method.id === id)
+  if (found === undefined) throw new Error(`No method ${id} is listed here.`)
+  return found
+}
+
 export function formatAgo(instant: string, now: Date = new Date()): string {
   const seconds = Math.floor((now.getTime() - new Date(instant).getTime()) / 1000)
   if (seconds < 60) return 'just now'

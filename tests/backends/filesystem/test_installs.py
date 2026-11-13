@@ -52,6 +52,24 @@ class TestFilesystemInstalls(InstallConformance):
     ) -> None:
         assert await installs.list_installs() == []
 
+    async def test_a_sweep_removes_the_lock_of_an_install_the_store_does_not_hold(
+        self, installs: FilesystemInstalls, tmp_path: Path
+    ) -> None:
+        posted = await installs.post_install(draft())
+        await installs.update_install(posted.id, InstallPatch(status="running"))
+        folder = tmp_path / INSTALLS_DIR
+        orphan = folder / f"{uuid.uuid4()}.lock"
+        orphan.write_text("", encoding="utf-8")
+        for kept in ("post.lock", "slot.lock"):
+            (folder / kept).write_text("", encoding="utf-8")
+
+        installs.sweep()
+
+        assert not orphan.exists()
+        assert (folder / f"{posted.id}.lock").is_file()
+        assert install_dir(tmp_path, posted.id).is_dir()
+        assert (folder / "post.lock").is_file() and (folder / "slot.lock").is_file()
+
     async def test_a_second_store_on_the_same_directory_waits_for_the_slot(
         self, installs: FilesystemInstalls, tmp_path: Path
     ) -> None:

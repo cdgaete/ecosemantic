@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+import olca_schema as o
 import pytest
+from olca_schema.zipio import ZipReader
 
 from ecosemantic.errors import Conflict, NotSupported
 from ecosemantic.model.entities import Uncertainty
+from ecosemantic.model.refs import olca_process_id
 from ecosemantic.package.background import read_background
 from ecosemantic.package.base_writer import (
     BaseDataset,
@@ -145,3 +149,35 @@ def test_an_existing_bundle_is_not_overwritten(tmp_path: Path) -> None:
             destination=tmp_path / "db.zip",
             now=NOW,
         )
+
+
+def test_a_comment_and_classifications_are_written_to_the_process(tmp_path: Path) -> None:
+    rows = _rows()
+    steel, elec = rows.datasets
+    described = replace(
+        steel,
+        comment="a made-up comment",
+        classifications=(
+            ("ISIC rev.4 ecoinvent", "2410"),
+            ("By-product classification", "allocatable product"),
+        ),
+    )
+    bare = replace(elec, comment=None, classifications=())
+    written = write_base_bundle(
+        BaseRows(datasets=(described, bare), flows=rows.flows, methods=rows.methods),
+        scheme="ecoinvent",
+        name="db",
+        version="1",
+        destination=tmp_path / "db.zip",
+        now=NOW,
+    )
+    with ZipReader(str(written.bundle)) as reader:
+        processes = {p.id: p for p in reader.read_each(o.Process)}
+    named = processes[olca_process_id("ecoinvent", STEEL)]
+    assert named.description == "a made-up comment"
+    assert named.tags == [
+        "ISIC rev.4 ecoinvent: 2410",
+        "By-product classification: allocatable product",
+    ]
+    plain = processes[olca_process_id("ecoinvent", ELEC)]
+    assert plain.description is None and plain.tags is None

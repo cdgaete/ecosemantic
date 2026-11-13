@@ -144,7 +144,7 @@ class NativeCalculation:
             solution = calculation.solve(self._foreground(calculation, system), demand)
             values = calculation.scores(solution, methods).data
             return [
-                Score(value=float(value), unit=method.unit, method=method)
+                Score(value=float(value), unit=method.unit, method_id=method.id)
                 for value, method in zip(values, methods, strict=True)
             ]
 
@@ -209,7 +209,9 @@ class NativeCalculation:
                     )
                 )
             return Hotspots(
-                total=Score(value=total, unit=method.unit, method=method), items=items, cut=cut
+                total=Score(value=total, unit=method.unit, method_id=method.id),
+                items=items,
+                cut=cut,
             )
 
         return await self._run(system, run)
@@ -251,7 +253,9 @@ class NativeCalculation:
                     )
                 )
             return FlowHotspots(
-                total=Score(value=total, unit=method.unit, method=method), items=items, cut=cut
+                total=Score(value=total, unit=method.unit, method_id=method.id),
+                items=items,
+                cut=cut,
             )
 
         return await self._run(system, run)
@@ -310,7 +314,7 @@ class NativeCalculation:
                 )
 
             return Tree(
-                total=Score(value=walked.total, unit=method.unit, method=method),
+                total=Score(value=walked.total, unit=method.unit, method_id=method.id),
                 root=node_of(walked.root),
                 truncated=walked.truncated,
             )
@@ -437,7 +441,7 @@ class NativeCalculation:
                 database=self.store.registered(system.database).database,
                 n=len(samples[0]),
                 stopped=stopped,
-                gating_method=methods[gating],
+                gating_method=methods[gating].id,
                 scope=config.scope,
                 normals_at_amount=sampler.normals_at_amount,
                 credit_loops=credit_loops(system.product_system)
@@ -450,7 +454,9 @@ class NativeCalculation:
                 dropped_linked_loops=dropped_linked,
                 categories=[
                     MonteCarloCategory(
-                        method=method, summary=summarize_samples(samples[at]), samples=samples[at]
+                        method_id=method.id,
+                        summary=summarize_samples(samples[at]),
+                        samples=samples[at],
                     )
                     for at, method in enumerate(methods)
                 ],

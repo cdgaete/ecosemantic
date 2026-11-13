@@ -9,10 +9,13 @@ import system from './fixtures/system.json'
 import systems from './fixtures/systems.json'
 import validation from './fixtures/validation.json'
 import { renderAt } from './render'
+import { firstMethodOf } from './method'
 
 const first = impact.value.scores[0]
-const second = { ...first, method: { ...first.method, id: 'm_second', impact_category: 'second category' } }
-const twoCategories = { ...impact, value: { ...impact.value, scores: [first, second] } }
+const firstMethod = firstMethodOf(impact.value)
+const secondMethod = { ...firstMethod, id: 'm_second', impact_category: 'second category' }
+const second = { ...first, method_id: 'm_second' }
+const twoCategories = { ...impact, value: { ...impact.value, methods: [firstMethod, secondMethod], scores: [first, second] } }
 
 vi.mock('@/api/client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/api/client')>()
@@ -38,7 +41,7 @@ function Address() {
 }
 
 const base = `/systems/${system.value.id}/results`
-const search = `?impact_method=${encodeURIComponent(first.method.impact_method)}`
+const search = `?impact_method=${encodeURIComponent(firstMethod.impact_method)}`
 const pages = [
   ['processes', 'Impact category'],
   ['tree', 'Impact category'],
@@ -57,7 +60,7 @@ it('opens every result page on the category its address names', async () => {
 it('writes the chosen category into the address, which the other result pages carry', async () => {
   renderAt(`${base}/tree${search}`, <><Screens /><Address /></>)
   const select = (await screen.findByLabelText('Impact category')) as HTMLSelectElement
-  await waitFor(() => expect(select.value).toBe(first.method.id))
+  await waitFor(() => expect(select.value).toBe(first.method_id))
   fireEvent.change(select, { target: { value: 'm_second' } })
   await waitFor(() => expect(screen.getByTestId('address').textContent).toContain('category=m_second'))
   expect(screen.getByRole('link', { name: 'Sankey diagram' }).getAttribute('href')).toContain('category=m_second')

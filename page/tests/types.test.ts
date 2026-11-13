@@ -204,15 +204,15 @@ const METHOD_KEYS = {
   indicator: true,
 } satisfies Record<keyof Method, true>
 
-const SCORE_KEYS = { value: true, unit: true, method: true } satisfies Record<keyof Score, true>
+const SCORE_KEYS = { value: true, unit: true, method_id: true } satisfies Record<keyof Score, true>
 
 const VARIANT_SCORES_KEYS = { name: true, scores: true, deltas: true, credit_loops: true, linked_credit_loops: true, treatments_run_backwards: true, uncertainty: true, paired_deltas: true } satisfies Record<keyof VariantScores, true>
 const PAIRED_DELTA_KEYS = { delta_abs: true, delta_pct: true, delta_ci95: true } satisfies Record<keyof PairedDelta, true>
 const MONTE_CARLO_SUMMARY_KEYS = { n: true, mean: true, median: true, median_ci95: true, percentiles: true, rel_se: true } satisfies Record<keyof MonteCarloSummary, true>
-const MONTE_CARLO_CATEGORY_KEYS = { method: true, summary: true, samples: true } satisfies Record<keyof MonteCarloCategory, true>
+const MONTE_CARLO_CATEGORY_KEYS = { method_id: true, summary: true, samples: true, histogram: true } satisfies Record<keyof MonteCarloCategory, true>
 const MONTE_CARLO_RESULT_KEYS = { database: true, n: true, stopped: true, gating_method: true, scope: true, normals_at_amount: true, credit_loops: true, dropped_draws: true, dropped_loops: true, dropped_background: true, linked_credit_loops: true, dropped_linked_loops: true, categories: true } satisfies Record<keyof MonteCarloResult, true>
 
-const IMPACT_RESULT_KEYS = { product_system: true, database: true, scores: true, credit_loops: true, linked_credit_loops: true, links_behind: true, treatments_run_backwards: true, variants: true, uncertainty: true } satisfies Record<keyof ImpactResult, true>
+const IMPACT_RESULT_KEYS = { product_system: true, database: true, methods: true, scores: true, credit_loops: true, linked_credit_loops: true, links_behind: true, treatments_run_backwards: true, variants: true, uncertainty: true } satisfies Record<keyof ImpactResult, true>
 
 const MONTE_CARLO_CONFIG_KEYS = { n_min: true, n_max: true, rel_se_target: true, seed: true, scope: true, n: true } satisfies Record<keyof MonteCarloConfig, true>
 const DEMAND_ITEM_KEYS = { ref: true, amount: true } satisfies Record<keyof DemandItem, true>
@@ -273,6 +273,7 @@ const TREE_NODE_KEYS = {
 const CONTRIBUTION_RESULT_KEYS = {
   database: true,
   by: true,
+  method: true,
   total: true,
   credit_loops: true,
   linked_credit_loops: true,
@@ -416,9 +417,16 @@ function expectOverrideKeys(override: Override): void {
   } else expectKeys(override, PARAMETER_OVERRIDE_KEYS)
 }
 
-function expectScoreKeys(score: Score): void {
+function expectScoreKeys(score: Score, methods: Method[]): void {
   expectKeys(score, SCORE_KEYS)
-  expectKeys(score.method, METHOD_KEYS)
+  expect(methods.map((method) => method.id)).toContain(score.method_id)
+}
+
+function expectContributionKeys(result: ContributionResult): void {
+  expectKeys(result, CONTRIBUTION_RESULT_KEYS)
+  expectKeys(result.method, METHOD_KEYS)
+  expectKeys(result.total, SCORE_KEYS)
+  expect(result.total.method_id).toBe(result.method.id)
 }
 
 function expectTreeNodeKeys(node: TreeNode): void {
@@ -440,7 +448,15 @@ function expectRunStateKeys(run: RunState, keys: Record<string, true> = RUN_STAT
 
 function expectRunKeys(run: Run): void {
   expectRunStateKeys(run, RUN_KEYS)
-  if (run.result) expectKeys(run.result, MONTE_CARLO_RESULT_KEYS)
+  if (run.result) {
+    expectKeys(run.result, MONTE_CARLO_RESULT_KEYS)
+    expect(run.methods.map((method) => method.id)).toContain(run.result.gating_method)
+    run.result.categories.forEach((category) => {
+      expectKeys(category, MONTE_CARLO_CATEGORY_KEYS)
+      expect(category.histogram).toBeNull()
+      expect(run.methods.map((method) => method.id)).toContain(category.method_id)
+    })
+  }
 }
 
 const typedDatabases = databases as Answer<Database[]>
@@ -589,7 +605,8 @@ describe('recorded response keys match the types field for field', () => {
   it('impact', () => {
     expectKeys(typedImpact, ANSWER_KEYS)
     expectKeys(typedImpact.value, IMPACT_RESULT_KEYS)
-    typedImpact.value.scores.forEach(expectScoreKeys)
+    typedImpact.value.methods.forEach((method) => expectKeys(method, METHOD_KEYS))
+    typedImpact.value.scores.forEach((score) => expectScoreKeys(score, typedImpact.value.methods))
     expect(typedImpact.value.variants).toEqual([])
     expect(typedImpact.value.uncertainty).toBeNull()
   })
@@ -597,11 +614,12 @@ describe('recorded response keys match the types field for field', () => {
   it('impact with variants and Monte Carlo', () => {
     expectKeys(typedImpactMonteCarlo, ANSWER_KEYS)
     expectKeys(typedImpactMonteCarlo.value, IMPACT_RESULT_KEYS)
-    typedImpactMonteCarlo.value.scores.forEach(expectScoreKeys)
+    typedImpactMonteCarlo.value.methods.forEach((method) => expectKeys(method, METHOD_KEYS))
+    typedImpactMonteCarlo.value.scores.forEach((score) => expectScoreKeys(score, typedImpactMonteCarlo.value.methods))
     expect(typedImpactMonteCarlo.value.variants.length).toBeGreaterThan(0)
     typedImpactMonteCarlo.value.variants.forEach((variant) => {
       expectKeys(variant, VARIANT_SCORES_KEYS)
-      variant.scores.forEach(expectScoreKeys)
+      variant.scores.forEach((score) => expectScoreKeys(score, typedImpactMonteCarlo.value.methods))
       expect(variant.paired_deltas).toHaveLength(variant.scores.length)
       variant.paired_deltas?.forEach((paired) => expectKeys(paired, PAIRED_DELTA_KEYS))
       expect(variant.uncertainty).not.toBeNull()
@@ -614,10 +632,11 @@ describe('recorded response keys match the types field for field', () => {
     expect(uncertainty).not.toBeNull()
     if (uncertainty) {
       expectKeys(uncertainty, MONTE_CARLO_RESULT_KEYS)
-      expectKeys(uncertainty.gating_method, METHOD_KEYS)
+      expect(typedImpactMonteCarlo.value.methods.map((method) => method.id)).toContain(uncertainty.gating_method)
       uncertainty.categories.forEach((category) => {
         expectKeys(category, MONTE_CARLO_CATEGORY_KEYS)
-        expectKeys(category.method, METHOD_KEYS)
+        expect(category.histogram).toBeNull()
+        expect(typedImpactMonteCarlo.value.methods.map((method) => method.id)).toContain(category.method_id)
         expectKeys(category.summary, MONTE_CARLO_SUMMARY_KEYS)
       })
     }
@@ -625,8 +644,7 @@ describe('recorded response keys match the types field for field', () => {
 
   it('contributions by process', () => {
     expectKeys(typedByProcess, ANSWER_KEYS)
-    expectKeys(typedByProcess.value, CONTRIBUTION_RESULT_KEYS)
-    expectKeys(typedByProcess.value.total, SCORE_KEYS)
+    expectContributionKeys(typedByProcess.value)
     const processes = typedByProcess.value.processes
     expect(processes).not.toBeNull()
     processes?.forEach((hotspot) => {
@@ -640,7 +658,7 @@ describe('recorded response keys match the types field for field', () => {
 
   it('contributions by flow', () => {
     expectKeys(typedByFlow, ANSWER_KEYS)
-    expectKeys(typedByFlow.value, CONTRIBUTION_RESULT_KEYS)
+    expectContributionKeys(typedByFlow.value)
     const flows = typedByFlow.value.flows
     expect(flows).not.toBeNull()
     flows?.forEach((hotspot) => {
@@ -653,7 +671,7 @@ describe('recorded response keys match the types field for field', () => {
 
   it('contributions by path', () => {
     expectKeys(typedByPath, ANSWER_KEYS)
-    expectKeys(typedByPath.value, CONTRIBUTION_RESULT_KEYS)
+    expectContributionKeys(typedByPath.value)
     expect(typedByPath.value.root).not.toBeNull()
     if (typedByPath.value.root) expectTreeNodeKeys(typedByPath.value.root)
     expect(typedByPath.value.processes).toBeNull()

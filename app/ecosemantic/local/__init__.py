@@ -84,6 +84,12 @@ def build_context(
     inventory = NativeInventory(store)
     resolver = InventoryResolver(inventory)
     bus = EventBus()
+    storage = FilesystemStorage(systems, resolver)
+    runs = FilesystemRuns(systems)
+    installs = FilesystemInstalls(data)
+    storage.sweep()
+    runs.sweep()
+    installs.sweep()
 
     def release() -> None:
         """Release what the bound backends and the resolver hold."""
@@ -94,13 +100,13 @@ def build_context(
         inventory=inventory,
         search=NativeSearch(store),
         calculation=NativeCalculation(store),
-        storage=NotifyingStorage(FilesystemStorage(systems, resolver), bus),
+        storage=NotifyingStorage(storage, bus),
         resolver=resolver,
         actor=actor if actor is not None else AGENT,
-        runs=FilesystemRuns(systems),
+        runs=runs,
         activity=FilesystemActivity(systems),
         launcher=LocalLauncher(systems, data, systems, store.solver),
-        installs=FilesystemInstalls(data),
+        installs=installs,
         installer=LocalInstaller(data),
         systems_dir=systems,
         data_dir=data,

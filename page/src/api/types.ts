@@ -50,7 +50,7 @@ export interface ExchangeOverride {
   exchange_id: string
   amount: number | null
   multiplier: number | null
-  input: Exclude<ExchangeInput, SystemRef> | null
+  input: BackgroundRef | ForegroundRef | null
 }
 export interface ParameterOverride { kind: 'parameter'; name: string; value: number }
 export type Override = ExchangeOverride | ParameterOverride
@@ -183,7 +183,7 @@ export interface Method {
   impact_category: string
   indicator: string
 }
-export interface Score { value: number; unit: string; method: Method }
+export interface Score { value: number; unit: string; method_id: string }
 export interface PairedDelta { delta_abs: number; delta_pct: number | null; delta_ci95: [number, number] | null }
 export interface VariantScores { name: string; scores: Score[]; deltas: number[]; credit_loops: string[][]; linked_credit_loops: LinkedLoop[]; treatments_run_backwards: string[]; uncertainty: MonteCarloResult | null; paired_deltas: PairedDelta[] | null }
 export type Scope = 'full' | 'biosphere_only'
@@ -197,11 +197,12 @@ export interface MonteCarloSummary {
   percentiles: [number, number]
   rel_se: number | null
 }
-export interface MonteCarloCategory { method: Method; summary: MonteCarloSummary; samples: number[] }
+export interface Histogram { low: number; high: number; counts: number[] }
+export interface MonteCarloCategory { method_id: string; summary: MonteCarloSummary; samples: number[] | null; histogram: Histogram | null }
 export type Stopped = 'target' | 'ceiling' | 'fixed' | 'cancelled'
-export interface MonteCarloResult { database: Database; n: number; stopped: Stopped; gating_method: Method; scope: Scope; normals_at_amount: number; credit_loops: string[][]; dropped_draws: number[]; dropped_loops: string[][]; dropped_background: string[]; linked_credit_loops: LinkedLoop[]; dropped_linked_loops: LinkedLoop[]; categories: MonteCarloCategory[] }
+export interface MonteCarloResult { database: Database; n: number; stopped: Stopped; gating_method: string; scope: Scope; normals_at_amount: number; credit_loops: string[][]; dropped_draws: number[]; dropped_loops: string[][]; dropped_background: string[]; linked_credit_loops: LinkedLoop[]; dropped_linked_loops: LinkedLoop[]; categories: MonteCarloCategory[] }
 export interface PinBehind { product_system_id: string; name: string; at_hash: string }
-export interface ImpactResult { product_system: string; database: Database; scores: Score[]; credit_loops: string[][]; linked_credit_loops: LinkedLoop[]; links_behind: PinBehind[]; treatments_run_backwards: string[]; variants: VariantScores[]; uncertainty: MonteCarloResult | null }
+export interface ImpactResult { product_system: string; database: Database; methods: Method[]; scores: Score[]; credit_loops: string[][]; linked_credit_loops: LinkedLoop[]; links_behind: PinBehind[]; treatments_run_backwards: string[]; variants: VariantScores[]; uncertainty: MonteCarloResult | null }
 export type RunStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
 export interface RunProgress { iterations: number; worst_rel_se: number | null }
 export interface Run {
@@ -305,6 +306,7 @@ export interface Cut {
 export interface ContributionResult {
   database: Database
   by: Decomposition
+  method: Method
   total: Score
   credit_loops: string[][]
   linked_credit_loops: LinkedLoop[]

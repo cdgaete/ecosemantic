@@ -12,22 +12,25 @@
     },
     "linked_credit_loops": [],
     "links_behind": [],
+    "methods": [
+      {
+        "id": "m_bff077f3bd",
+        "impact_category": "climate change",
+        "impact_method": "gwp",
+        "indicator": "GWP100",
+        "spec": "fixture > gwp > climate change > GWP100",
+        "tuple": [
+          "fixture",
+          "gwp",
+          "climate change > GWP100"
+        ],
+        "unit": "kg CO2-Eq"
+      }
+    ],
     "product_system": "widget",
     "scores": [
       {
-        "method": {
-          "id": "m_bff077f3bd",
-          "impact_category": "climate change",
-          "impact_method": "gwp",
-          "indicator": "GWP100",
-          "spec": "fixture > gwp > climate change > GWP100",
-          "tuple": [
-            "fixture",
-            "gwp",
-            "climate change > GWP100"
-          ],
-          "unit": "kg CO2-Eq"
-        },
+        "method_id": "m_bff077f3bd",
         "unit": "kg CO2-Eq",
         "value": 4.158
       }

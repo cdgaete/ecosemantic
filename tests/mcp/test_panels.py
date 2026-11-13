@@ -5,7 +5,7 @@ import dataclasses
 from fastmcp import Client
 
 from ecosemantic.mcp.context import ServerContext
-from ecosemantic.mcp.panels import PANELS
+from ecosemantic.mcp.panels import PANELS, html
 from ecosemantic.mcp.server import build_server
 from ecosemantic.model.entities import ProductSystem, method_id
 from tests.fixture_data import GWP
@@ -89,3 +89,28 @@ async def test_each_panel_says_it_is_a_figure_the_host_fills_from_its_call(
     for tool, name in CARRIERS.items():
         description = listed[PANELS[name]].description or ""
         assert "carries no data" in description and tool in description, name
+
+
+def test_the_impact_panel_draws_its_bars_from_the_histogram_or_from_the_samples() -> None:
+    # this reads the document; the script runs over recorded answers in page/tests/panels.test.ts
+    document = html("impact")
+    body = document.split("function histogram(value, category) {", 1)[1].split("\n  }", 1)[0]
+    counted = document.split("function counted(samples) {", 1)[1].split("\n  }", 1)[0]
+    assert "category.histogram ? category.histogram.counts" in body
+    assert "category.samples.slice()" not in body
+    assert "samples.slice().sort(" in counted
+    assert "bins = 20" in counted and "new Array(bins).fill(0)" in counted
+    first = next(line for line in body.splitlines() if line.strip())
+    assert "category.histogram" not in first
+    assert "<svg viewBox=" not in body.split("counts === null", 1)[0]
+    assert "mean_ci95" not in document
+    assert "s.median_ci95" in body
+
+
+def test_the_impact_panel_reads_each_spec_from_the_answer_s_methods_by_id() -> None:
+    # this reads the document; the script runs over recorded answers in page/tests/panels.test.ts
+    document = html("impact")
+    assert ".method.spec" not in document
+    assert "value.methods" in document
+    assert "specOf(value, score.method_id)" in document
+    assert "specOf(value, category.method_id)" in document

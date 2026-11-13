@@ -10,13 +10,13 @@
       "at_hash": "5e7cbc6616a342f77bae99b02dae520bc6d6861274530f8845675868ac9e7630",
       "entity": null,
       "entity_id": null,
-      "id": "fae7e177-7557-43f8-9f16-0d68e0c2cb89",
+      "id": "d602c488-533c-463e-87eb-9432b4b696da",
       "kind": "return",
       "message": "recheck the lorry distance",
       "open": true,
       "outcome": null,
       "seq": 1,
-      "timestamp": "2026-10-20T06:59:17.864613Z"
+      "timestamp": "2026-11-13T18:37:27.318576Z"
     },
     {
       "actor": {
@@ -27,7 +27,7 @@
       "at_hash": "5e7cbc6616a342f77bae99b02dae520bc6d6861274530f8845675868ac9e7630",
       "entity": "process",
       "entity_id": "frame",
-      "id": "442a5496-881d-4c2d-a544-c639ed51be29",
+      "id": "0349c6a7-8ed4-4ab1-8721-bf3d7e6d4cb2",
       "kind": "edit",
       "message": "use recycled steel in the frame",
       "open": false,
@@ -39,10 +39,10 @@
         },
         "message": "the supplier certifies no recycled content",
         "resolution": "overridden",
-        "timestamp": "2026-10-20T06:59:17.865118Z"
+        "timestamp": "2026-11-13T18:37:27.319187Z"
       },
       "seq": 2,
-      "timestamp": "2026-10-20T06:59:17.864950Z"
+      "timestamp": "2026-11-13T18:37:27.318966Z"
     }
   ],
   "view_url": null

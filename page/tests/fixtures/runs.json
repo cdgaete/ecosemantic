@@ -22,8 +22,8 @@
         }
       ],
       "error": null,
-      "finished_at": "2026-10-20T06:59:20.187766Z",
-      "id": "b6d4acc0-3564-4440-a992-8211c2f6b40a",
+      "finished_at": "2026-11-13T18:37:30.140362Z",
+      "id": "c1cf7f3b-9b04-411f-8eb7-640abab1782d",
       "methods": [
         {
           "id": "m_bff077f3bd",
@@ -40,14 +40,14 @@
         }
       ],
       "open": false,
-      "pid": 1153178,
-      "posted_at": "2026-10-20T06:59:19.811107Z",
+      "pid": 3613367,
+      "posted_at": "2026-11-13T18:37:29.707680Z",
       "product_system_id": "bb309f67-e625-53b4-8e7c-3062610d2de0",
       "progress": {
         "iterations": 6,
         "worst_rel_se": 0.008721077974733555
       },
-      "started_at": "2026-10-20T06:59:20.172697Z",
+      "started_at": "2026-11-13T18:37:30.123548Z",
       "status": "done",
       "treatments_run_backwards": []
     }

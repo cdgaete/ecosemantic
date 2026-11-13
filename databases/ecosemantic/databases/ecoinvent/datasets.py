@@ -214,6 +214,65 @@ def _exchange(
     return None
 
 
+def _comment_block(block: ET.Element | None, native: str) -> str:
+    """A comment block as one text: its children in document order, a text as its text and an
+    image named, joined by a newline, every child holding no text left out; a block of another
+    child is refused."""
+    if block is None:
+        return ""
+    parts: list[str] = []
+    for child in block:
+        tag = child.tag.removeprefix(NS)
+        body = child.text or ""
+        if tag == "text":
+            if body.strip():
+                parts.append(body)
+        elif tag == "imageUrl":
+            if body.strip():
+                parts.append(f"Image: {body}")
+        else:
+            raise Invalid(f"{native} holds a {tag} in a comment block")
+    return "\n".join(parts)
+
+
+def _prefixed(prefix: str, body: str) -> str:
+    """A named part of a comment, absent when the block it names holds no text."""
+    return f"{prefix}{body}" if body else ""
+
+
+def _comment(description: ET.Element, activity: ET.Element, native: str) -> str | None:
+    """A dataset's comment: its general comment, the activities it includes and its geography,
+    technology and time period, each part named and left out when it holds no text."""
+    geography = _comment_block(description.find(f"{NS}geography/{NS}comment"), native)
+    technology = _comment_block(description.find(f"{NS}technology/{NS}comment"), native)
+    period = _comment_block(description.find(f"{NS}timePeriod/{NS}comment"), native)
+    parts = [
+        _comment_block(activity.find(f"{NS}generalComment"), native),
+        _prefixed("Included activities start: ", text(activity, "includedActivitiesStart")),
+        _prefixed("Included activities end: ", text(activity, "includedActivitiesEnd")),
+        _prefixed("Geography: ", geography),
+        _prefixed("Technology: ", technology),
+        _prefixed("Time period: ", period),
+    ]
+    return "\n".join(part for part in parts if part) or None
+
+
+def _classifications(
+    description: ET.Element, reference: ET.Element, native: str
+) -> tuple[tuple[str, str], ...]:
+    """A dataset's classifications: its activity's then its reference product's, each a system
+    and a value in file order and each pair once; an incomplete one stops the read."""
+    pairs: list[tuple[str, str]] = []
+    for element in (description, reference):
+        for classification in element.findall(f"{NS}classification"):
+            system = text(classification, "classificationSystem")
+            value = text(classification, "classificationValue")
+            if not system or not value:
+                raise Invalid(f"{native} holds a classification without a system or a value")
+            pairs.append((system, value))
+    return tuple(dict.fromkeys(pairs))
+
+
 def _dataset(
     path: Path,
     urls: dict[str, str],
@@ -257,9 +316,10 @@ def _dataset(
         reference_product=text(reference, "name"),
         unit=exchange_unit(reference, native, findings.unknown_units),
         location=text(geography, "shortname"),
-        comment=None,
+        comment=_comment(description, activity, native),
         url=urls.get(native),
         exchanges=exchanges,
+        classifications=_classifications(description, reference, native),
     )
 
 

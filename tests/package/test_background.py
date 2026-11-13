@@ -148,6 +148,32 @@ def test_the_missing_provider_is_the_one_unlinked_input(imported: Import) -> Non
     assert all(FLOW_IDS["part"] not in str(code) for _, code in widget)
 
 
+def test_a_process_reads_its_category_then_its_tags_as_classifications(tmp_path: Path) -> None:
+    package = build_package(
+        tmp_path / "tagged.zip",
+        categories={"elec": "Energy/carriers"},
+        tags={
+            "elec": ["CPC: 17100: Electrical energy"],
+            "steel": ["By-product classification: allocatable product", "CPC: 4123"],
+        },
+    )
+    imported = read_background(package, NAME, foreground=frozenset())
+    elec = imported.datasets[(NAME, _code("elec", "electricity"))]
+    assert elec["classifications"] == [
+        ("Category", "Energy/carriers"),
+        "CPC: 17100: Electrical energy",
+    ]
+    steel = imported.datasets[(NAME, _code("steel", "steel"))]
+    assert steel["classifications"] == [
+        "By-product classification: allocatable product",
+        "CPC: 4123",
+    ]
+    widget = imported.datasets[(NAME, _code("widget", "widget"))]
+    assert widget["classifications"] == [("Category", "Manufacturing/assembly")]
+    treatment = imported.datasets[(NAME, _code("treatment", "scrap"))]
+    assert treatment["classifications"] == []
+
+
 def test_elementary_flows_carry_compartment_type_and_cas(imported: Import) -> None:
     co2 = imported.flows[(f"{NAME}-biosphere", FLOW_IDS["co2"])]
     assert co2["categories"] == ("Emissions to air", "unspecified") and co2["type"] == "emission"

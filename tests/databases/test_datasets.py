@@ -19,6 +19,8 @@ from tests.databases.spold_fixture import (
     IRON,
     NS,
     STEEL,
+    STEEL_CLASSIFICATIONS,
+    STEEL_COMMENT,
     STEEL_PRODUCT,
     TREAT,
     TREAT_PRODUCT,
@@ -64,7 +66,8 @@ def test_each_dataset_is_its_reference_product_with_linked_inputs(tmp_path: Path
     by_code = {d.code: d for d in datasets}
     steel = by_code[STEEL]
     assert steel.native == STEEL and steel.name == "steel production"
-    assert steel.reference_product == "steel" and steel.comment is None and steel.url is None
+    assert steel.reference_product == "steel" and steel.comment == STEEL_COMMENT
+    assert steel.url is None
     assert steel.location == "NA" and steel.unit == "kilogram"
     kinds = [(e.kind, e.input, e.amount) for e in steel.exchanges]
     assert ("production", STEEL, 1.0) in kinds
@@ -527,4 +530,48 @@ def test_a_dataset_without_flow_data_stops_the_read(tmp_path: Path) -> None:
 
     _rewrite(tmp_path, STEEL, drop_flows)
     with pytest.raises(Invalid, match="flowData"):
+        read_datasets(release.ecospold, urls={})
+
+
+def test_the_comment_and_classifications_are_read_off_the_dataset(tmp_path: Path) -> None:
+    datasets, findings = read_datasets(build_release(tmp_path).ecospold, urls={})
+    steel = next(d for d in datasets if d.code == STEEL)
+    assert steel.comment == STEEL_COMMENT
+    assert steel.classifications == STEEL_CLASSIFICATIONS
+    assert findings.unread == {}
+
+
+def test_a_dataset_without_a_comment_or_a_classification_reads_neither(tmp_path: Path) -> None:
+    datasets, _ = read_datasets(build_release(tmp_path).ecospold, urls={})
+    elec = next(d for d in datasets if d.code == ELEC)
+    assert elec.comment is None and elec.classifications == ()
+
+
+def test_a_comment_block_holding_an_unknown_child_stops_the_read(tmp_path: Path) -> None:
+    release = build_release(tmp_path)
+
+    def footnote(root: ET.Element) -> None:
+        activity = _dataset_element(root).find(f"{{{NS}}}activityDescription/{{{NS}}}activity")
+        assert activity is not None
+        block = activity.find(f"{{{NS}}}generalComment")
+        assert block is not None
+        ET.SubElement(block, f"{{{NS}}}footnote").text = "made up"
+
+    _rewrite(tmp_path, STEEL, footnote)
+    with pytest.raises(Invalid, match=f"{STEEL} holds a footnote"):
+        read_datasets(release.ecospold, urls={})
+
+
+def test_a_classification_without_a_value_stops_the_read(tmp_path: Path) -> None:
+    release = build_release(tmp_path)
+
+    def unvalued(root: ET.Element) -> None:
+        classification = _exchange(root, STEEL_PRODUCT).find(f"{{{NS}}}classification")
+        assert classification is not None
+        value = classification.find(f"{{{NS}}}classificationValue")
+        assert value is not None
+        classification.remove(value)
+
+    _rewrite(tmp_path, STEEL, unvalued)
+    with pytest.raises(Invalid, match=f"{STEEL} holds a classification"):
         read_datasets(release.ecospold, urls={})

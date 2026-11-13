@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import pytest
 from fastmcp import Client, FastMCP
@@ -106,6 +107,27 @@ async def test_set_parameters_refusals(full_server: FastMCP, bottle: str) -> Non
         assert derived["error"] == "invalid" and "twice" in derived["message"]
 
 
+def _override_input_kinds(schema: dict[str, Any]) -> set[str]:
+    """The kind each input the schema lets an exchange override name declares."""
+    branches = schema["properties"]["overrides"]["items"]["oneOf"]
+    exchange = next(
+        branch for branch in branches if branch["properties"]["kind"]["const"] == "exchange"
+    )
+    return {
+        option["properties"]["kind"]["const"]
+        for option in exchange["properties"]["input"]["anyOf"][0]["oneOf"]
+    }
+
+
+async def test_create_scenario_schema_takes_a_process_input_alone(full_server: FastMCP) -> None:
+    async with Client(full_server) as client:
+        tools = {tool.name: tool for tool in await client.list_tools()}
+    assert _override_input_kinds(tools["create_scenario"].input_schema) == {
+        "background",
+        "foreground",
+    }
+
+
 async def test_a_scenario_is_refused_when_stale_and_calculates_when_rebased(
     full_server: FastMCP, bottle: str
 ) -> None:
@@ -198,6 +220,42 @@ async def test_set_parameters_answers_the_matrix_too(full_server: FastMCP, bottl
             },
         )
     assert out.structured_content["value"]["matrix"]["cases"] == ["high"]
+
+
+async def test_get_parameters_answers_the_parameters_in_the_order_they_were_written(
+    full_server: FastMCP, bottle: str
+) -> None:
+    async with Client(full_server) as client:
+        await client.call_tool(
+            "set_parameters",
+            {
+                "product_system_id": bottle,
+                "parameters": [
+                    {"name": "kwh_per_kg", "value": 1.2, "unit": "kWh/kg"},
+                    {"name": "grid_loss", "value": 0.08},
+                    {"name": "distance_km", "value": 240.0, "unit": "km"},
+                ],
+            },
+        )
+        await client.call_tool(
+            "set_parameters",
+            {
+                "product_system_id": bottle,
+                "parameters": [
+                    {"name": "kwh_per_kg", "value": 1.4, "unit": "kWh/kg"},
+                    {"name": "tkm", "value": 12.0, "unit": "tkm"},
+                ],
+            },
+        )
+        space = await client.call_tool("get_parameters", {"product_system_id": bottle})
+    parameters = space.structured_content["value"]["parameters"]
+    assert [p["name"] for p in parameters] == [
+        "kwh_per_kg",
+        "grid_loss",
+        "distance_km",
+        "tkm",
+    ]
+    assert parameters[0]["value"] == 1.4
 
 
 async def test_get_parameters_answers_a_past_version_when_given_its_hash(

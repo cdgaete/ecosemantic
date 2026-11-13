@@ -3,18 +3,54 @@
 from __future__ import annotations
 
 import asyncio
-import shutil
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from datetime import datetime
 from pathlib import Path
 
 from filelock import AsyncFileLock
+from pydantic import model_validator
 
 from ecosemantic.backends.filesystem.records import RecordFolder
 from ecosemantic.backends.filesystem.run_folder import RECORD_FILE, RUNS_DIR
 from ecosemantic.ports import posted
 from ecosemantic.ports.types import Run, RunDraft, RunPatch, StoreChange, refuse_open
+
+
+class StoredRun(Run):
+    """A run as its record holds it, where a result naming each method by its whole record reads
+    as one naming it by id."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _methods_named_by_id(cls, value: object) -> object:
+        """The record with its result naming each method by id, and any other value as it is."""
+        if not isinstance(value, Mapping):
+            return value
+        result = value.get("result")
+        if not isinstance(result, Mapping):
+            return value
+        named = dict(result)
+        gating = named.get("gating_method")
+        if isinstance(gating, Mapping):
+            named["gating_method"] = gating["id"]
+        categories = named.get("categories")
+        if isinstance(categories, list):
+            named["categories"] = [_category_named_by_id(category) for category in categories]
+        return {**value, "result": named}
+
+
+def _category_named_by_id(category: object) -> object:
+    """One category naming its method by the id of the record it holds, or as it is when it holds
+    no record."""
+    if not isinstance(category, Mapping):
+        return category
+    method = category.get("method")
+    if not isinstance(method, Mapping):
+        return category
+    named = {key: value for key, value in category.items() if key != "method"}
+    named["method_id"] = method["id"]
+    return named
 
 
 class FilesystemRuns:
@@ -27,7 +63,7 @@ class FilesystemRuns:
 
     def __init__(self, root: Path) -> None:
         self.root = root
-        self.records = RecordFolder(root, RUNS_DIR, RECORD_FILE, Run, "run")
+        self.records = RecordFolder[Run](root, RUNS_DIR, RECORD_FILE, StoredRun, "run")
 
     def read_record(self, run_id: uuid.UUID) -> Run:
         """One run, read synchronously; the worker's callback runs off the event loop."""
@@ -35,12 +71,11 @@ class FilesystemRuns:
 
     def apply_patch(self, run_id: uuid.UUID, patch: RunPatch) -> Run:
         """The record with the patch's named fields applied, written synchronously."""
-        with self.records.lock(run_id):
-            return self.records.write(run_id, patch.applied_to(self.read_record(run_id)))
+        return self.records.patch(run_id, patch.applied_to)
 
     async def post_run(self, draft: RunDraft) -> Run:
         def construct(posted_at: datetime) -> Run:
-            return Run(id=uuid.uuid4(), posted_at=posted_at, **draft.model_dump())
+            return StoredRun(id=uuid.uuid4(), posted_at=posted_at, **draft.model_dump())
 
         return await asyncio.to_thread(self.records.post, construct)
 
@@ -70,8 +105,7 @@ class FilesystemRuns:
             owned = [r for r in self.records.all() if r.product_system_id == product_system_id]
             refuse_open(owned)
             for run in owned:
-                with self.records.lock(run.id):
-                    shutil.rmtree(self.records.folder(run.id))
+                self.records.remove(run.id)
 
         await asyncio.to_thread(remove)
 
@@ -89,6 +123,10 @@ class FilesystemRuns:
                 await found.aclose()
 
         return iterate()
+
+    def sweep(self) -> None:
+        """Remove the lock file of every run this store does not hold."""
+        self.records.sweep()
 
     def slot(self) -> AsyncFileLock:
         """The workspace's one-run slot: a file lock every process over this directory takes,

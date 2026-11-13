@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import uuid
 from pathlib import Path
 
 import pytest
@@ -72,6 +73,28 @@ def test_the_variable_names_the_data_directory(
     data, systems = default_directories()
     assert data == clean / "elsewhere"
     assert systems == clean / "home" / ".local" / "share" / "ecosemantic" / "systems"
+
+
+def test_building_a_context_removes_the_lock_files_of_ids_the_directories_do_not_hold(
+    tmp_path: Path,
+) -> None:
+    data = tmp_path / "data"
+    systems = tmp_path / "systems"
+    (data / "installs" / "uploads").mkdir(parents=True)
+    (systems / "runs").mkdir(parents=True)
+    orphans = [
+        systems / f"{uuid.uuid4()}.lock",
+        systems / "runs" / f"{uuid.uuid4()}.lock",
+        data / "installs" / f"{uuid.uuid4()}.lock",
+    ]
+    for lock in orphans:
+        lock.write_text("", encoding="utf-8")
+
+    context = build_context(data, systems, environ={})
+    try:
+        assert [lock for lock in orphans if lock.exists()] == []
+    finally:
+        context.close()
 
 
 def test_build_context_holds_the_accounts_the_environment_names(

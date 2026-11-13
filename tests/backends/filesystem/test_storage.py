@@ -67,6 +67,23 @@ class TestFilesystemStorage(StorageConformance):
         assert str(missing) in str(refused.value)
         assert str(storage.root) not in str(refused.value)
 
+    async def test_a_system_the_store_does_not_hold_is_read_logged_and_laid_out_without_a_lock(
+        self, storage: FilesystemStorage
+    ) -> None:
+        missing = uuid.uuid4()
+        for work in (storage.get_product_system, storage.log, storage.get_layout):
+            with pytest.raises(NotFound):
+                await work(missing)
+        assert not storage.root.exists() or list(storage.root.iterdir()) == []
+
+    async def test_deleting_a_stored_system_leaves_no_file_and_no_folder_of_its_id(
+        self, storage: FilesystemStorage, product_system: ProductSystem
+    ) -> None:
+        agent = Actor(kind="agent", id="mcp")
+        await storage.put_product_system(product_system, agent, "created")
+        await storage.delete_product_system(product_system.id, agent)
+        assert list(storage.root.iterdir()) == []
+
     async def test_requests_sit_beside_the_log_and_survive_a_write(
         self, storage: FilesystemStorage, product_system: ProductSystem
     ) -> None:
@@ -155,6 +172,51 @@ class TestFilesystemStorage(StorageConformance):
         current = await storage.get_product_system(product_system.id)
         assert time.monotonic() - started >= 1.0
         assert current.id == product_system.id
+        assert process.wait(timeout=10) == 0
+
+    async def test_a_sweep_removes_the_lock_file_of_an_id_the_store_does_not_hold(
+        self, storage: FilesystemStorage, product_system: ProductSystem
+    ) -> None:
+        agent = Actor(kind="agent", id="mcp")
+        await storage.put_product_system(product_system, agent, "created")
+        stored = storage.root / f"{product_system.id}.lock"
+        orphan = storage.root / f"{uuid.uuid4()}.lock"
+        orphan.write_text("", encoding="utf-8")
+        notes = storage.root / "notes.lock"
+        notes.write_text("", encoding="utf-8")
+
+        storage.sweep()
+
+        assert not orphan.exists()
+        assert (storage.root / str(product_system.id)).is_dir() and stored.is_file()
+        assert notes.is_file()
+
+    async def test_a_sweep_waits_for_the_lock_of_an_orphan_another_process_holds(
+        self, storage: FilesystemStorage
+    ) -> None:
+        orphan = storage.root / f"{uuid.uuid4()}.lock"
+        orphan.parent.mkdir(parents=True, exist_ok=True)
+        orphan.write_text("", encoding="utf-8")
+        holder = (
+            "import sys, time\n"
+            "from filelock import FileLock\n"
+            "with FileLock(sys.argv[1]):\n"
+            "    print('held', flush=True)\n"
+            "    time.sleep(1.5)\n"
+        )
+        process = subprocess.Popen(
+            [sys.executable, "-c", holder, str(orphan)],
+            stdout=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+        )
+        assert process.stdout is not None and process.stdout.readline().strip() == "held"
+
+        started = time.monotonic()
+        storage.sweep()
+
+        assert time.monotonic() - started >= 1.0
+        assert not orphan.exists()
         assert process.wait(timeout=10) == 0
 
     async def test_a_returned_export_appends_one_openlca_entry(

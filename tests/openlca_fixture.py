@@ -173,8 +173,20 @@ def build_package(
     no_location: bool = False,
     unknown_location: bool = False,
     widget_reference: float = 1.0,
+    categories: dict[str, str] | None = None,
+    tags: dict[str, list[str]] | None = None,
 ) -> Path:
     """Write the package as a zip at path and return it."""
+
+    def fields(key: str, given: dict[str, object]) -> dict[str, object]:
+        """A process's own fields, with the category and the tags these maps give it."""
+        described = {**given}
+        if categories is not None and key in categories:
+            described["category"] = categories[key]
+        if tags is not None and key in tags:
+            described["tags"] = tags[key]
+        return described
+
     with ZipWriter(str(path)) as writer:
         for group, (reference, others) in GROUPS.items():
             units = [
@@ -236,6 +248,7 @@ def build_package(
                     ),
                     _exchange(2, "co2", 1.0, is_input=False),
                 ],
+                **fields("elec", {}),
             )
         )
         writer.write(
@@ -271,6 +284,7 @@ def build_package(
                 ],
                 location=None if no_location else "GLO",
                 location_id=MISSING_LOCATION if unknown_location else None,
+                **fields("steel", {}),
             )
         )
         allocation = (
@@ -301,6 +315,7 @@ def build_package(
                 ],
                 default_allocation_method=allocation,
                 allocation_factors=allocation_factors,
+                **fields("refinery", {}),
             )
         )
         widget = [
@@ -316,7 +331,9 @@ def build_package(
             widget.append(
                 _exchange(8, "scrap", 0.2, is_input=True, provider=PROCESSES["treatment"])
             )
-        writer.write(_process("widget", widget, category="Manufacturing/assembly"))
+        writer.write(
+            _process("widget", widget, **fields("widget", {"category": "Manufacturing/assembly"}))
+        )
         writer.write(
             _process(
                 "treatment",
@@ -324,6 +341,7 @@ def build_package(
                     _exchange(1, "scrap", 1.0, is_input=True, reference=True),
                     _exchange(2, "co2", 0.3, is_input=False),
                 ],
+                **fields("treatment", {}),
             )
         )
         climate_factors = [_impact("co2", "Mass", "kg", 1.0), _impact("ch4", "Mass", "g", 0.028)]

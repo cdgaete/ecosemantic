@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import uuid
 from pathlib import Path
 
@@ -8,11 +9,18 @@ import pytest
 
 from ecosemantic.errors import Invalid, NotFound
 from ecosemantic.model.canonical import content_hash
-from ecosemantic.model.entities import ProductSystem
+from ecosemantic.model.entities import ProductSystem, Uncertainty
 from ecosemantic.model.refs import BackgroundRef
 from ecosemantic.package.jsonld import read_jsonld, write_jsonld
 from ecosemantic.package.log import diff_product_systems
-from ecosemantic.package.sidecar import ActivityRecord, Identities, ProjectRecord, Sidecar
+from ecosemantic.package.sidecar import (
+    ActivityRecord,
+    Identities,
+    ProjectRecord,
+    Sidecar,
+    read_sidecar,
+    write_sidecar,
+)
 from ecosemantic.ports.resolver import BackgroundInfo
 from tests.conftest import (
     BACKGROUNDS,
@@ -115,6 +123,46 @@ def test_edits_made_in_the_files_come_back_as_changes(
     added = next(e for e in back.process("fabric").exchanges if e.amount == 0.002)
     assert added.type == "elementary" and added.input == CO2
     assert added.name == "Carbon dioxide, fossil"
+
+
+def _reordered(product_system: ProductSystem, names: list[str]) -> ProductSystem:
+    """The t-shirt with its parameters in the given order, each one as the fixture states it."""
+    by_name = {p.name: p for p in product_system.parameters}
+    return product_system.model_copy(update={"parameters": [by_name[name] for name in names]})
+
+
+def test_parameters_read_back_in_the_order_the_document_carries_them(
+    product_system: ProductSystem, resolver: DictResolver, tmp_path: Path
+) -> None:
+    written = ["organic_share", "elec_per_kg", "fabric_mass", "fibre_mass", "waste_rate"]
+    ordered = _reordered(product_system, written)
+    sidecar = _sidecar(ordered, write_jsonld(ordered, tmp_path, resolver))
+    back = read_jsonld(tmp_path, sidecar)
+    # the parameters' files sort as waste_rate, fabric_mass, fibre_mass, elec_per_kg, organic_share
+    assert [p.name for p in back.parameters] == written
+
+
+def test_a_parameter_the_sidecar_does_not_name_reads_after_the_named_ones(
+    product_system: ProductSystem, resolver: DictResolver, tmp_path: Path
+) -> None:
+    ordered = _reordered(
+        product_system,
+        ["organic_share", "elec_per_kg", "fabric_mass", "fibre_mass", "waste_rate"],
+    )
+    sidecar = _sidecar(ordered, write_jsonld(ordered, tmp_path, resolver))
+    write_sidecar(tmp_path, sidecar)
+    path = tmp_path / "ecosemantic" / "identities.json"
+    identities = json.loads(path.read_text(encoding="utf-8"))
+    del identities["parameter_units"]["elec_per_kg"]
+    path.write_text(json.dumps(identities), encoding="utf-8")
+    back = read_jsonld(tmp_path, read_sidecar(tmp_path))
+    assert [p.name for p in back.parameters] == [
+        "organic_share",
+        "fabric_mass",
+        "fibre_mass",
+        "waste_rate",
+        "elec_per_kg",
+    ]
 
 
 def test_new_process_gets_a_fresh_activity(
@@ -266,6 +314,26 @@ def test_a_negative_input_reads_back_as_written(
     # the scale crosses exp and log on the way through openLCA's geometric deviation
     assert read.uncertainty.params["scale"] == pytest.approx(0.3)
     assert content_hash(back) == content_hash(negative)
+
+
+@pytest.mark.parametrize("amount", [0.5, -0.5], ids=["positive", "negative"])
+def test_a_lognormals_written_parameters_read_back_as_written(
+    product_system: ProductSystem, resolver: DictResolver, tmp_path: Path, amount: float
+) -> None:
+    stated = product_system.model_copy(deep=True)
+    electricity = stated.process("tshirt").exchanges[2]
+    electricity.amount = amount
+    electricity.uncertainty = Uncertainty(
+        type="lognormal", params={"loc": math.log(0.5), "scale": 0.1823}
+    ).scaled(1.0 if amount > 0 else -1.0)
+    sidecar = _sidecar(stated, write_jsonld(stated, tmp_path, resolver))
+    back = read_jsonld(tmp_path, sidecar)
+    read = back.process("tshirt").exchanges[2]
+    assert read.amount == amount
+    assert read.uncertainty is not None
+    assert read.uncertainty.params["scale"] == 0.1823
+    assert read.uncertainty.params["loc"] == electricity.uncertainty.params["loc"]
+    assert content_hash(back) == content_hash(stated)
 
 
 def test_an_empty_document_round_trips(

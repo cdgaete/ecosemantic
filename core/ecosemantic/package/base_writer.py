@@ -39,7 +39,8 @@ class BaseExchange:
 
 @dataclass(frozen=True)
 class BaseDataset:
-    """A process of a base database, its exchanges and the ids that name it."""
+    """A process of a base database, its exchanges and the ids that name it. Its comment and its
+    classifications are what the source says about it, and either may be absent."""
 
     code: str
     native: str
@@ -50,6 +51,7 @@ class BaseDataset:
     comment: str | None
     url: str | None
     exchanges: tuple[BaseExchange, ...]
+    classifications: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -231,6 +233,8 @@ class _Builder:
                     id=olca_process_id(self.scheme, dataset.native),
                     name=dataset.name,
                     description=dataset.comment,
+                    tags=[f"{system}: {value}" for system, value in dataset.classifications]
+                    or None,
                     process_type=o.ProcessType.UNIT_PROCESS,
                     location=location,
                     exchanges=exchanges,

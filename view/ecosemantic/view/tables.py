@@ -77,13 +77,15 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             _, _, entry = await apply_tables(context, system_id, folder, actor, "returned tables")
         return created(entry)
 
-    def calculation(tool: str, render: Render, filename: str) -> Handler:
+    def calculation(tool: str, render: Render, filename: str, **fixed: JsonValue) -> Handler:
         @answering
         async def handler(request: Request) -> Response:
             body = await json_object(request)
             system_id = as_uuid(request.path_params["id"])
             stored = await context.storage.get_product_system(system_id)
-            answered = await structured(server, tool, {"product_system_id": str(system_id), **body})
+            answered = await structured(
+                server, tool, {"product_system_id": str(system_id), **body, **fixed}
+            )
             key = result_key(
                 stored,
                 _NAME.validate_python(body.get("method_id")),
@@ -103,7 +105,7 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
         Route(f"{base}/tables", tables_returned, methods=["POST"]),
         Route(
             f"{base}/impact.zip",
-            calculation("calculate_impact", _impact, "impact.zip"),
+            calculation("calculate_impact", _impact, "impact.zip", samples=True),
             methods=["POST"],
         ),
         Route(

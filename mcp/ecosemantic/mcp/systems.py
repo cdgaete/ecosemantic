@@ -37,6 +37,7 @@ from ecosemantic.model.entities import ProductSystem
 from ecosemantic.model.validation import ValidationReport, validate
 from ecosemantic.package.model_package import export_model_package, import_model_package, stated_at
 from ecosemantic.ports.types import (
+    Limit,
     LogEntry,
     Page,
     ProductSystemSummary,
@@ -209,7 +210,10 @@ async def import_product_system(context: ServerContext, path: str) -> Written[Sy
 
 
 async def get_product_system_log(
-    context: ServerContext, product_system_id: str, limit: int = LOG_PAGE, cursor: str | None = None
+    context: ServerContext,
+    product_system_id: str,
+    limit: Limit = LOG_PAGE,
+    cursor: str | None = None,
 ) -> Listing[LogEntry]:
     entries = await context.storage.log(as_uuid(product_system_id))
     start = page_start(cursor, limit)

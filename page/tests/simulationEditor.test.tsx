@@ -133,8 +133,10 @@ it('redraws on a run event without reading the run again', async () => {
 it('tells apart two categories that share a name by their indicator', async () => {
   const result = done.value.result!
   const [first] = result.categories
-  const other = { ...first, method: { ...first.method, id: 'm_gwp20', indicator: 'GWP20' } }
-  vi.mocked(api.run).mockResolvedValueOnce(answer({ result: { ...result, categories: [first, other] } }))
+  const [firstMethod] = done.value.methods
+  const otherMethod = { ...firstMethod, id: 'm_gwp20', indicator: 'GWP20' }
+  const other = { ...first, method_id: 'm_gwp20' }
+  vi.mocked(api.run).mockResolvedValueOnce(answer({ methods: [firstMethod, otherMethod], result: { ...result, categories: [first, other] } }))
   open()
   const select = await waitFor(() => screen.getByLabelText('Impact category'))
   expect(Array.from(select.querySelectorAll('option')).map((o) => o.textContent)).toEqual(['climate change · GWP100', 'climate change · GWP20'])

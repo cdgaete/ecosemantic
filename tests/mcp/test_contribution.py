@@ -52,6 +52,7 @@ async def test_by_process_is_an_exact_partition(server: FastMCP, widget: uuid.UU
             )
         ).structured_content["value"]
     assert out["by"] == "process" and out["root"] is None
+    assert out["method"]["id"] == out["total"]["method_id"] == GWP_ID
     assert out["total"]["value"] == pytest.approx(4.158)
     assert out["database"]["fingerprint"] == FIXTURE_FINGERPRINT
     assert sum(p["score"] for p in out["processes"]) == pytest.approx(4.158)

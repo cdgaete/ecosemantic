@@ -142,7 +142,7 @@ def _sampled(samples: list[float], dropped: list[int]) -> MonteCarloResult:
         database=FIXTURE_DATABASE,
         n=len(samples),
         stopped="fixed",
-        gating_method=method,
+        gating_method=method.id,
         scope="full",
         normals_at_amount=0,
         credit_loops=[],
@@ -150,7 +150,9 @@ def _sampled(samples: list[float], dropped: list[int]) -> MonteCarloResult:
         dropped_loops=[["widget"]] if dropped else [],
         dropped_background=[],
         categories=[
-            MonteCarloCategory(method=method, summary=summarize_samples(samples), samples=samples)
+            MonteCarloCategory(
+                method_id=method.id, summary=summarize_samples(samples), samples=samples
+            )
         ],
     )
 

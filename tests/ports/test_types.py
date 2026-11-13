@@ -15,7 +15,7 @@ from ecosemantic.errors import (
     NotSupported,
     Unavailable,
 )
-from ecosemantic.model.entities import Actor, DemandItem, ProductSystem
+from ecosemantic.model.entities import Actor, DemandItem, Method, ProductSystem, method_by_id
 from ecosemantic.model.refs import ElementaryFlowRef, ForegroundRef
 from ecosemantic.ports.resolver import FlowInfo
 from ecosemantic.ports.types import (
@@ -25,6 +25,7 @@ from ecosemantic.ports.types import (
     Compartment,
     DatabaseSource,
     ElementaryFlow,
+    Histogram,
     Install,
     InstallDraft,
     InstallPatch,
@@ -33,7 +34,10 @@ from ecosemantic.ports.types import (
     InstallTerms,
     InventoryRow,
     LogEntry,
+    MonteCarloCategory,
     MonteCarloConfig,
+    MonteCarloResult,
+    MonteCarloSummary,
     Page,
     Run,
     RunPatch,
@@ -49,6 +53,7 @@ from ecosemantic.ports.types import (
     patched,
     source_credential,
 )
+from tests.fixture_data import FIXTURE_DATABASE
 
 
 def test_errors_share_a_base() -> None:
@@ -402,3 +407,82 @@ def test_a_flat_list_shows_what_reaches_the_cutoff_up_to_its_length_and_counts_t
     assert (shown, cut.below, cut.unlisted, cut.unlisted_share) == (4, 2, 0, 0.0)
     shown, cut = listed(fractions, top_n=10, cutoff=0.0)
     assert (shown, cut.below, cut.share, cut.unlisted) == (6, 0, 0.0, 0)
+
+
+def _sampled(samples: list[float] | None) -> MonteCarloResult:
+    method = Method.of(("fixture", "gwp", "climate change"), "kg CO2-Eq")
+    summary = MonteCarloSummary(
+        n=3, mean=2.0, median=2.0, median_ci95=None, percentiles=(1.0, 3.0), rel_se=None
+    )
+    return MonteCarloResult(
+        database=FIXTURE_DATABASE,
+        n=3,
+        stopped="fixed",
+        gating_method=method.id,
+        scope="full",
+        normals_at_amount=0,
+        credit_loops=[],
+        dropped_draws=[],
+        dropped_loops=[],
+        dropped_background=[],
+        categories=[MonteCarloCategory(method_id=method.id, summary=summary, samples=samples)],
+    )
+
+
+def test_without_samples_answers_each_category_s_histogram_and_no_samples() -> None:
+    sampled = _sampled([1.0, 2.0, 3.0])
+    bare = sampled.without_samples()
+    assert [category.samples for category in bare.categories] == [None]
+    assert [category.summary for category in bare.categories] == [
+        category.summary for category in sampled.categories
+    ]
+    assert [category.histogram for category in bare.categories] == [Histogram.of([1.0, 2.0, 3.0])]
+    assert bare.model_dump(exclude={"categories"}) == sampled.model_dump(exclude={"categories"})
+    assert sampled.categories[0].samples == [1.0, 2.0, 3.0]
+    assert sampled.categories[0].histogram is None
+
+
+def test_histogram_of_counts_twenty_bins_summing_to_the_number_of_draws() -> None:
+    histogram = Histogram.of([float(draw) for draw in range(100)])
+    assert len(histogram.counts) == 20
+    assert sum(histogram.counts) == 100
+
+
+def test_histogram_of_puts_the_smallest_draw_first_and_the_largest_last() -> None:
+    histogram = Histogram.of([0.0, 0.9, 5.0, 19.9])
+    assert (histogram.low, histogram.high) == (0.0, 19.9)
+    assert histogram.counts[0] == 2
+    assert histogram.counts[-1] == 1
+    assert sum(histogram.counts) == 4
+
+
+def test_histogram_of_counts_equal_draws_in_the_first_bin_with_low_equal_to_high() -> None:
+    histogram = Histogram.of([5.0, 5.0, 5.0])
+    assert (histogram.low, histogram.high) == (5.0, 5.0)
+    assert len(histogram.counts) == 20
+    assert histogram.counts == [3] + [0] * 19
+
+
+def test_histogram_of_refuses_no_draws() -> None:
+    with pytest.raises(Invalid) as caught:
+        Histogram.of([])
+    assert "draws" in str(caught.value)
+
+
+def test_sampled_answers_the_draws_and_refuses_a_category_that_carries_none() -> None:
+    sampled = _sampled([1.0, 2.0, 3.0])
+    assert sampled.categories[0].sampled() == [1.0, 2.0, 3.0]
+    with pytest.raises(Invalid) as caught:
+        sampled.without_samples().categories[0].sampled()
+    assert str(caught.value) == (
+        "this Monte Carlo answer carries no samples; ask for them with samples"
+    )
+
+
+def test_a_method_is_the_one_its_id_names_and_an_id_none_carries_is_invalid() -> None:
+    water = Method.of(("fixture", "water", "water scarcity"), "m3")
+    gwp = Method.of(("fixture", "gwp", "climate change"), "kg CO2-Eq")
+    assert method_by_id([water, gwp], gwp.id) == gwp
+    with pytest.raises(Invalid) as caught:
+        method_by_id([water, gwp], "m_ffffffffff")
+    assert "m_ffffffffff" in str(caught.value)

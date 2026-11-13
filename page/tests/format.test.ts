@@ -1,5 +1,5 @@
 import type { Method } from '@/api/types'
-import { categoryLabel, formatAmount, formatAgo, formatShare, shortHash } from '@/lib/format'
+import { categoryLabel, formatAmount, formatAgo, formatShare, methodById, shortHash } from '@/lib/format'
 
 describe('formatAmount', () => {
   it('rounds by magnitude', () => {
@@ -33,6 +33,19 @@ describe('categoryLabel', () => {
 
   it('names a three-part method by its category', () => {
     expect(categoryLabel({ ...method, indicator: '' })).toBe('climate change: total')
+  })
+})
+
+describe('methodById', () => {
+  const method: Method = { id: 'm_1', tuple: ['x', 'IPCC 2021', 'climate change: total', 'GWP20'], spec: 'x > IPCC 2021 > climate change: total > GWP20', unit: 'kg CO2-Eq', impact_method: 'IPCC 2021', impact_category: 'climate change: total', indicator: 'GWP20' }
+  const other: Method = { ...method, id: 'm_2', indicator: 'GWP100' }
+
+  it('answers the method an id names', () => {
+    expect(methodById([method, other], 'm_2')).toBe(other)
+  })
+
+  it('throws for an id the answer does not list, naming it', () => {
+    expect(() => methodById([method, other], 'm_3')).toThrow('m_3')
   })
 })
 

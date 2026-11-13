@@ -6,7 +6,7 @@ import re
 import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime
-from typing import Generic, Literal, Protocol, TypeVar, assert_never, get_args
+from typing import Annotated, Generic, Literal, Protocol, TypeVar, assert_never, get_args
 
 from pydantic import (
     BaseModel,
@@ -34,7 +34,7 @@ from ecosemantic.model.refs import (
     ForegroundRef,
     LinkedProcessRef,
 )
-from ecosemantic.model.summary import Summary, SummaryItem, SummaryScore
+from ecosemantic.model.summary import Summary, SummaryItem
 
 T = TypeVar("T")
 Source = Literal["mcp", "openlca", "import", "handover", "tables"]
@@ -84,6 +84,9 @@ def flow_side(flow_type: FlowType, sub_compartment: str | None) -> Side:
     if sub_compartment in _OUTPUT_SUB_COMPARTMENTS.get(flow_type, frozenset()):
         return "output"
     raise NotSupported(f"no side for a {flow_type!r} flow in {sub_compartment!r}")
+
+
+Limit = Annotated[int, Field(ge=1)]
 
 
 def page_start(cursor: str | None, limit: int) -> int:
@@ -270,13 +273,11 @@ class System(BaseModel):
 
 
 class Score(BaseModel):
+    """One method's value, naming the method the answer lists it under."""
+
     value: float
     unit: str
-    method: Method
-
-    def summary_score(self) -> SummaryScore:
-        """The score as one line of a summary."""
-        return SummaryScore(method=self.method.spec, value=self.value, unit=self.unit)
+    method_id: str
 
 
 def fraction_of(score: float, total: float) -> float:
@@ -452,32 +453,73 @@ class MonteCarloSummary(BaseModel):
 
 Stopped = Literal["target", "ceiling", "fixed", "cancelled"]
 
+HISTOGRAM_BINS = 20
+
+
+class Histogram(BaseModel):
+    """Draws counted in bins of equal width from the smallest to the largest. `low` and `high`
+    are those two draws, and `counts` holds the twenty bins, so a draw falls in bin
+    `min(19, floor((draw - low) / width))` with `width = (high - low) / 20`."""
+
+    low: float
+    high: float
+    counts: list[int]
+
+    @classmethod
+    def of(cls, samples: Sequence[float]) -> Histogram:
+        """The histogram of these draws, every one equal falling in the first bin."""
+        if not samples:
+            raise Invalid("a histogram counts draws; this one has none to count")
+        low = min(samples)
+        high = max(samples)
+        width = (high - low) / HISTOGRAM_BINS
+        counts = [0] * HISTOGRAM_BINS
+        if width == 0:
+            counts[0] = len(samples)
+        else:
+            for draw in samples:
+                counts[min(HISTOGRAM_BINS - 1, int((draw - low) // width))] += 1
+        return cls(low=low, high=high, counts=counts)
+
 
 class MonteCarloCategory(BaseModel):
-    method: Method
+    """One category's summary over the draws a run kept, and either the draws themselves or
+    their histogram. A computed result holds its samples and no histogram; an answer whose
+    caller did not ask for the samples carries the histogram in their place."""
+
+    method_id: str
     summary: MonteCarloSummary
-    samples: list[float]
+    samples: list[float] | None = None
+    histogram: Histogram | None = None
+
+    def sampled(self) -> list[float]:
+        """The samples, or Invalid when this answer carries none."""
+        if self.samples is None:
+            raise Invalid("this Monte Carlo answer carries no samples; ask for them with samples")
+        return self.samples
 
 
 class MonteCarloResult(BaseModel):
     """The samples of every category over the database build `database` names, and why sampling
     stopped: at the target relative standard error of every median, at the ceiling `n_max`, at a
     stated count, or cancelled.
-    `gating_method` is the category whose median's relative standard error is the largest, or
-    the first whose is undefined. `normals_at_amount` counts the background normal distributions
-    sampled at their amount because their standard deviation exceeds it.
+    `gating_method` is the id of the method of the category whose median's relative standard
+    error is the largest, or the first whose is undefined. `normals_at_amount` counts the
+    background normal distributions sampled at their amount because their standard deviation
+    exceeds it.
     `credit_loops` names the processes of each loop holding a credit, whose delivery no check
     decides. `dropped_draws` are the draws, counted from zero, left out because a loop without a
     credit, or a process using its own product, delivered nothing in them; `dropped_loops` names
     those loops, and `dropped_background` the background process each failing background loop
     scaled most negatively, or that used as much of its own product as it made. The linked
     fields name those loops inside linked systems. `n` counts the draws kept, and each
-    category's samples follow them in order."""
+    category's samples follow them in order; `without_samples` answers the same result with each
+    category's histogram in place of its draws."""
 
     database: Database
     n: int
     stopped: Stopped
-    gating_method: Method
+    gating_method: str
     scope: Scope
     normals_at_amount: int
     credit_loops: list[list[str]]
@@ -492,6 +534,20 @@ class MonteCarloResult(BaseModel):
         """The draw, counted from zero, each sample was taken at."""
         dropped = set(self.dropped_draws)
         return [d for d in range(self.n + len(dropped)) if d not in dropped]
+
+    def without_samples(self) -> MonteCarloResult:
+        """A copy whose every category carries its summary and the histogram of its draws,
+        with no samples."""
+        return self.model_copy(
+            update={
+                "categories": [
+                    category.model_copy(
+                        update={"samples": None, "histogram": Histogram.of(category.sampled())}
+                    )
+                    for category in self.categories
+                ]
+            }
+        )
 
 
 class RunProgress(BaseModel):

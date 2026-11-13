@@ -109,6 +109,7 @@ from ecosemantic.ports.types import (
     ElementaryFlowHit,
     FlowType,
     Install,
+    Limit,
     LogEntry,
     MonteCarloConfig,
     ProcessHit,
@@ -255,9 +256,9 @@ class Workspace:
         """The `import_tables` tool."""
         return self.call(import_tables, path=path)
 
-    def get_run(self, run_id: str) -> Answer[Run]:
+    def get_run(self, run_id: str, samples: bool = False) -> Answer[Run]:
         """The `get_run` tool."""
-        return self.call(get_run, run_id=run_id)
+        return self.call(get_run, run_id=run_id, samples=samples)
 
     def cancel_run(self, run_id: str) -> Answer[Run]:
         """The `cancel_run` tool."""
@@ -316,7 +317,7 @@ class Database:
         query: str,
         location: str | None = None,
         unit: str | None = None,
-        limit: int = 20,
+        limit: Limit = 20,
         cursor: str | None = None,
     ) -> Listing[ProcessHit]:
         """The `search_processes` tool."""
@@ -337,7 +338,7 @@ class Database:
         sub_compartment: str | None = None,
         flow_type: FlowType | None = None,
         unit: str | None = None,
-        limit: int = 20,
+        limit: Limit = 20,
         cursor: str | None = None,
     ) -> Listing[ElementaryFlowHit]:
         """The `search_elementary_flows` tool."""
@@ -354,7 +355,10 @@ class Database:
         )
 
     def search_methods(
-        self, query: str, limit: int = 20, cursor: str | None = None
+        self,
+        query: str,
+        limit: Limit = 20,
+        cursor: str | None = None,
     ) -> Listing[Method]:
         """The `search_methods` tool."""
         return self.workspace.call(
@@ -432,7 +436,7 @@ class ProductSystem:
         )
 
     def get_product_system_log(
-        self, limit: int = LOG_PAGE, cursor: str | None = None
+        self, limit: Limit = LOG_PAGE, cursor: str | None = None
     ) -> Listing[LogEntry]:
         """The `get_product_system_log` tool."""
         return self.workspace.call(
@@ -597,6 +601,7 @@ class ProductSystem:
         demand: list[DemandItem] | None = None,
         variants: list[str] | None = None,
         monte_carlo: ImpactMonteCarlo | None = None,
+        samples: bool = False,
     ) -> Answer[ImpactResult]:
         """The `calculate_impact` tool."""
         return self.workspace.call(
@@ -607,6 +612,7 @@ class ProductSystem:
             demand=demand,
             variants=variants,
             monte_carlo=monte_carlo,
+            samples=samples,
         )
 
     def contribution_analysis(
@@ -639,7 +645,7 @@ class ProductSystem:
         demand: list[DemandItem] | None = None,
         compartment: str | None = None,
         query: str | None = None,
-        limit: int = 100,
+        limit: Limit = 100,
         cursor: str | None = None,
     ) -> InventoryListing:
         """The `calculate_inventory` tool."""

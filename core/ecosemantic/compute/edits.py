@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import uuid
 from collections.abc import Mapping, Sequence
-from typing import Literal
+from typing import Literal, overload
 
 from pydantic import JsonValue, ValidationError
 
@@ -32,6 +32,7 @@ from ecosemantic.model.refs import (
     ElementaryFlowRef,
     ExchangeInput,
     ForegroundRef,
+    ProcessInput,
     SystemRef,
 )
 from ecosemantic.model.validation import linked_reference
@@ -110,6 +111,14 @@ def background_references(system: ProductSystem) -> list[Placed]:
                     (f"scenario {scenario.name}", str(override.exchange_id), override.input)
                 )
     return found
+
+
+@overload
+def _onto(ref: ProcessInput, installed: Database) -> ProcessInput: ...
+
+
+@overload
+def _onto(ref: ExchangeInput | None, installed: Database) -> ExchangeInput | None: ...
 
 
 def _onto(ref: ExchangeInput | None, installed: Database) -> ExchangeInput | None:

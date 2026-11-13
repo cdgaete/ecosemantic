@@ -408,7 +408,7 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "The characterised impact of a stored product system. Name one method_id from search_methods, or one impact_method to score all of its categories. Add variants to compare scenarios or cases against the base under one seed: each variant answers its point scores and its deltas, its score less the base's, method by method. A monte_carlo block adds uncertainty and takes at most 200 draws; start_monte_carlo runs up to 1000 outside the call. Under that block a pair is the base's and the variant's draws at one position, over the first draws of each up to the shorter run, since each run's own stop rule ends it, and paired_deltas holds each difference's median, interval and percentage.",
+    "description": "The characterised impact of a stored product system. Name one method_id from search_methods, or one impact_method to score all of its categories. Add variants to compare scenarios or cases against the base under one seed: each variant answers its point scores and its deltas, its score less the base's, method by method. A monte_carlo block adds uncertainty and takes at most 200 draws; start_monte_carlo runs up to 1000 outside the call. Under that block a pair is the base's and the variant's draws at one position, over the first draws of each up to the shorter run, since each run's own stop rule ends it, and paired_deltas holds each difference's median, interval and percentage. samples adds every category's draws to the base's answer and to each variant's; without it each category carries its summary and a histogram of twenty bins. methods names every method scored once, and each score, each variant's score and each uncertainty category names one of them by method_id.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -563,6 +563,10 @@
         "product_system_id": {
           "type": "string"
         },
+        "samples": {
+          "default": false,
+          "type": "boolean"
+        },
         "variants": {
           "anyOf": [
             {
@@ -598,7 +602,7 @@
           "default": null
         },
         "value": {
-          "description": "The characterised score of a product system over the database build `database` names,\nwith variants and uncertainty, the processes of each loop holding a credit, whose delivery\nno check decides, the links the score was taken behind, and each exchange sending a\npositive amount to a treatment, which runs it backwards and scores its emissions as\ncredits.",
+          "description": "The characterised score of a product system over the database build `database` names,\nwith variants and uncertainty, the processes of each loop holding a credit, whose delivery\nno check decides, the links the score was taken behind, and each exchange sending a\npositive amount to a treatment, which runs it backwards and scores its emissions as\ncredits. `methods` lists every method scored once, in the order `scores`, each variant's\n`scores` and each Monte Carlo category follow, and a score names its method by\n`method_id`.",
           "properties": {
             "credit_loops": {
               "items": {
@@ -703,50 +707,57 @@
               },
               "type": "array"
             },
+            "methods": {
+              "items": {
+                "description": "An impact assessment method as the background database names it, with its opaque id.",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "impact_category": {
+                    "type": "string"
+                  },
+                  "impact_method": {
+                    "type": "string"
+                  },
+                  "indicator": {
+                    "type": "string"
+                  },
+                  "spec": {
+                    "type": "string"
+                  },
+                  "tuple": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "unit": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "tuple",
+                  "spec",
+                  "unit",
+                  "impact_method",
+                  "impact_category",
+                  "indicator"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
             "product_system": {
               "type": "string"
             },
             "scores": {
               "items": {
+                "description": "One method's value, naming the method the answer lists it under.",
                 "properties": {
-                  "method": {
-                    "description": "An impact assessment method as the background database names it, with its opaque id.",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "impact_category": {
-                        "type": "string"
-                      },
-                      "impact_method": {
-                        "type": "string"
-                      },
-                      "indicator": {
-                        "type": "string"
-                      },
-                      "spec": {
-                        "type": "string"
-                      },
-                      "tuple": {
-                        "items": {
-                          "type": "string"
-                        },
-                        "type": "array"
-                      },
-                      "unit": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "tuple",
-                      "spec",
-                      "unit",
-                      "impact_method",
-                      "impact_category",
-                      "indicator"
-                    ],
-                    "type": "object"
+                  "method_id": {
+                    "type": "string"
                   },
                   "unit": {
                     "type": "string"
@@ -758,7 +769,7 @@
                 "required": [
                   "value",
                   "unit",
-                  "method"
+                  "method_id"
                 ],
                 "type": "object"
               },
@@ -773,55 +784,59 @@
             "uncertainty": {
               "anyOf": [
                 {
-                  "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median, at the ceiling `n_max`, at a\nstated count, or cancelled.\n`gating_method` is the category whose median's relative standard error is the largest, or\nthe first whose is undefined. `normals_at_amount` counts the background normal distributions\nsampled at their amount because their standard deviation exceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order.",
+                  "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median, at the ceiling `n_max`, at a\nstated count, or cancelled.\n`gating_method` is the id of the method of the category whose median's relative standard\nerror is the largest, or the first whose is undefined. `normals_at_amount` counts the\nbackground normal distributions sampled at their amount because their standard deviation\nexceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order; `without_samples` answers the same result with each\ncategory's histogram in place of its draws.",
                   "properties": {
                     "categories": {
                       "items": {
+                        "description": "One category's summary over the draws a run kept, and either the draws themselves or\ntheir histogram. A computed result holds its samples and no histogram; an answer whose\ncaller did not ask for the samples carries the histogram in their place.",
                         "properties": {
-                          "method": {
-                            "description": "An impact assessment method as the background database names it, with its opaque id.",
-                            "properties": {
-                              "id": {
-                                "type": "string"
+                          "histogram": {
+                            "anyOf": [
+                              {
+                                "description": "Draws counted in bins of equal width from the smallest to the largest. `low` and `high`\nare those two draws, and `counts` holds the twenty bins, so a draw falls in bin\n`min(19, floor((draw - low) / width))` with `width = (high - low) / 20`.",
+                                "properties": {
+                                  "counts": {
+                                    "items": {
+                                      "type": "integer"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "high": {
+                                    "type": "number"
+                                  },
+                                  "low": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "low",
+                                  "high",
+                                  "counts"
+                                ],
+                                "type": "object"
                               },
-                              "impact_category": {
-                                "type": "string"
-                              },
-                              "impact_method": {
-                                "type": "string"
-                              },
-                              "indicator": {
-                                "type": "string"
-                              },
-                              "spec": {
-                                "type": "string"
-                              },
-                              "tuple": {
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "method_id": {
+                            "type": "string"
+                          },
+                          "samples": {
+                            "anyOf": [
+                              {
                                 "items": {
-                                  "type": "string"
+                                  "type": "number"
                                 },
                                 "type": "array"
                               },
-                              "unit": {
-                                "type": "string"
+                              {
+                                "type": "null"
                               }
-                            },
-                            "required": [
-                              "id",
-                              "tuple",
-                              "spec",
-                              "unit",
-                              "impact_method",
-                              "impact_category",
-                              "indicator"
                             ],
-                            "type": "object"
-                          },
-                          "samples": {
-                            "items": {
-                              "type": "number"
-                            },
-                            "type": "array"
+                            "default": null
                           },
                           "summary": {
                             "description": "One category's samples in short. `median_ci95` is the median's 95 % interval, two of the\nsamples that bound it whatever the distribution, which narrows as samples grow, and `rel_se`\nits half-width over 1.96, relative to the median: the stop rule judges it. Both are None below\nsix samples, and `rel_se` for a median of zero. `percentiles` are the 2.5th and 97.5th\npercentiles of the samples, the spread of the result itself. `mean` is reported and judged by\nnothing: a loop close to using as much of its products as it makes gives draws whose mean\nneed not exist.",
@@ -891,9 +906,8 @@
                           }
                         },
                         "required": [
-                          "method",
-                          "summary",
-                          "samples"
+                          "method_id",
+                          "summary"
                         ],
                         "type": "object"
                       },
@@ -1000,43 +1014,7 @@
                       "type": "array"
                     },
                     "gating_method": {
-                      "description": "An impact assessment method as the background database names it, with its opaque id.",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "impact_category": {
-                          "type": "string"
-                        },
-                        "impact_method": {
-                          "type": "string"
-                        },
-                        "indicator": {
-                          "type": "string"
-                        },
-                        "spec": {
-                          "type": "string"
-                        },
-                        "tuple": {
-                          "items": {
-                            "type": "string"
-                          },
-                          "type": "array"
-                        },
-                        "unit": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "tuple",
-                        "spec",
-                        "unit",
-                        "impact_method",
-                        "impact_category",
-                        "indicator"
-                      ],
-                      "type": "object"
+                      "type": "string"
                     },
                     "linked_credit_loops": {
                       "items": {
@@ -1215,45 +1193,10 @@
                   },
                   "scores": {
                     "items": {
+                      "description": "One method's value, naming the method the answer lists it under.",
                       "properties": {
-                        "method": {
-                          "description": "An impact assessment method as the background database names it, with its opaque id.",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "impact_category": {
-                              "type": "string"
-                            },
-                            "impact_method": {
-                              "type": "string"
-                            },
-                            "indicator": {
-                              "type": "string"
-                            },
-                            "spec": {
-                              "type": "string"
-                            },
-                            "tuple": {
-                              "items": {
-                                "type": "string"
-                              },
-                              "type": "array"
-                            },
-                            "unit": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "tuple",
-                            "spec",
-                            "unit",
-                            "impact_method",
-                            "impact_category",
-                            "indicator"
-                          ],
-                          "type": "object"
+                        "method_id": {
+                          "type": "string"
                         },
                         "unit": {
                           "type": "string"
@@ -1265,7 +1208,7 @@
                       "required": [
                         "value",
                         "unit",
-                        "method"
+                        "method_id"
                       ],
                       "type": "object"
                     },
@@ -1280,55 +1223,59 @@
                   "uncertainty": {
                     "anyOf": [
                       {
-                        "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median, at the ceiling `n_max`, at a\nstated count, or cancelled.\n`gating_method` is the category whose median's relative standard error is the largest, or\nthe first whose is undefined. `normals_at_amount` counts the background normal distributions\nsampled at their amount because their standard deviation exceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order.",
+                        "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median, at the ceiling `n_max`, at a\nstated count, or cancelled.\n`gating_method` is the id of the method of the category whose median's relative standard\nerror is the largest, or the first whose is undefined. `normals_at_amount` counts the\nbackground normal distributions sampled at their amount because their standard deviation\nexceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order; `without_samples` answers the same result with each\ncategory's histogram in place of its draws.",
                         "properties": {
                           "categories": {
                             "items": {
+                              "description": "One category's summary over the draws a run kept, and either the draws themselves or\ntheir histogram. A computed result holds its samples and no histogram; an answer whose\ncaller did not ask for the samples carries the histogram in their place.",
                               "properties": {
-                                "method": {
-                                  "description": "An impact assessment method as the background database names it, with its opaque id.",
-                                  "properties": {
-                                    "id": {
-                                      "type": "string"
+                                "histogram": {
+                                  "anyOf": [
+                                    {
+                                      "description": "Draws counted in bins of equal width from the smallest to the largest. `low` and `high`\nare those two draws, and `counts` holds the twenty bins, so a draw falls in bin\n`min(19, floor((draw - low) / width))` with `width = (high - low) / 20`.",
+                                      "properties": {
+                                        "counts": {
+                                          "items": {
+                                            "type": "integer"
+                                          },
+                                          "type": "array"
+                                        },
+                                        "high": {
+                                          "type": "number"
+                                        },
+                                        "low": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "low",
+                                        "high",
+                                        "counts"
+                                      ],
+                                      "type": "object"
                                     },
-                                    "impact_category": {
-                                      "type": "string"
-                                    },
-                                    "impact_method": {
-                                      "type": "string"
-                                    },
-                                    "indicator": {
-                                      "type": "string"
-                                    },
-                                    "spec": {
-                                      "type": "string"
-                                    },
-                                    "tuple": {
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "default": null
+                                },
+                                "method_id": {
+                                  "type": "string"
+                                },
+                                "samples": {
+                                  "anyOf": [
+                                    {
                                       "items": {
-                                        "type": "string"
+                                        "type": "number"
                                       },
                                       "type": "array"
                                     },
-                                    "unit": {
-                                      "type": "string"
+                                    {
+                                      "type": "null"
                                     }
-                                  },
-                                  "required": [
-                                    "id",
-                                    "tuple",
-                                    "spec",
-                                    "unit",
-                                    "impact_method",
-                                    "impact_category",
-                                    "indicator"
                                   ],
-                                  "type": "object"
-                                },
-                                "samples": {
-                                  "items": {
-                                    "type": "number"
-                                  },
-                                  "type": "array"
+                                  "default": null
                                 },
                                 "summary": {
                                   "description": "One category's samples in short. `median_ci95` is the median's 95 % interval, two of the\nsamples that bound it whatever the distribution, which narrows as samples grow, and `rel_se`\nits half-width over 1.96, relative to the median: the stop rule judges it. Both are None below\nsix samples, and `rel_se` for a median of zero. `percentiles` are the 2.5th and 97.5th\npercentiles of the samples, the spread of the result itself. `mean` is reported and judged by\nnothing: a loop close to using as much of its products as it makes gives draws whose mean\nneed not exist.",
@@ -1398,9 +1345,8 @@
                                 }
                               },
                               "required": [
-                                "method",
-                                "summary",
-                                "samples"
+                                "method_id",
+                                "summary"
                               ],
                               "type": "object"
                             },
@@ -1507,43 +1453,7 @@
                             "type": "array"
                           },
                           "gating_method": {
-                            "description": "An impact assessment method as the background database names it, with its opaque id.",
-                            "properties": {
-                              "id": {
-                                "type": "string"
-                              },
-                              "impact_category": {
-                                "type": "string"
-                              },
-                              "impact_method": {
-                                "type": "string"
-                              },
-                              "indicator": {
-                                "type": "string"
-                              },
-                              "spec": {
-                                "type": "string"
-                              },
-                              "tuple": {
-                                "items": {
-                                  "type": "string"
-                                },
-                                "type": "array"
-                              },
-                              "unit": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "id",
-                              "tuple",
-                              "spec",
-                              "unit",
-                              "impact_method",
-                              "impact_category",
-                              "indicator"
-                            ],
-                            "type": "object"
+                            "type": "string"
                           },
                           "linked_credit_loops": {
                             "items": {
@@ -1631,6 +1541,7 @@
           "required": [
             "product_system",
             "database",
+            "methods",
             "scores",
             "credit_loops"
           ],
@@ -1756,6 +1667,7 @@
         },
         "limit": {
           "default": 100,
+          "minimum": 1,
           "type": "integer"
         },
         "product_system_id": {
@@ -2680,55 +2592,59 @@
             "result": {
               "anyOf": [
                 {
-                  "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median, at the ceiling `n_max`, at a\nstated count, or cancelled.\n`gating_method` is the category whose median's relative standard error is the largest, or\nthe first whose is undefined. `normals_at_amount` counts the background normal distributions\nsampled at their amount because their standard deviation exceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order.",
+                  "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median, at the ceiling `n_max`, at a\nstated count, or cancelled.\n`gating_method` is the id of the method of the category whose median's relative standard\nerror is the largest, or the first whose is undefined. `normals_at_amount` counts the\nbackground normal distributions sampled at their amount because their standard deviation\nexceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order; `without_samples` answers the same result with each\ncategory's histogram in place of its draws.",
                   "properties": {
                     "categories": {
                       "items": {
+                        "description": "One category's summary over the draws a run kept, and either the draws themselves or\ntheir histogram. A computed result holds its samples and no histogram; an answer whose\ncaller did not ask for the samples carries the histogram in their place.",
                         "properties": {
-                          "method": {
-                            "description": "An impact assessment method as the background database names it, with its opaque id.",
-                            "properties": {
-                              "id": {
-                                "type": "string"
+                          "histogram": {
+                            "anyOf": [
+                              {
+                                "description": "Draws counted in bins of equal width from the smallest to the largest. `low` and `high`\nare those two draws, and `counts` holds the twenty bins, so a draw falls in bin\n`min(19, floor((draw - low) / width))` with `width = (high - low) / 20`.",
+                                "properties": {
+                                  "counts": {
+                                    "items": {
+                                      "type": "integer"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "high": {
+                                    "type": "number"
+                                  },
+                                  "low": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "low",
+                                  "high",
+                                  "counts"
+                                ],
+                                "type": "object"
                               },
-                              "impact_category": {
-                                "type": "string"
-                              },
-                              "impact_method": {
-                                "type": "string"
-                              },
-                              "indicator": {
-                                "type": "string"
-                              },
-                              "spec": {
-                                "type": "string"
-                              },
-                              "tuple": {
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "method_id": {
+                            "type": "string"
+                          },
+                          "samples": {
+                            "anyOf": [
+                              {
                                 "items": {
-                                  "type": "string"
+                                  "type": "number"
                                 },
                                 "type": "array"
                               },
-                              "unit": {
-                                "type": "string"
+                              {
+                                "type": "null"
                               }
-                            },
-                            "required": [
-                              "id",
-                              "tuple",
-                              "spec",
-                              "unit",
-                              "impact_method",
-                              "impact_category",
-                              "indicator"
                             ],
-                            "type": "object"
-                          },
-                          "samples": {
-                            "items": {
-                              "type": "number"
-                            },
-                            "type": "array"
+                            "default": null
                           },
                           "summary": {
                             "description": "One category's samples in short. `median_ci95` is the median's 95 % interval, two of the\nsamples that bound it whatever the distribution, which narrows as samples grow, and `rel_se`\nits half-width over 1.96, relative to the median: the stop rule judges it. Both are None below\nsix samples, and `rel_se` for a median of zero. `percentiles` are the 2.5th and 97.5th\npercentiles of the samples, the spread of the result itself. `mean` is reported and judged by\nnothing: a loop close to using as much of its products as it makes gives draws whose mean\nneed not exist.",
@@ -2798,9 +2714,8 @@
                           }
                         },
                         "required": [
-                          "method",
-                          "summary",
-                          "samples"
+                          "method_id",
+                          "summary"
                         ],
                         "type": "object"
                       },
@@ -2907,43 +2822,7 @@
                       "type": "array"
                     },
                     "gating_method": {
-                      "description": "An impact assessment method as the background database names it, with its opaque id.",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "impact_category": {
-                          "type": "string"
-                        },
-                        "impact_method": {
-                          "type": "string"
-                        },
-                        "indicator": {
-                          "type": "string"
-                        },
-                        "spec": {
-                          "type": "string"
-                        },
-                        "tuple": {
-                          "items": {
-                            "type": "string"
-                          },
-                          "type": "array"
-                        },
-                        "unit": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "tuple",
-                        "spec",
-                        "unit",
-                        "impact_method",
-                        "impact_category",
-                        "indicator"
-                      ],
-                      "type": "object"
+                      "type": "string"
                     },
                     "linked_credit_loops": {
                       "items": {
@@ -3082,7 +2961,7 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "Decompose one impact. by='process' partitions the total over the processes that emit it, each appearing once. by='path' nests it under the demanded process along the supply chain that caused it, with elementary flows itemised at each node. by='flow' partitions it over the substances emitted or drawn, ranked by characterised score. Same total every way. by='path' stops at max_level (default 3) and max_nodes (default 50) and folds a branch below cutoff (default 0.001) of the total into a remainder; by='process' and by='flow' answer the top_n (default 10) largest parts that reach cutoff, and cut says what the list leaves out: below, the parts under the cut-off, with their share of the total, and unlisted, the parts that reach it past top_n, with their unlisted_share. Example: {\"product_system_id\": \"\u2026\", \"by\": \"path\", \"method_id\": \"m_\u2026\", \"max_level\": 4}.",
+    "description": "Decompose one impact. by='process' partitions the total over the processes that emit it, each appearing once. by='path' nests it under the demanded process along the supply chain that caused it, with elementary flows itemised at each node. by='flow' partitions it over the substances emitted or drawn, ranked by characterised score. Same total every way. by='path' stops at max_level (default 3) and max_nodes (default 50) and folds a branch below cutoff (default 0.001) of the total into a remainder; by='process' and by='flow' answer the top_n (default 10) largest parts that reach cutoff, and cut says what the list leaves out: below, the parts under the cut-off, with their share of the total, and unlisted, the parts that reach it past top_n, with their unlisted_share. method names the method once and total names it by method_id. Example: {\"product_system_id\": \"\u2026\", \"by\": \"path\", \"method_id\": \"m_\u2026\", \"max_level\": 4}.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -3233,7 +3112,7 @@
           "type": "object"
         },
         "ContributionResult": {
-          "description": "One decomposition of a total over the database build `database` names: flat over\nemitters, nested over paths, or flat over flows, with the processes of each loop holding a\ncredit, whose delivery no check decides, and each exchange sending a positive amount to a\ntreatment, which runs it backwards. `cut` is what a flat list leaves out, under its cut-off\nand past its length, and a tree holds its own `truncated` beside none.",
+          "description": "One decomposition of a total over the database build `database` names: flat over\nemitters, nested over paths, or flat over flows, with the processes of each loop holding a\ncredit, whose delivery no check decides, and each exchange sending a positive amount to a\ntreatment, which runs it backwards. `cut` is what a flat list leaves out, under its cut-off\nand past its length, and a tree holds its own `truncated` beside none. `method` is the\nmethod of `total`, which names it by `method_id`.",
           "properties": {
             "by": {
               "enum": [
@@ -3286,6 +3165,9 @@
               },
               "type": "array"
             },
+            "method": {
+              "$ref": "#/$defs/Method"
+            },
             "processes": {
               "anyOf": [
                 {
@@ -3335,6 +3217,7 @@
           "required": [
             "database",
             "by",
+            "method",
             "total",
             "credit_loops"
           ],
@@ -3643,9 +3526,10 @@
           "type": "object"
         },
         "Score": {
+          "description": "One method's value, naming the method the answer lists it under.",
           "properties": {
-            "method": {
-              "$ref": "#/$defs/Method"
+            "method_id": {
+              "type": "string"
             },
             "unit": {
               "type": "string"
@@ -3657,7 +3541,7 @@
           "required": [
             "value",
             "unit",
-            "method"
+            "method_id"
           ],
           "type": "object"
         },
@@ -5467,70 +5351,6 @@
                               "kind"
                             ],
                             "type": "object"
-                          },
-                          {
-                            "additionalProperties": false,
-                            "description": "One unit of the functional unit of another product system on the same database, as the\ncontent hash names that system's state, under the case of that system it names or its base\nvalues when it names none. A stored document always carries the hash; the create_exchange\ntool pins the system's current one when a caller leaves it out.",
-                            "properties": {
-                              "at_hash": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ],
-                                "default": null
-                              },
-                              "case": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ],
-                                "default": null
-                              },
-                              "kind": {
-                                "const": "system",
-                                "default": "system",
-                                "type": "string"
-                              },
-                              "product_system_id": {
-                                "format": "uuid",
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "product_system_id",
-                              "kind"
-                            ],
-                            "type": "object"
-                          },
-                          {
-                            "description": "An elementary flow, by the elementary-flow database's native id.",
-                            "properties": {
-                              "database": {
-                                "type": "string"
-                              },
-                              "id": {
-                                "type": "string"
-                              },
-                              "kind": {
-                                "const": "elementary_flow",
-                                "default": "elementary_flow",
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "database",
-                              "id",
-                              "kind"
-                            ],
-                            "type": "object"
                           }
                         ],
                         "type": "object"
@@ -5918,70 +5738,6 @@
                                 },
                                 "required": [
                                   "code",
-                                  "kind"
-                                ],
-                                "type": "object"
-                              },
-                              {
-                                "additionalProperties": false,
-                                "description": "One unit of the functional unit of another product system on the same database, as the\ncontent hash names that system's state, under the case of that system it names or its base\nvalues when it names none. A stored document always carries the hash; the create_exchange\ntool pins the system's current one when a caller leaves it out.",
-                                "properties": {
-                                  "at_hash": {
-                                    "anyOf": [
-                                      {
-                                        "type": "string"
-                                      },
-                                      {
-                                        "type": "null"
-                                      }
-                                    ],
-                                    "default": null
-                                  },
-                                  "case": {
-                                    "anyOf": [
-                                      {
-                                        "type": "string"
-                                      },
-                                      {
-                                        "type": "null"
-                                      }
-                                    ],
-                                    "default": null
-                                  },
-                                  "kind": {
-                                    "const": "system",
-                                    "default": "system",
-                                    "type": "string"
-                                  },
-                                  "product_system_id": {
-                                    "format": "uuid",
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "product_system_id",
-                                  "kind"
-                                ],
-                                "type": "object"
-                              },
-                              {
-                                "description": "An elementary flow, by the elementary-flow database's native id.",
-                                "properties": {
-                                  "database": {
-                                    "type": "string"
-                                  },
-                                  "id": {
-                                    "type": "string"
-                                  },
-                                  "kind": {
-                                    "const": "elementary_flow",
-                                    "default": "elementary_flow",
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "database",
-                                  "id",
                                   "kind"
                                 ],
                                 "type": "object"
@@ -8662,70 +8418,6 @@
                                         "kind"
                                       ],
                                       "type": "object"
-                                    },
-                                    {
-                                      "additionalProperties": false,
-                                      "description": "One unit of the functional unit of another product system on the same database, as the\ncontent hash names that system's state, under the case of that system it names or its base\nvalues when it names none. A stored document always carries the hash; the create_exchange\ntool pins the system's current one when a caller leaves it out.",
-                                      "properties": {
-                                        "at_hash": {
-                                          "anyOf": [
-                                            {
-                                              "type": "string"
-                                            },
-                                            {
-                                              "type": "null"
-                                            }
-                                          ],
-                                          "default": null
-                                        },
-                                        "case": {
-                                          "anyOf": [
-                                            {
-                                              "type": "string"
-                                            },
-                                            {
-                                              "type": "null"
-                                            }
-                                          ],
-                                          "default": null
-                                        },
-                                        "kind": {
-                                          "const": "system",
-                                          "default": "system",
-                                          "type": "string"
-                                        },
-                                        "product_system_id": {
-                                          "format": "uuid",
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "product_system_id",
-                                        "kind"
-                                      ],
-                                      "type": "object"
-                                    },
-                                    {
-                                      "description": "An elementary flow, by the elementary-flow database's native id.",
-                                      "properties": {
-                                        "database": {
-                                          "type": "string"
-                                        },
-                                        "id": {
-                                          "type": "string"
-                                        },
-                                        "kind": {
-                                          "const": "elementary_flow",
-                                          "default": "elementary_flow",
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "database",
-                                        "id",
-                                        "kind"
-                                      ],
-                                      "type": "object"
                                     }
                                   ],
                                   "type": "object"
@@ -8847,6 +8539,7 @@
         },
         "limit": {
           "default": 10,
+          "minimum": 1,
           "type": "integer"
         },
         "product_system_id": {
@@ -9067,12 +8760,16 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "One run: its status, how many iterations it has taken, and its result once it is done. A run whose worker is gone answers as failed.",
+    "description": "One run: its status, how many iterations it has taken, and its result once it is done. A run whose worker is gone answers as failed. samples adds every category's draws; without it each category carries its summary and a histogram of twenty bins. methods names every method the run sampled once, and each result category names one of them by method_id.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
         "run_id": {
           "type": "string"
+        },
+        "samples": {
+          "default": false,
+          "type": "boolean"
         }
       },
       "required": [
@@ -9348,55 +9045,59 @@
             "result": {
               "anyOf": [
                 {
-                  "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median, at the ceiling `n_max`, at a\nstated count, or cancelled.\n`gating_method` is the category whose median's relative standard error is the largest, or\nthe first whose is undefined. `normals_at_amount` counts the background normal distributions\nsampled at their amount because their standard deviation exceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order.",
+                  "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median, at the ceiling `n_max`, at a\nstated count, or cancelled.\n`gating_method` is the id of the method of the category whose median's relative standard\nerror is the largest, or the first whose is undefined. `normals_at_amount` counts the\nbackground normal distributions sampled at their amount because their standard deviation\nexceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order; `without_samples` answers the same result with each\ncategory's histogram in place of its draws.",
                   "properties": {
                     "categories": {
                       "items": {
+                        "description": "One category's summary over the draws a run kept, and either the draws themselves or\ntheir histogram. A computed result holds its samples and no histogram; an answer whose\ncaller did not ask for the samples carries the histogram in their place.",
                         "properties": {
-                          "method": {
-                            "description": "An impact assessment method as the background database names it, with its opaque id.",
-                            "properties": {
-                              "id": {
-                                "type": "string"
+                          "histogram": {
+                            "anyOf": [
+                              {
+                                "description": "Draws counted in bins of equal width from the smallest to the largest. `low` and `high`\nare those two draws, and `counts` holds the twenty bins, so a draw falls in bin\n`min(19, floor((draw - low) / width))` with `width = (high - low) / 20`.",
+                                "properties": {
+                                  "counts": {
+                                    "items": {
+                                      "type": "integer"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "high": {
+                                    "type": "number"
+                                  },
+                                  "low": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "low",
+                                  "high",
+                                  "counts"
+                                ],
+                                "type": "object"
                               },
-                              "impact_category": {
-                                "type": "string"
-                              },
-                              "impact_method": {
-                                "type": "string"
-                              },
-                              "indicator": {
-                                "type": "string"
-                              },
-                              "spec": {
-                                "type": "string"
-                              },
-                              "tuple": {
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "method_id": {
+                            "type": "string"
+                          },
+                          "samples": {
+                            "anyOf": [
+                              {
                                 "items": {
-                                  "type": "string"
+                                  "type": "number"
                                 },
                                 "type": "array"
                               },
-                              "unit": {
-                                "type": "string"
+                              {
+                                "type": "null"
                               }
-                            },
-                            "required": [
-                              "id",
-                              "tuple",
-                              "spec",
-                              "unit",
-                              "impact_method",
-                              "impact_category",
-                              "indicator"
                             ],
-                            "type": "object"
-                          },
-                          "samples": {
-                            "items": {
-                              "type": "number"
-                            },
-                            "type": "array"
+                            "default": null
                           },
                           "summary": {
                             "description": "One category's samples in short. `median_ci95` is the median's 95 % interval, two of the\nsamples that bound it whatever the distribution, which narrows as samples grow, and `rel_se`\nits half-width over 1.96, relative to the median: the stop rule judges it. Both are None below\nsix samples, and `rel_se` for a median of zero. `percentiles` are the 2.5th and 97.5th\npercentiles of the samples, the spread of the result itself. `mean` is reported and judged by\nnothing: a loop close to using as much of its products as it makes gives draws whose mean\nneed not exist.",
@@ -9466,9 +9167,8 @@
                           }
                         },
                         "required": [
-                          "method",
-                          "summary",
-                          "samples"
+                          "method_id",
+                          "summary"
                         ],
                         "type": "object"
                       },
@@ -9575,43 +9275,7 @@
                       "type": "array"
                     },
                     "gating_method": {
-                      "description": "An impact assessment method as the background database names it, with its opaque id.",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "impact_category": {
-                          "type": "string"
-                        },
-                        "impact_method": {
-                          "type": "string"
-                        },
-                        "indicator": {
-                          "type": "string"
-                        },
-                        "spec": {
-                          "type": "string"
-                        },
-                        "tuple": {
-                          "items": {
-                            "type": "string"
-                          },
-                          "type": "array"
-                        },
-                        "unit": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "tuple",
-                        "spec",
-                        "unit",
-                        "impact_method",
-                        "impact_category",
-                        "indicator"
-                      ],
-                      "type": "object"
+                      "type": "string"
                     },
                     "linked_credit_loops": {
                       "items": {
@@ -13545,70 +13209,6 @@
                                   "kind"
                                 ],
                                 "type": "object"
-                              },
-                              {
-                                "additionalProperties": false,
-                                "description": "One unit of the functional unit of another product system on the same database, as the\ncontent hash names that system's state, under the case of that system it names or its base\nvalues when it names none. A stored document always carries the hash; the create_exchange\ntool pins the system's current one when a caller leaves it out.",
-                                "properties": {
-                                  "at_hash": {
-                                    "anyOf": [
-                                      {
-                                        "type": "string"
-                                      },
-                                      {
-                                        "type": "null"
-                                      }
-                                    ],
-                                    "default": null
-                                  },
-                                  "case": {
-                                    "anyOf": [
-                                      {
-                                        "type": "string"
-                                      },
-                                      {
-                                        "type": "null"
-                                      }
-                                    ],
-                                    "default": null
-                                  },
-                                  "kind": {
-                                    "const": "system",
-                                    "default": "system",
-                                    "type": "string"
-                                  },
-                                  "product_system_id": {
-                                    "format": "uuid",
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "product_system_id",
-                                  "kind"
-                                ],
-                                "type": "object"
-                              },
-                              {
-                                "description": "An elementary flow, by the elementary-flow database's native id.",
-                                "properties": {
-                                  "database": {
-                                    "type": "string"
-                                  },
-                                  "id": {
-                                    "type": "string"
-                                  },
-                                  "kind": {
-                                    "const": "elementary_flow",
-                                    "default": "elementary_flow",
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "database",
-                                  "id",
-                                  "kind"
-                                ],
-                                "type": "object"
                               }
                             ],
                             "type": "object"
@@ -14009,6 +13609,7 @@
         },
         "limit": {
           "default": 20,
+          "minimum": 1,
           "type": "integer"
         },
         "query": {
@@ -14194,6 +13795,7 @@
         },
         "limit": {
           "default": 20,
+          "minimum": 1,
           "type": "integer"
         },
         "query": {
@@ -14323,6 +13925,7 @@
         },
         "limit": {
           "default": 20,
+          "minimum": 1,
           "type": "integer"
         },
         "location": {
@@ -15420,55 +15023,59 @@
             "result": {
               "anyOf": [
                 {
-                  "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median, at the ceiling `n_max`, at a\nstated count, or cancelled.\n`gating_method` is the category whose median's relative standard error is the largest, or\nthe first whose is undefined. `normals_at_amount` counts the background normal distributions\nsampled at their amount because their standard deviation exceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order.",
+                  "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median, at the ceiling `n_max`, at a\nstated count, or cancelled.\n`gating_method` is the id of the method of the category whose median's relative standard\nerror is the largest, or the first whose is undefined. `normals_at_amount` counts the\nbackground normal distributions sampled at their amount because their standard deviation\nexceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order; `without_samples` answers the same result with each\ncategory's histogram in place of its draws.",
                   "properties": {
                     "categories": {
                       "items": {
+                        "description": "One category's summary over the draws a run kept, and either the draws themselves or\ntheir histogram. A computed result holds its samples and no histogram; an answer whose\ncaller did not ask for the samples carries the histogram in their place.",
                         "properties": {
-                          "method": {
-                            "description": "An impact assessment method as the background database names it, with its opaque id.",
-                            "properties": {
-                              "id": {
-                                "type": "string"
+                          "histogram": {
+                            "anyOf": [
+                              {
+                                "description": "Draws counted in bins of equal width from the smallest to the largest. `low` and `high`\nare those two draws, and `counts` holds the twenty bins, so a draw falls in bin\n`min(19, floor((draw - low) / width))` with `width = (high - low) / 20`.",
+                                "properties": {
+                                  "counts": {
+                                    "items": {
+                                      "type": "integer"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "high": {
+                                    "type": "number"
+                                  },
+                                  "low": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "low",
+                                  "high",
+                                  "counts"
+                                ],
+                                "type": "object"
                               },
-                              "impact_category": {
-                                "type": "string"
-                              },
-                              "impact_method": {
-                                "type": "string"
-                              },
-                              "indicator": {
-                                "type": "string"
-                              },
-                              "spec": {
-                                "type": "string"
-                              },
-                              "tuple": {
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "method_id": {
+                            "type": "string"
+                          },
+                          "samples": {
+                            "anyOf": [
+                              {
                                 "items": {
-                                  "type": "string"
+                                  "type": "number"
                                 },
                                 "type": "array"
                               },
-                              "unit": {
-                                "type": "string"
+                              {
+                                "type": "null"
                               }
-                            },
-                            "required": [
-                              "id",
-                              "tuple",
-                              "spec",
-                              "unit",
-                              "impact_method",
-                              "impact_category",
-                              "indicator"
                             ],
-                            "type": "object"
-                          },
-                          "samples": {
-                            "items": {
-                              "type": "number"
-                            },
-                            "type": "array"
+                            "default": null
                           },
                           "summary": {
                             "description": "One category's samples in short. `median_ci95` is the median's 95 % interval, two of the\nsamples that bound it whatever the distribution, which narrows as samples grow, and `rel_se`\nits half-width over 1.96, relative to the median: the stop rule judges it. Both are None below\nsix samples, and `rel_se` for a median of zero. `percentiles` are the 2.5th and 97.5th\npercentiles of the samples, the spread of the result itself. `mean` is reported and judged by\nnothing: a loop close to using as much of its products as it makes gives draws whose mean\nneed not exist.",
@@ -15538,9 +15145,8 @@
                           }
                         },
                         "required": [
-                          "method",
-                          "summary",
-                          "samples"
+                          "method_id",
+                          "summary"
                         ],
                         "type": "object"
                       },
@@ -15647,43 +15253,7 @@
                       "type": "array"
                     },
                     "gating_method": {
-                      "description": "An impact assessment method as the background database names it, with its opaque id.",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "impact_category": {
-                          "type": "string"
-                        },
-                        "impact_method": {
-                          "type": "string"
-                        },
-                        "indicator": {
-                          "type": "string"
-                        },
-                        "spec": {
-                          "type": "string"
-                        },
-                        "tuple": {
-                          "items": {
-                            "type": "string"
-                          },
-                          "type": "array"
-                        },
-                        "unit": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "tuple",
-                        "spec",
-                        "unit",
-                        "impact_method",
-                        "impact_category",
-                        "indicator"
-                      ],
-                      "type": "object"
+                      "type": "string"
                     },
                     "linked_credit_loops": {
                       "items": {

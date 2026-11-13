@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import dataclasses
 import io
 import json
@@ -91,6 +92,20 @@ def test_an_impact_run_folder_downloads_as_a_zip(
     names = zipfile.ZipFile(io.BytesIO(response.content)).namelist()
     assert any(name.endswith("schema.yaml") for name in names)
     assert any(name.endswith("scores.csv") for name in names)
+
+
+def test_an_impact_run_folder_carries_every_draw_of_a_monte_carlo(
+    client: TestClient, fixture_system_stored: ProductSystem
+) -> None:
+    response = client.post(
+        f"/api/product-systems/{fixture_system_stored.id}/impact.zip",
+        json={"method_id": GWP_ID, "monte_carlo": {"n": 4, "seed": 1}},
+    )
+    assert response.status_code == 200
+    zipped = zipfile.ZipFile(io.BytesIO(response.content))
+    [samples] = [name for name in zipped.namelist() if name.endswith("samples.csv")]
+    rows = list(csv.DictReader(io.StringIO(zipped.read(samples).decode("utf-8"))))
+    assert len(rows) == 4 and {row["iteration"] for row in rows} == {"0", "1", "2", "3"}
 
 
 def test_contributions_answer_a_run_folder(

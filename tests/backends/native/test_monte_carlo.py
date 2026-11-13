@@ -36,7 +36,8 @@ async def test_a_fixed_count_at_a_seed_reproduces(calculation: NativeCalculation
     again = await calculation.monte_carlo(fixture_system(), WIDGET, [GWP, WATER], config)
     assert first.n == 8 and first.stopped == "fixed" and first.scope == "full"
     assert [c.samples for c in first.categories] == [c.samples for c in again.categories]
-    assert first.categories[0].method == GWP
+    assert first.categories[0].method_id == GWP.id
+    assert first.gating_method in {c.method_id for c in first.categories}
     assert first.categories[0].summary.mean == pytest.approx(4.158, rel=0.2)
     assert first.categories[1].samples == pytest.approx([0.0] * 8)
 

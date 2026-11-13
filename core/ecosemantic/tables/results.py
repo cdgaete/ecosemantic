@@ -10,9 +10,15 @@ import yaml
 from pydantic import BaseModel, Field
 
 from ecosemantic.compute.results import ContributionResult, ImpactResult, InventoryResult
-from ecosemantic.model.entities import DemandItem
+from ecosemantic.model.entities import DemandItem, Method, method_by_id
 from ecosemantic.model.refs import slug
-from ecosemantic.ports.types import InventoryRow, MonteCarloResult, Page, TreeNode
+from ecosemantic.ports.types import (
+    InventoryRow,
+    MonteCarloResult,
+    Page,
+    Score,
+    TreeNode,
+)
 from ecosemantic.tables.folder import FORMAT, SCHEMA_FILE, number, write_csv
 
 RESULTS_DIR = "results"
@@ -114,36 +120,37 @@ def write_impact(root: Path, key: ResultKey, result: ImpactResult, at: datetime)
         named["dropped_background"] = result.uncertainty.dropped_background
     folder = _open(root, key, at, key.method, named)
     rows = [
-        {
-            "variant": "",
-            "method_id": score.method.id,
-            "impact_method": score.method.impact_method,
-            "impact_category": score.method.impact_category,
-            "indicator": score.method.indicator,
-            "score": number(score.value),
-            "unit": score.unit,
-            "delta": "",
-        }
+        _score_row("", score, "", method_by_id(result.methods, score.method_id))
         for score in result.scores
     ]
     for variant in result.variants:
         for score, delta in zip(variant.scores, variant.deltas, strict=True):
             rows.append(
-                {
-                    "variant": variant.name,
-                    "method_id": score.method.id,
-                    "impact_method": score.method.impact_method,
-                    "impact_category": score.method.impact_category,
-                    "indicator": score.method.indicator,
-                    "score": number(score.value),
-                    "unit": score.unit,
-                    "delta": number(delta),
-                }
+                _score_row(
+                    variant.name,
+                    score,
+                    number(delta),
+                    method_by_id(result.methods, score.method_id),
+                )
             )
     write_csv(folder / SCORES, SCORE_COLUMNS, rows)
     if result.uncertainty is not None:
         _write_uncertainty(folder, result.uncertainty)
     return folder
+
+
+def _score_row(variant: str, score: Score, delta: str, method: Method) -> dict[str, str]:
+    """One row of the scores table, named by the method its score carries."""
+    return {
+        "variant": variant,
+        "method_id": score.method_id,
+        "impact_method": method.impact_method,
+        "impact_category": method.impact_category,
+        "indicator": method.indicator,
+        "score": number(score.value),
+        "unit": score.unit,
+        "delta": delta,
+    }
 
 
 def _write_uncertainty(folder: Path, uncertainty: MonteCarloResult) -> None:
@@ -166,7 +173,7 @@ def _write_uncertainty(folder: Path, uncertainty: MonteCarloResult) -> None:
         ],
         [
             {
-                "method_id": category.method.id,
+                "method_id": category.method_id,
                 "n": str(category.summary.n),
                 "stopped": uncertainty.stopped,
                 "scope": uncertainty.scope,
@@ -188,9 +195,9 @@ def _write_uncertainty(folder: Path, uncertainty: MonteCarloResult) -> None:
         folder / SAMPLES,
         ["method_id", "iteration", "value"],
         [
-            {"method_id": category.method.id, "iteration": str(draw), "value": number(value)}
+            {"method_id": category.method_id, "iteration": str(draw), "value": number(value)}
             for category in uncertainty.categories
-            for draw, value in zip(uncertainty.draws(), category.samples, strict=True)
+            for draw, value in zip(uncertainty.draws(), category.sampled(), strict=True)
         ],
     )
 

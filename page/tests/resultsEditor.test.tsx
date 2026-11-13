@@ -3,6 +3,7 @@ import { renderAt } from './render'
 import { App, Screens } from '@/App'
 import { api } from '@/api/client'
 import type { Answer, Call, ImpactResult, SystemRead, Value } from '@/api/types'
+import { methodById } from '@/lib/format'
 import system from './fixtures/system.json'
 import systems from './fixtures/systems.json'
 import databases from './fixtures/databases.json'
@@ -10,6 +11,7 @@ import validation from './fixtures/validation.json'
 import recordedImpact from './fixtures/impact.json'
 import byProcess from './fixtures/contributions_process.json'
 import calculations from './fixtures/calculations.json'
+import { firstMethodOf } from './method'
 
 const impact = recordedImpact as Answer<ImpactResult>
 vi.mock('@/api/client', async (importOriginal) => {
@@ -33,18 +35,18 @@ const recorded = calculations.value[0] as Call
 const callOn = (patch: Partial<Call>): Value<Call[]> => ({ value: [{ ...recorded, product_system_id: system.value.id, ...patch }] })
 
 it('shows the impact analysis with a row per category', async () => {
-  renderAt(`/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(impact.value.scores[0].method.impact_method)}`, <App router={false} />)
-  await waitFor(() => expect(screen.getByText(`Impact analysis: ${impact.value.scores[0].method.impact_method}`)).toBeInTheDocument())
+  renderAt(`/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`, <App router={false} />)
+  await waitFor(() => expect(screen.getByText(`Impact analysis: ${firstMethodOf(impact.value).impact_method}`)).toBeInTheDocument())
   // The title renders from the URL's impact_method param before the impact query settles, so the
   // category cells (which need the fetched scores) need their own wait.
   await waitFor(() => {
-    for (const score of impact.value.scores) expect(screen.getByText(score.method.impact_category)).toBeInTheDocument()
+    for (const score of impact.value.scores) expect(screen.getByText(methodById(impact.value.methods, score.method_id).impact_category)).toBeInTheDocument()
   })
   expect(screen.getByText('Sub-group by:')).toBeInTheDocument()
 })
 
 it('lists the top 5 contributions in a table beside the chart', async () => {
-  renderAt(`/systems/${system.value.id}/results/general?impact_method=${encodeURIComponent(impact.value.scores[0].method.impact_method)}`, <App router={false} />)
+  renderAt(`/systems/${system.value.id}/results/general?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`, <App router={false} />)
   const heading = await screen.findByText('Top 5 direct contributions to impact category results - overview')
   const table = await waitFor(() => within(heading.closest('section')!).getByRole('table'))
   for (const p of byProcess.value.processes) expect(within(table).getByText(new RegExp(p.name))).toBeInTheDocument()
@@ -54,7 +56,7 @@ it('demands the reference process the system names', async () => {
   vi.mocked(api.impact).mockClear()
   vi.mocked(api.system).mockResolvedValue({ ...system, value: { ...system.value, reference_process: 'frame' } } as SystemRead)
   // App's own client already holds the system read above; Screens reads through a fresh one
-  renderAt(`/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(impact.value.scores[0].method.impact_method)}&amount=2`, <Screens />)
+  renderAt(`/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}&amount=2`, <Screens />)
   await waitFor(() => expect(api.impact).toHaveBeenCalled())
   const body = vi.mocked(api.impact).mock.calls[0][1]
   expect(body.demand?.[0].ref).toEqual({ kind: 'foreground', code: 'frame' })
@@ -100,12 +102,11 @@ it('opens a recorded calculation whose demand holds several items, and names eac
 })
 
 it('names the method of a category that has no indicator without a separator', async () => {
-  const [score] = impact.value.scores
-  const bare = { ...score, method: { ...score.method, indicator: '' } }
-  vi.mocked(api.impact).mockResolvedValue({ ...impact, value: { ...impact.value, scores: [bare] } } as typeof impact)
+  const bare = { ...firstMethodOf(impact.value), indicator: '' }
+  vi.mocked(api.impact).mockResolvedValue({ ...impact, value: { ...impact.value, methods: [bare] } } as typeof impact)
   // an amount of its own keys a query no earlier test cached
-  renderAt(`/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(score.method.impact_method)}&amount=3`, <App router={false} />)
-  const row = (await screen.findByText(score.method.impact_category)).closest('tr')!
-  expect(within(row).getByText(score.method.impact_method, { selector: 'td' }).textContent).toBe(score.method.impact_method)
+  renderAt(`/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(bare.impact_method)}&amount=3`, <App router={false} />)
+  const row = (await screen.findByText(bare.impact_category)).closest('tr')!
+  expect(within(row).getByText(bare.impact_method, { selector: 'td' }).textContent).toBe(bare.impact_method)
   vi.mocked(api.impact).mockResolvedValue(impact)
 })

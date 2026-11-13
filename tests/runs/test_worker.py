@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from ecosemantic.backends.filesystem.records import RecordFolder
 from ecosemantic.backends.filesystem.run_folder import run_dir
 from ecosemantic.backends.filesystem.runs import FilesystemRuns
 from ecosemantic.compute.parameters import materialize
@@ -196,13 +197,13 @@ async def test_the_worker_reads_the_record_once_an_iteration(
 ) -> None:
     runs, run_id = await queued(context, tmp_path, fixture_system_stored, 4)
     reads: list[uuid.UUID] = []
-    read = FilesystemRuns.read_record
+    read = RecordFolder.read
 
-    def counted(self: FilesystemRuns, found: uuid.UUID) -> Run:
+    def counted(self: RecordFolder[Run], found: uuid.UUID) -> Run:
         reads.append(found)
         return read(self, found)
 
-    monkeypatch.setattr(FilesystemRuns, "read_record", counted)
+    monkeypatch.setattr(RecordFolder, "read", counted)
     await asyncio.to_thread(run_once, systems_dir, bundle_dir, tmp_path, run_id)
     # two reads and two patches around the sampling, then one patch an iteration
     assert len(reads) == 8

@@ -4,6 +4,7 @@ import { ResultsEditor } from '@/editors/results/ResultsEditor'
 import { rememberToken } from '@/api/client'
 import { useUi } from '@/store/ui'
 import { renderAt } from './render'
+import { firstMethodOf } from './method'
 import impact from './fixtures/impact.json'
 import system from './fixtures/system.json'
 import validation from './fixtures/validation.json'
@@ -19,7 +20,7 @@ vi.mock('@/api/client', async (importOriginal) => {
 it('stores no token in the tabs it persists', async () => {
   useUi.setState({ pinned: [], details: null })
   rememberToken('?token=secret')
-  const search = `?impact_method=${encodeURIComponent(impact.value.scores[0].method.impact_method)}&token=secret`
+  const search = `?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}&token=secret`
   renderAt(
     `/systems/${system.value.id}/results/impact${search}`,
     <Routes>

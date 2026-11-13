@@ -236,6 +236,39 @@ async def test_update_and_delete_an_exchange(full_server: FastMCP, bottle: str) 
         assert [len(p["exchanges"]) for p in whole["processes"]] == [1, 1]
 
 
+async def test_a_lognormals_written_scale_survives_the_next_write(
+    full_server: FastMCP, bottle: str
+) -> None:
+    async with Client(full_server) as client:
+        await _process(client, bottle, "bottle", "unit")
+        made = (
+            await client.call_tool(
+                "create_exchange",
+                {
+                    "product_system_id": bottle,
+                    "code": "bottle",
+                    "type": "product",
+                    "amount": 0.5,
+                    "input": {"kind": "background", "database": FIXTURE_DB, "id": CODES["steel"]},
+                    "uncertainty": {
+                        "type": "lognormal",
+                        "params": {"loc": -2.3, "scale": 0.1823},
+                    },
+                },
+            )
+        ).structured_content["value"]
+        await client.call_tool(
+            "update_exchange",
+            {"product_system_id": bottle, "exchange_id": made["id"], "comment": "checked"},
+        )
+        whole = (
+            await client.call_tool("get_product_system", {"product_system_id": bottle})
+        ).structured_content["value"]
+        read = next(e for p in whole["processes"] for e in p["exchanges"] if e["id"] == made["id"])
+        assert read["uncertainty"]["params"]["scale"] == 0.1823
+        assert read["uncertainty"]["params"]["loc"] == -2.3
+
+
 async def test_an_object_sent_as_its_json_text_is_refused_naming_what_to_send(
     full_server: FastMCP, bottle: str
 ) -> None:
@@ -256,7 +289,7 @@ async def test_an_object_sent_as_its_json_text_is_refused_naming_what_to_send(
         assert "does not take" not in message
         assert "a string holding JSON" in message and "the object itself" in message
     message = str(wrong["message"])
-    assert "'amount'" in message and "got a string" in message
+    assert "'amount'" in message and "it got 'lots'" in message
     assert "does not take" not in message and "holding JSON" not in message
 
 

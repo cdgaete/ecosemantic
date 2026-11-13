@@ -27,7 +27,7 @@ from ecosemantic.model.entities import (
 )
 from ecosemantic.model.refs import BackgroundRef, ForegroundRef
 from ecosemantic.ports.types import MAX_DRAWS, MonteCarloConfig, System
-from tests.fixture_data import CODES, FIXTURE_DB, FIXTURE_FINGERPRINT, GWP
+from tests.fixture_data import CODES, FIXTURE_DB, FIXTURE_FINGERPRINT, GWP, WATER
 
 GWP_ID = method_id(" > ".join(GWP))
 WIDGET_DEMAND = [{"ref": {"kind": "foreground", "code": "widget"}, "amount": 1.0}]
@@ -139,7 +139,8 @@ async def test_an_impact_method_scores_every_category(server: FastMCP, widget: u
                 {"product_system_id": str(widget), "impact_method": "gwp"},
             )
         ).structured_content["value"]
-        assert [s["method"]["impact_method"] for s in out["scores"]] == ["gwp"]
+        assert [m["impact_method"] for m in out["methods"]] == ["gwp"]
+        assert [s["method_id"] for s in out["scores"]] == [m["id"] for m in out["methods"]]
 
 
 async def test_naming_neither_method_is_invalid(server: FastMCP, widget: uuid.UUID) -> None:
@@ -154,6 +155,7 @@ async def test_monte_carlo_is_reproducible(server: FastMCP, widget: uuid.UUID) -
         "product_system_id": str(widget),
         "method_id": GWP_ID,
         "monte_carlo": {"n": 5, "seed": 3},
+        "samples": True,
     }
     async with Client(server) as client:
         first = (await client.call_tool("calculate_impact", args)).structured_content["value"]
@@ -229,6 +231,7 @@ async def test_under_monte_carlo_each_variant_carries_its_samples_and_its_paired
                     "method_id": GWP_ID,
                     "variants": ["half", "double_steel"],
                     "monte_carlo": {"n": 8, "seed": 3},
+                    "samples": True,
                 },
             )
         ).structured_content["value"]
@@ -266,6 +269,7 @@ async def test_under_monte_carlo_a_variant_s_deltas_are_its_scores_less_the_base
                     "method_id": GWP_ID,
                     "variants": ["half", "double_steel"],
                     "monte_carlo": {"n": 8, "seed": 3},
+                    "samples": True,
                 },
             )
         ).structured_content["value"]
@@ -455,6 +459,32 @@ async def test_a_demand_naming_a_product_system_is_refused(
                     ],
                 },
             )
+
+
+async def test_an_impact_answer_lists_each_method_once_and_every_score_names_one_by_id(
+    context: ServerContext, varied: uuid.UUID
+) -> None:
+    stored = await context.storage.get_product_system(varied)
+    methods = [
+        await context.inventory.resolve_method(stored.database.name, method_id(" > ".join(key)))
+        for key in (GWP, WATER)
+    ]
+    result = await impact_of(
+        context.calculation,
+        materialize(stored),
+        methods,
+        variants=["half"],
+        monte_carlo=MonteCarloConfig(n=8),
+    )
+    ids = [method.id for method in methods]
+    assert [method.id for method in result.methods] == ids
+    assert [score.method_id for score in result.scores] == ids
+    assert [[score.method_id for score in v.scores] for v in result.variants] == [ids]
+    assert result.uncertainty is not None
+    assert [category.method_id for category in result.uncertainty.categories] == ids
+    assert result.uncertainty.gating_method in ids
+    assert result.variants[0].uncertainty is not None
+    assert [category.method_id for category in result.variants[0].uncertainty.categories] == ids
 
 
 async def test_impact_of_scores_a_system_and_each_variant(
@@ -660,3 +690,33 @@ def test_the_call_takes_the_run_defaults_and_caps_them_at_its_own_ceiling():
             "Le": MAX_ITERATIONS
         }
     assert MAX_ITERATIONS < MAX_DRAWS
+
+
+async def test_a_monte_carlo_call_answers_a_histogram_unless_the_samples_are_asked_for(
+    server: FastMCP, varied: uuid.UUID
+) -> None:
+    args = {
+        "product_system_id": str(varied),
+        "method_id": GWP_ID,
+        "variants": ["half"],
+        "monte_carlo": {"n": 8, "seed": 3},
+    }
+    async with Client(server) as client:
+        bare = (await client.call_tool("calculate_impact", args)).structured_content["value"]
+        asked = (
+            await client.call_tool("calculate_impact", {**args, "samples": True})
+        ).structured_content["value"]
+    assert [c["samples"] for c in bare["uncertainty"]["categories"]] == [None]
+    bare_category = bare["uncertainty"]["categories"][0]
+    assert len(bare_category["histogram"]["counts"]) == 20
+    assert sum(bare_category["histogram"]["counts"]) == bare_category["summary"]["n"]
+    [variant] = bare["variants"]
+    assert [c["samples"] for c in variant["uncertainty"]["categories"]] == [None]
+    variant_category = variant["uncertainty"]["categories"][0]
+    assert len(variant_category["histogram"]["counts"]) == 20
+    assert sum(variant_category["histogram"]["counts"]) == variant_category["summary"]["n"]
+    assert variant["paired_deltas"] == asked["variants"][0]["paired_deltas"]
+    assert len(asked["uncertainty"]["categories"][0]["samples"]) == 8
+    assert asked["uncertainty"]["categories"][0]["histogram"] is None
+    assert len(asked["variants"][0]["uncertainty"]["categories"][0]["samples"]) == 8
+    assert asked["variants"][0]["uncertainty"]["categories"][0]["histogram"] is None

@@ -8,7 +8,7 @@ import system from './fixtures/system.json'
 import systems from './fixtures/systems.json'
 import validation from './fixtures/validation.json'
 import { renderAt } from './render'
-
+import { firstMethodOf } from './method'
 vi.mock('@/api/client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/api/client')>()
   return {
@@ -25,7 +25,7 @@ vi.mock('@/api/client', async (importOriginal) => {
   }
 })
 
-const search = `?impact_method=${encodeURIComponent(impact.value.scores[0].method.impact_method)}`
+const search = `?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`
 // the fixture's one method is ('climate change', 'GWP100')
 const label = 'climate change · GWP100'
 

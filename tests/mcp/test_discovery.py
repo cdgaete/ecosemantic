@@ -201,7 +201,7 @@ async def test_a_filtered_search_whose_words_match_blames_the_filter(server: Fas
         assert "unit" in out["hint"] and "the words alone match" in out["hint"]
 
 
-async def test_a_filtered_search_whose_words_match_nothing_says_to_name_fewer_words(
+async def test_a_filtered_search_whose_one_word_matches_nothing_is_told_to_try_another_word(
     server: FastMCP,
 ) -> None:
     async with Client(server) as client:
@@ -213,7 +213,7 @@ async def test_a_filtered_search_whose_words_match_nothing_says_to_name_fewer_wo
         ).structured_content
         assert out["items"] == []
         assert "unit" not in out["hint"]
-        assert "name fewer words" in out["hint"]
+        assert out["hint"] is not None and "no entry holds 'unobtainium'" in out["hint"]
 
 
 async def test_a_filter_value_the_vocabulary_lacks_is_named_with_the_vocabulary_that_lists_it(
@@ -250,7 +250,7 @@ async def test_a_filter_value_the_vocabulary_lacks_is_named_with_the_vocabulary_
     )
 
 
-async def test_an_unfiltered_search_that_matches_nothing_says_to_name_fewer_words(
+async def test_an_unfiltered_search_that_matches_nothing_says_to_try_another_word(
     server: FastMCP,
 ) -> None:
     async with Client(server) as client:
@@ -260,7 +260,22 @@ async def test_an_unfiltered_search_that_matches_nothing_says_to_name_fewer_word
             )
         ).structured_content
         assert out["items"] == []
-        assert out["hint"] is not None and "name fewer words" in out["hint"]
+        assert out["hint"] == (
+            "no entry holds 'unobtainium'; try another word, or the start of one followed by *"
+        )
+
+
+async def test_a_search_for_two_words_that_matches_nothing_says_to_name_fewer_words(
+    server: FastMCP,
+) -> None:
+    async with Client(server) as client:
+        out = (
+            await client.call_tool(
+                "search_processes", {"database": FIXTURE_DB, "query": "unobtainium supply"}
+            )
+        ).structured_content
+        assert out["items"] == []
+        assert out["hint"] == "no entry holds every word of the query; name fewer words"
 
 
 async def test_a_flow_search_whose_words_match_blames_the_flow_type(server: FastMCP) -> None:
@@ -275,7 +290,7 @@ async def test_a_flow_search_whose_words_match_blames_the_flow_type(server: Fast
         assert "flow_type" in out["hint"] and "the words alone match" in out["hint"]
 
 
-async def test_a_flow_search_whose_words_match_nothing_says_to_name_fewer_words(
+async def test_a_flow_search_whose_one_word_matches_nothing_is_told_to_try_another_word(
     server: FastMCP,
 ) -> None:
     async with Client(server) as client:
@@ -287,4 +302,4 @@ async def test_a_flow_search_whose_words_match_nothing_says_to_name_fewer_words(
         ).structured_content
         assert out["items"] == []
         assert "flow_type" not in out["hint"]
-        assert "name fewer words" in out["hint"]
+        assert out["hint"] is not None and "no entry holds 'unobtainium'" in out["hint"]

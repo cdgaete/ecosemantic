@@ -77,17 +77,26 @@ def test_a_background_process_is_one_item() -> None:
 
 
 def test_a_result_is_its_scores() -> None:
-    score = Score(value=2.5, unit="kg CO2-Eq", method=GWP)
+    score = Score(value=2.5, unit="kg CO2-Eq", method_id=GWP.id)
     expected = Summary(scores=[SummaryScore(method=GWP_SPEC, value=2.5, unit="kg CO2-Eq")])
     assert (
         ImpactResult(
-            database=FIXTURE_DATABASE, product_system="bottle", scores=[score], credit_loops=[]
+            database=FIXTURE_DATABASE,
+            product_system="bottle",
+            methods=[GWP],
+            scores=[score],
+            credit_loops=[],
         ).summarise()
         == expected
     )
     assert (
         ContributionResult(
-            database=FIXTURE_DATABASE, by="process", total=score, processes=[], credit_loops=[]
+            database=FIXTURE_DATABASE,
+            by="process",
+            method=GWP,
+            total=score,
+            processes=[],
+            credit_loops=[],
         ).summarise()
         == expected
     )

@@ -8,6 +8,7 @@ import system from './fixtures/system.json'
 import validation from './fixtures/validation.json'
 import recordedImpact from './fixtures/impact.json'
 import byProcess from './fixtures/contributions_process.json'
+import { firstMethodOf } from './method'
 
 const impact = recordedImpact as Answer<ImpactResult>
 const changed = { ...system, value: { ...system.value, hash: 'a-different-hash' } }
@@ -62,7 +63,7 @@ afterEach(() => vi.unstubAllGlobals())
 it('shows the model-changed banner on a stream entry and only recalculates when asked', async () => {
   vi.mocked(api.system).mockResolvedValueOnce(system as SystemRead)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const address = `/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(impact.value.scores[0].method.impact_method)}`
+  const address = `/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[address]}>
@@ -86,7 +87,7 @@ it('shows the model-changed banner on a stream entry and only recalculates when 
 it('computes no page an entry has made stale and asks for a recalculation instead', async () => {
   vi.mocked(api.system).mockResolvedValueOnce(system as SystemRead)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const address = `/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(impact.value.scores[0].method.impact_method)}`
+  const address = `/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[address]}>
@@ -111,7 +112,7 @@ it('computes no page an entry has made stale and asks for a recalculation instea
 
 function openImpact() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const address = `/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(impact.value.scores[0].method.impact_method)}`
+  const address = `/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[address]}>
@@ -145,6 +146,6 @@ it('says nothing of loops when none holds a credit', async () => {
   vi.mocked(api.system).mockResolvedValueOnce(system as SystemRead)
   openImpact()
   await waitFor(() => expect(api.impact).toHaveBeenCalledTimes(1))
-  await waitFor(() => expect(screen.getAllByText(impact.value.scores[0].method.impact_category).length).toBeGreaterThan(0))
+  await waitFor(() => expect(screen.getAllByText(firstMethodOf(impact.value).impact_category).length).toBeGreaterThan(0))
   expect(screen.queryByText(/holds a credit/)).not.toBeInTheDocument()
 })

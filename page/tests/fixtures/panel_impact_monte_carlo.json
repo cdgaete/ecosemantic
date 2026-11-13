@@ -1,0 +1,203 @@
+{
+  "hint": null,
+  "value": {
+    "credit_loops": [],
+    "database": {
+      "elementary_flows": "fixture-biosphere",
+      "fingerprint": "ab4a4851ae4bc8a41d356d0da3b12a8727e59dcd7f46776f7016caa670b616d9",
+      "name": "fixture",
+      "scheme": "olca",
+      "system_model": "unit process",
+      "version": "1"
+    },
+    "linked_credit_loops": [],
+    "links_behind": [],
+    "methods": [
+      {
+        "id": "m_bff077f3bd",
+        "impact_category": "climate change",
+        "impact_method": "gwp",
+        "indicator": "GWP100",
+        "spec": "fixture > gwp > climate change > GWP100",
+        "tuple": [
+          "fixture",
+          "gwp",
+          "climate change > GWP100"
+        ],
+        "unit": "kg CO2-Eq"
+      }
+    ],
+    "product_system": "widget",
+    "scores": [
+      {
+        "method_id": "m_bff077f3bd",
+        "unit": "kg CO2-Eq",
+        "value": 4.158
+      }
+    ],
+    "treatments_run_backwards": [],
+    "uncertainty": {
+      "categories": [
+        {
+          "histogram": {
+            "counts": [
+              1,
+              0,
+              0,
+              1,
+              0,
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              2
+            ],
+            "high": 4.263411556488797,
+            "low": 4.120354646846025
+          },
+          "method_id": "m_bff077f3bd",
+          "samples": null,
+          "summary": {
+            "mean": 4.193766123236991,
+            "median": 4.184663903777714,
+            "median_ci95": [
+              4.120354646846025,
+              4.263411556488797
+            ],
+            "n": 6,
+            "percentiles": [
+              4.123716405206066,
+              4.263266863778365
+            ],
+            "rel_se": 0.008721077974733555
+          }
+        }
+      ],
+      "credit_loops": [],
+      "database": {
+        "elementary_flows": "fixture-biosphere",
+        "fingerprint": "ab4a4851ae4bc8a41d356d0da3b12a8727e59dcd7f46776f7016caa670b616d9",
+        "name": "fixture",
+        "scheme": "olca",
+        "system_model": "unit process",
+        "version": "1"
+      },
+      "dropped_background": [],
+      "dropped_draws": [],
+      "dropped_linked_loops": [],
+      "dropped_loops": [],
+      "gating_method": "m_bff077f3bd",
+      "linked_credit_loops": [],
+      "n": 6,
+      "normals_at_amount": 2,
+      "scope": "full",
+      "stopped": "target"
+    },
+    "variants": [
+      {
+        "credit_loops": [],
+        "deltas": [
+          1.6679999999999993
+        ],
+        "linked_credit_loops": [],
+        "name": "heavy",
+        "paired_deltas": [
+          {
+            "delta_abs": 1.6679999999999993,
+            "delta_ci95": [
+              1.6679999999999984,
+              1.6680000000000001
+            ],
+            "delta_pct": 39.859831956736336
+          }
+        ],
+        "scores": [
+          {
+            "method_id": "m_bff077f3bd",
+            "unit": "kg CO2-Eq",
+            "value": 5.826
+          }
+        ],
+        "treatments_run_backwards": [],
+        "uncertainty": {
+          "categories": [
+            {
+              "histogram": {
+                "counts": [
+                  1,
+                  0,
+                  0,
+                  1,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  2
+                ],
+                "high": 5.931411556488795,
+                "low": 5.788354646846024
+              },
+              "method_id": "m_bff077f3bd",
+              "samples": null,
+              "summary": {
+                "mean": 5.86176612323699,
+                "median": 5.852663903777713,
+                "median_ci95": [
+                  5.788354646846024,
+                  5.931411556488795
+                ],
+                "n": 6,
+                "percentiles": [
+                  5.791716405206065,
+                  5.931266863778363
+                ],
+                "rel_se": 0.006235584479631896
+              }
+            }
+          ],
+          "credit_loops": [],
+          "database": {
+            "elementary_flows": "fixture-biosphere",
+            "fingerprint": "ab4a4851ae4bc8a41d356d0da3b12a8727e59dcd7f46776f7016caa670b616d9",
+            "name": "fixture",
+            "scheme": "olca",
+            "system_model": "unit process",
+            "version": "1"
+          },
+          "dropped_background": [],
+          "dropped_draws": [],
+          "dropped_linked_loops": [],
+          "dropped_loops": [],
+          "gating_method": "m_bff077f3bd",
+          "linked_credit_loops": [],
+          "n": 6,
+          "normals_at_amount": 2,
+          "scope": "full",
+          "stopped": "target"
+        }
+      }
+    ]
+  },
+  "view_url": null
+}

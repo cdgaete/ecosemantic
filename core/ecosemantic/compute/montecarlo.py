@@ -89,8 +89,8 @@ def paired_samples(
 ) -> tuple[list[float], list[float]]:
     """One category's samples of a base and a variant at the draws both kept, in draw order, so
     each pair shares its random numbers."""
-    at_base = dict(zip(base.draws(), base.categories[category].samples, strict=True))
-    at_variant = dict(zip(variant.draws(), variant.categories[category].samples, strict=True))
+    at_base = dict(zip(base.draws(), base.categories[category].sampled(), strict=True))
+    at_variant = dict(zip(variant.draws(), variant.categories[category].sampled(), strict=True))
     common = sorted(at_base.keys() & at_variant.keys())
     return [at_base[d] for d in common], [at_variant[d] for d in common]
 

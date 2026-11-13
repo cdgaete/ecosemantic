@@ -51,22 +51,23 @@
       }
     ],
     "linked_credit_loops": [],
+    "method": {
+      "id": "m_bff077f3bd",
+      "impact_category": "climate change",
+      "impact_method": "gwp",
+      "indicator": "GWP100",
+      "spec": "fixture > gwp > climate change > GWP100",
+      "tuple": [
+        "fixture",
+        "gwp",
+        "climate change > GWP100"
+      ],
+      "unit": "kg CO2-Eq"
+    },
     "processes": null,
     "root": null,
     "total": {
-      "method": {
-        "id": "m_bff077f3bd",
-        "impact_category": "climate change",
-        "impact_method": "gwp",
-        "indicator": "GWP100",
-        "spec": "fixture > gwp > climate change > GWP100",
-        "tuple": [
-          "fixture",
-          "gwp",
-          "climate change > GWP100"
-        ],
-        "unit": "kg CO2-Eq"
-      },
+      "method_id": "m_bff077f3bd",
       "unit": "kg CO2-Eq",
       "value": 4.158
     },

@@ -10,6 +10,7 @@ from ecosemantic.errors import Invalid
 from ecosemantic.geometry import (
     CARD_WIDTH,
     COLUMN_GAP,
+    COLUMN_TOP,
     FOLD_AFTER,
     HEADER_HEIGHT,
     LINKED_HEIGHT,
@@ -237,6 +238,28 @@ def test_a_process_added_beside_a_held_card_does_not_move_it() -> None:
     second = {p.code: p for p in arrange(after, ["fu"], held, emitted(after))}
     assert (first["a"].x, first["a"].y) == (second["a"].x, second["a"].y)
     assert overlapping(list(second.values())) == []
+
+
+def test_a_held_card_in_the_reference_column_keeps_the_reference_clear_of_it() -> None:
+    built = system(process("fu", ["a", "b"]), process("a"), process("b"))
+    column = CARD_WIDTH + COLUMN_GAP
+    held = {"a": (column, COLUMN_TOP)}
+    placed = {p.code: p for p in arrange(built, ["fu"], held, emitted(built))}
+    assert (placed["a"].x, placed["a"].y) == (column, COLUMN_TOP)
+    assert not placed["fu"].held
+    assert overlapping(list(placed.values())) == []
+
+
+def test_a_held_card_outside_the_reference_column_leaves_the_reference_at_the_middle() -> None:
+    built = system(process("fu", ["a", "b", "c"]), process("a"), process("b"), process("c"))
+    far = 2 * (CARD_WIDTH + COLUMN_GAP)
+    placed = {p.code: p for p in arrange(built, ["fu"], {"a": (far, COLUMN_TOP)}, emitted(built))}
+    assert (placed["a"].x, placed["a"].y) == (far, COLUMN_TOP)
+    suppliers = [placed[c] for c in ("a", "b", "c")]
+    top = min(p.y for p in suppliers)
+    bottom = max(p.y + p.height for p in suppliers)
+    middle = placed["fu"].y + placed["fu"].height / 2
+    assert abs(middle - (top + bottom) / 2) < 1.0
 
 
 def test_a_card_no_anchor_reaches_sits_left_of_every_column() -> None:

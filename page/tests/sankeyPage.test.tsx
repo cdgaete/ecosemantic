@@ -3,6 +3,7 @@ import type { ContributionResult, TreeNode } from '@/api/types'
 import { App } from '@/App'
 import { formatAmount } from '@/lib/format'
 import { renderAt } from './render'
+import { firstMethodOf } from './method'
 import databases from './fixtures/databases.json'
 import byPath from './fixtures/contributions_path.json'
 import impact from './fixtures/impact.json'
@@ -30,7 +31,7 @@ vi.mock('@/api/client', async (importOriginal) => {
 })
 
 it('shows a credited node with its negative score in the node table', async () => {
-  renderAt(`/systems/${system.value.id}/results/sankey?impact_method=${encodeURIComponent(impact.value.scores[0].method.impact_method)}`, <App router={false} />)
+  renderAt(`/systems/${system.value.id}/results/sankey?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`, <App router={false} />)
   const heading = await screen.findByText('Sankey nodes')
   const table = within(heading.closest('section')!).getByRole('table')
   const row = within(table).getByText(new RegExp(`^${credited.children[0].name}`)).closest('tr')!

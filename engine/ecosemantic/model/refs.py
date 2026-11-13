@@ -94,6 +94,11 @@ ExchangeInput = Annotated[
     Field(discriminator="kind", json_schema_extra={"type": "object"}),
 ]
 
+ProcessInput = Annotated[
+    BackgroundRef | ForegroundRef,
+    Field(discriminator="kind", json_schema_extra={"type": "object"}),
+]
+
 
 def slug(text: str, separator: str) -> str:
     """A name in lowercase letters and digits, each run of anything else as one separator and

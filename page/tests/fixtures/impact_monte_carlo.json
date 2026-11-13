@@ -12,22 +12,25 @@
     },
     "linked_credit_loops": [],
     "links_behind": [],
+    "methods": [
+      {
+        "id": "m_bff077f3bd",
+        "impact_category": "climate change",
+        "impact_method": "gwp",
+        "indicator": "GWP100",
+        "spec": "fixture > gwp > climate change > GWP100",
+        "tuple": [
+          "fixture",
+          "gwp",
+          "climate change > GWP100"
+        ],
+        "unit": "kg CO2-Eq"
+      }
+    ],
     "product_system": "widget",
     "scores": [
       {
-        "method": {
-          "id": "m_bff077f3bd",
-          "impact_category": "climate change",
-          "impact_method": "gwp",
-          "indicator": "GWP100",
-          "spec": "fixture > gwp > climate change > GWP100",
-          "tuple": [
-            "fixture",
-            "gwp",
-            "climate change > GWP100"
-          ],
-          "unit": "kg CO2-Eq"
-        },
+        "method_id": "m_bff077f3bd",
         "unit": "kg CO2-Eq",
         "value": 4.158
       }
@@ -36,19 +39,8 @@
     "uncertainty": {
       "categories": [
         {
-          "method": {
-            "id": "m_bff077f3bd",
-            "impact_category": "climate change",
-            "impact_method": "gwp",
-            "indicator": "GWP100",
-            "spec": "fixture > gwp > climate change > GWP100",
-            "tuple": [
-              "fixture",
-              "gwp",
-              "climate change > GWP100"
-            ],
-            "unit": "kg CO2-Eq"
-          },
+          "histogram": null,
+          "method_id": "m_bff077f3bd",
           "samples": [
             4.263411556488797,
             4.21115097995817,
@@ -86,19 +78,7 @@
       "dropped_draws": [],
       "dropped_linked_loops": [],
       "dropped_loops": [],
-      "gating_method": {
-        "id": "m_bff077f3bd",
-        "impact_category": "climate change",
-        "impact_method": "gwp",
-        "indicator": "GWP100",
-        "spec": "fixture > gwp > climate change > GWP100",
-        "tuple": [
-          "fixture",
-          "gwp",
-          "climate change > GWP100"
-        ],
-        "unit": "kg CO2-Eq"
-      },
+      "gating_method": "m_bff077f3bd",
       "linked_credit_loops": [],
       "n": 6,
       "normals_at_amount": 2,
@@ -125,19 +105,7 @@
         ],
         "scores": [
           {
-            "method": {
-              "id": "m_bff077f3bd",
-              "impact_category": "climate change",
-              "impact_method": "gwp",
-              "indicator": "GWP100",
-              "spec": "fixture > gwp > climate change > GWP100",
-              "tuple": [
-                "fixture",
-                "gwp",
-                "climate change > GWP100"
-              ],
-              "unit": "kg CO2-Eq"
-            },
+            "method_id": "m_bff077f3bd",
             "unit": "kg CO2-Eq",
             "value": 5.826
           }
@@ -146,19 +114,8 @@
         "uncertainty": {
           "categories": [
             {
-              "method": {
-                "id": "m_bff077f3bd",
-                "impact_category": "climate change",
-                "impact_method": "gwp",
-                "indicator": "GWP100",
-                "spec": "fixture > gwp > climate change > GWP100",
-                "tuple": [
-                  "fixture",
-                  "gwp",
-                  "climate change > GWP100"
-                ],
-                "unit": "kg CO2-Eq"
-              },
+              "histogram": null,
+              "method_id": "m_bff077f3bd",
               "samples": [
                 5.931411556488795,
                 5.879150979958169,
@@ -196,19 +153,7 @@
           "dropped_draws": [],
           "dropped_linked_loops": [],
           "dropped_loops": [],
-          "gating_method": {
-            "id": "m_bff077f3bd",
-            "impact_category": "climate change",
-            "impact_method": "gwp",
-            "indicator": "GWP100",
-            "spec": "fixture > gwp > climate change > GWP100",
-            "tuple": [
-              "fixture",
-              "gwp",
-              "climate change > GWP100"
-            ],
-            "unit": "kg CO2-Eq"
-          },
+          "gating_method": "m_bff077f3bd",
           "linked_credit_loops": [],
           "n": 6,
           "normals_at_amount": 2,
@@ -219,7 +164,7 @@
       {
         "credit_loops": [],
         "deltas": [
-          -0.8335999999999999
+          -0.8336000000000001
         ],
         "linked_credit_loops": [],
         "name": "lighter",
@@ -235,19 +180,7 @@
         ],
         "scores": [
           {
-            "method": {
-              "id": "m_bff077f3bd",
-              "impact_category": "climate change",
-              "impact_method": "gwp",
-              "indicator": "GWP100",
-              "spec": "fixture > gwp > climate change > GWP100",
-              "tuple": [
-                "fixture",
-                "gwp",
-                "climate change > GWP100"
-              ],
-              "unit": "kg CO2-Eq"
-            },
+            "method_id": "m_bff077f3bd",
             "unit": "kg CO2-Eq",
             "value": 3.3244000000000002
           }
@@ -256,19 +189,8 @@
         "uncertainty": {
           "categories": [
             {
-              "method": {
-                "id": "m_bff077f3bd",
-                "impact_category": "climate change",
-                "impact_method": "gwp",
-                "indicator": "GWP100",
-                "spec": "fixture > gwp > climate change > GWP100",
-                "tuple": [
-                  "fixture",
-                  "gwp",
-                  "climate change > GWP100"
-                ],
-                "unit": "kg CO2-Eq"
-              },
+              "histogram": null,
+              "method_id": "m_bff077f3bd",
               "samples": [
                 3.4298115564887968,
                 3.37755097995817,
@@ -306,19 +228,7 @@
           "dropped_draws": [],
           "dropped_linked_loops": [],
           "dropped_loops": [],
-          "gating_method": {
-            "id": "m_bff077f3bd",
-            "impact_category": "climate change",
-            "impact_method": "gwp",
-            "indicator": "GWP100",
-            "spec": "fixture > gwp > climate change > GWP100",
-            "tuple": [
-              "fixture",
-              "gwp",
-              "climate change > GWP100"
-            ],
-            "unit": "kg CO2-Eq"
-          },
+          "gating_method": "m_bff077f3bd",
           "linked_credit_loops": [],
           "n": 6,
           "normals_at_amount": 2,

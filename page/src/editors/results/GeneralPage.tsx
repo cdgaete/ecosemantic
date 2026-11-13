@@ -1,6 +1,6 @@
 import { useContributions } from '@/api/queries'
 import type { Hotspot, Process, ProductSystem } from '@/api/types'
-import { categoryLabel, cutNotice, formatAgo, formatAmount, formatShare } from '@/lib/format'
+import { categoryLabel, cutNotice, formatAgo, formatAmount, formatShare, methodById } from '@/lib/format'
 import { RequestAction } from '@/requests/RequestAction'
 import { DataTable, type Column } from '@/window/DataTable'
 import { EditorHeader } from '@/window/EditorHeader'
@@ -26,8 +26,11 @@ function targetOf(params: ResultParams, system: ProductSystem | undefined, rootP
 
 export function GeneralPage({ result }: { result: Result }) {
   const { id, params, hash, system, impact, root, stale, waiting } = result
-  const first = impact.data?.value.scores[0]
-  const top = useContributions(id, hash, { by: 'process', method_id: first?.method.id, top_n: 5, demand: demandOf(params!, root) }, first !== undefined && !stale)
+  const scores = impact.data?.value.scores
+  const first = scores?.[0]
+  const methods = impact.data?.value.methods
+  const firstMethod = first === undefined || methods === undefined ? undefined : methodById(methods, first.method_id)
+  const top = useContributions(id, hash, { by: 'process', method_id: first?.method_id, top_n: 5, demand: demandOf(params!, root) }, first !== undefined && !stale)
   const cut = cutNotice(top.data?.value.cut ?? null)
   const rootProcess = system?.processes.find((p) => p.code === root)
   const action = <RequestAction systemId={id} entity="product_system" entityId={id} />
@@ -46,7 +49,7 @@ export function GeneralPage({ result }: { result: Result }) {
             { label: 'Product system', value: system?.name ?? '' },
             { label: 'Reference process', value: rootProcess?.name ?? (root ?? '') },
             { label: 'Target amount', value: targetOf(params!, system, rootProcess) },
-            { label: 'Impact assessment method', value: params?.impact_method ?? first?.method.spec ?? '' },
+            { label: 'Impact assessment method', value: params?.impact_method ?? firstMethod?.spec ?? '' },
             { label: 'Parameter set', value: params?.variants.length ? params.variants.join(', ') : 'base' },
             ...(result.call ? [{ label: 'Calculated by', value: `${result.call.origin === 'view' ? 'you' : result.call.agent}, ${formatAgo(result.call.started_at)}` }] : []),
           ]}
@@ -66,7 +69,7 @@ export function GeneralPage({ result }: { result: Result }) {
         ) : (
           <p className="text-muted-foreground">{top.error?.message ?? impact.error?.message ?? waiting}</p>
         )}
-        {first ? <p className="pt-1 text-xs text-muted-foreground">{categoryLabel(first.method)}</p> : null}
+        {firstMethod ? <p className="pt-1 text-xs text-muted-foreground">{categoryLabel(firstMethod)}</p> : null}
       </Section>
     </>
   )

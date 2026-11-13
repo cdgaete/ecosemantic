@@ -6,13 +6,21 @@ from typing import Any
 
 import pytest
 
+from ecosemantic.backends.native.install import install
+from ecosemantic.backends.native.inventory import NativeInventory
+from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.databases.ecoinvent import build as build_module
 from ecosemantic.databases.ecoinvent import probe as probe_module
 from ecosemantic.databases.ecoinvent.build import build
 from ecosemantic.databases.ecoinvent.profile import default_profile
 from ecosemantic.errors import NotSupported
+from ecosemantic.model.refs import BackgroundRef
 from ecosemantic.package.background import read_background
-from tests.databases.spold_fixture import build_release
+from tests.databases.spold_fixture import (
+    STEEL_CLASSIFICATIONS,
+    STEEL_COMMENT,
+    build_release,
+)
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -58,3 +66,24 @@ def test_a_build_reads_the_release_once(tmp_path: Path, monkeypatch: pytest.Monk
     monkeypatch.setattr(build_module, "read_datasets", counted, raising=False)
     build(release, default_profile(release), tmp_path / "out", NOW)
     assert len(calls) == 1
+
+
+async def test_the_built_steel_dataset_answers_its_comment_and_classifications(
+    tmp_path: Path,
+) -> None:
+    release = build_release(tmp_path)
+    written = build(release, default_profile(release), tmp_path / "out", NOW)
+    imported = read_background(written.bundle, "ecoinvent-3.10-cutoff", foreground=frozenset())
+    key = next(k for k, d in imported.datasets.items() if d["name"] == "steel production")
+    install(
+        tmp_path / "data",
+        imported,
+        written.bundle,
+        version=release.version,
+        system_model=release.system_model,
+    )
+    store = NativeStore(tmp_path / "data")
+    read = await NativeInventory(store).get_process(BackgroundRef(database=key[0], id=key[1]))
+    store.close()
+    assert read.comment == STEEL_COMMENT
+    assert read.classifications == [f"{system}: {value}" for system, value in STEEL_CLASSIFICATIONS]

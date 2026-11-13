@@ -12,6 +12,7 @@ from ecosemantic.errors import NotFound, unreadable
 from ecosemantic.files import write_whole
 from ecosemantic.model.entities import Scenario
 from ecosemantic.model.refs import BackgroundRef, Database, ElementaryFlowRef, SystemRef
+from ecosemantic.package.olca import WrittenLognormal
 from ecosemantic.ports.types import Layout
 
 SIDECAR_DIR = "ecosemantic"
@@ -42,6 +43,7 @@ class Identities(BaseModel):
     suppliers: dict[str, BackgroundRef] = Field(default_factory=dict)
     product_flows: dict[str, uuid.UUID] = Field(default_factory=dict)
     links: dict[str, SystemRef] = Field(default_factory=dict)
+    lognormals: dict[str, WrittenLognormal] = Field(default_factory=dict)
     locations: dict[str, str] = Field(default_factory=dict)
     parameter_units: dict[str, str] = Field(default_factory=dict)
     parameter_prefix: str

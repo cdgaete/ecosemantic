@@ -70,12 +70,13 @@ def test_the_scores_table_carries_the_base_and_each_variant(tmp_path: Path) -> N
     result = ImpactResult(
         database=FIXTURE_DATABASE,
         product_system="Battery pack",
-        scores=[Score(value=4.21, unit="kg CO2-Eq", method=GWP)],
+        methods=[GWP],
+        scores=[Score(value=4.21, unit="kg CO2-Eq", method_id=GWP.id)],
         credit_loops=[],
         variants=[
             VariantScores(
                 name="lean",
-                scores=[Score(value=3.02, unit="kg CO2-Eq", method=GWP)],
+                scores=[Score(value=3.02, unit="kg CO2-Eq", method_id=GWP.id)],
                 deltas=[-1.19],
                 credit_loops=[],
             )
@@ -93,7 +94,11 @@ def test_the_scores_table_carries_the_base_and_each_variant(tmp_path: Path) -> N
 
 def test_the_run_schema_carries_the_key_it_was_computed_on(tmp_path: Path) -> None:
     result = ImpactResult(
-        database=FIXTURE_DATABASE, product_system="Battery pack", scores=[], credit_loops=[]
+        database=FIXTURE_DATABASE,
+        product_system="Battery pack",
+        methods=[GWP],
+        scores=[],
+        credit_loops=[],
     )
     folder = write_impact(tmp_path, key(), result, AT)
     schema = yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))
@@ -107,7 +112,8 @@ def test_a_contribution_over_processes_writes_its_own_columns(tmp_path: Path) ->
     result = ContributionResult(
         database=FIXTURE_DATABASE,
         by="process",
-        total=Score(value=4.21, unit="kg CO2-Eq", method=GWP),
+        method=GWP,
+        total=Score(value=4.21, unit="kg CO2-Eq", method_id=GWP.id),
         credit_loops=[],
         processes=[
             Hotspot(
@@ -132,7 +138,8 @@ def test_a_contribution_run_records_the_cut_it_made(tmp_path: Path) -> None:
     result = ContributionResult(
         database=FIXTURE_DATABASE,
         by="process",
-        total=Score(value=4.21, unit="kg CO2-Eq", method=GWP),
+        method=GWP,
+        total=Score(value=4.21, unit="kg CO2-Eq", method_id=GWP.id),
         credit_loops=[],
         processes=[],
         cut=Cut(cutoff=0.01, below=2, share=0.004, unlisted=3, unlisted_share=0.2),
@@ -150,7 +157,8 @@ def test_a_contribution_run_records_the_cut_it_made(tmp_path: Path) -> None:
     tree = ContributionResult(
         database=FIXTURE_DATABASE,
         by="path",
-        total=Score(value=4.21, unit="kg CO2-Eq", method=GWP),
+        method=GWP,
+        total=Score(value=4.21, unit="kg CO2-Eq", method_id=GWP.id),
         credit_loops=[],
         root=root,
         truncated=False,
@@ -163,13 +171,14 @@ def test_a_monte_carlo_block_writes_the_summary_and_the_samples(tmp_path: Path) 
     result = ImpactResult(
         database=FIXTURE_DATABASE,
         product_system="Battery pack",
-        scores=[Score(value=4.21, unit="kg CO2-Eq", method=GWP)],
+        methods=[GWP],
+        scores=[Score(value=4.21, unit="kg CO2-Eq", method_id=GWP.id)],
         credit_loops=[],
         uncertainty=MonteCarloResult(
             database=FIXTURE_DATABASE,
             n=6,
             stopped="target",
-            gating_method=GWP,
+            gating_method=GWP.id,
             scope="full",
             normals_at_amount=4,
             credit_loops=[],
@@ -178,7 +187,7 @@ def test_a_monte_carlo_block_writes_the_summary_and_the_samples(tmp_path: Path) 
             dropped_background=[],
             categories=[
                 MonteCarloCategory(
-                    method=GWP,
+                    method_id=GWP.id,
                     summary=MonteCarloSummary(
                         n=6,
                         mean=4.2,
@@ -209,7 +218,8 @@ def test_a_contribution_over_flows_writes_its_own_columns(tmp_path: Path) -> Non
     result = ContributionResult(
         database=FIXTURE_DATABASE,
         by="flow",
-        total=Score(value=4.21, unit="kg CO2-Eq", method=GWP),
+        method=GWP,
+        total=Score(value=4.21, unit="kg CO2-Eq", method_id=GWP.id),
         credit_loops=[],
         flows=[
             FlowHotspot(
@@ -240,7 +250,8 @@ def test_a_contribution_over_paths_flattens_the_tree_in_walk_order(tmp_path: Pat
     result = ContributionResult(
         database=FIXTURE_DATABASE,
         by="path",
-        total=Score(value=4.21, unit="kg CO2-Eq", method=GWP),
+        method=GWP,
+        total=Score(value=4.21, unit="kg CO2-Eq", method_id=GWP.id),
         credit_loops=[],
         root=root,
         truncated=False,
@@ -267,10 +278,11 @@ def test_each_run_schema_names_the_loops_holding_a_credit(tmp_path: Path) -> Non
     loop = [["frame", "widget"]]
     linked = [LinkedLoop(product_system_id=uuid.uuid4(), at_hash="a" * 64, codes=["part", "rim"])]
     dumped = [inside.model_dump(mode="json") for inside in linked]
-    total = Score(value=4.21, unit="kg CO2-Eq", method=GWP)
+    total = Score(value=4.21, unit="kg CO2-Eq", method_id=GWP.id)
     impact = ImpactResult(
         database=FIXTURE_DATABASE,
         product_system="Widget",
+        methods=[GWP],
         scores=[total],
         credit_loops=loop,
         linked_credit_loops=linked,
@@ -284,6 +296,7 @@ def test_each_run_schema_names_the_loops_holding_a_credit(tmp_path: Path) -> Non
     decomposed = ContributionResult(
         database=FIXTURE_DATABASE,
         by="process",
+        method=GWP,
         total=total,
         processes=[],
         credit_loops=loop,
@@ -319,13 +332,14 @@ def test_each_run_schema_names_the_exchanges_running_a_treatment_backwards(
 ) -> None:
     named = ["frame · steel at 2.4", "widget · steel at 0.5"]
     doubled = ["frame · steel at 2.4", "widget · steel at 1"]
-    total = Score(value=4.21, unit="kg CO2-Eq", method=GWP)
+    total = Score(value=4.21, unit="kg CO2-Eq", method_id=GWP.id)
     variant = VariantScores(
         name="lean", scores=[total], deltas=[0.0], credit_loops=[], treatments_run_backwards=doubled
     )
     impact = ImpactResult(
         database=FIXTURE_DATABASE,
         product_system="Widget",
+        methods=[GWP],
         scores=[total],
         credit_loops=[],
         treatments_run_backwards=named,
@@ -339,6 +353,7 @@ def test_each_run_schema_names_the_exchanges_running_a_treatment_backwards(
     decomposed = ContributionResult(
         database=FIXTURE_DATABASE,
         by="process",
+        method=GWP,
         total=total,
         processes=[],
         credit_loops=[],
@@ -375,13 +390,14 @@ def test_the_uncertainty_tables_count_the_dropped_draws_and_number_samples_by_dr
     result = ImpactResult(
         database=FIXTURE_DATABASE,
         product_system="Widget",
-        scores=[Score(value=4.21, unit="kg CO2-Eq", method=GWP)],
+        methods=[GWP],
+        scores=[Score(value=4.21, unit="kg CO2-Eq", method_id=GWP.id)],
         credit_loops=[],
         uncertainty=MonteCarloResult(
             database=FIXTURE_DATABASE,
             n=2,
             stopped="ceiling",
-            gating_method=GWP,
+            gating_method=GWP.id,
             scope="full",
             normals_at_amount=0,
             credit_loops=[],
@@ -390,7 +406,7 @@ def test_the_uncertainty_tables_count_the_dropped_draws_and_number_samples_by_dr
             dropped_background=["pellet production [GLO]"],
             categories=[
                 MonteCarloCategory(
-                    method=GWP,
+                    method_id=GWP.id,
                     summary=MonteCarloSummary(
                         n=2,
                         mean=4.2,

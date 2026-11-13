@@ -356,6 +356,30 @@ def record_activity(
     }
 
 
+async def record_panel(server: FastMCP, system_id: str) -> dict[str, object]:
+    """The answer `calculate_impact` hands a chat's panel: one variant, a Monte Carlo block and no
+    samples, so each category carries its histogram."""
+    chat = Client(
+        server, client_info=Implementation(name=CLIENT["name"], version=CLIENT["version"])
+    )
+    async with chat as session:
+        answered = await session.call_tool(
+            "calculate_impact",
+            {
+                "product_system_id": system_id,
+                "impact_method": GWP[1],
+                "variants": ["heavy"],
+                "monte_carlo": {
+                    "n_min": 6,
+                    "n_max": 8,
+                    "rel_se_target": 0.05,
+                    "seed": 12345,
+                },
+            },
+        )
+    return {"panel_impact_monte_carlo": answered.structured_content}
+
+
 async def record_fixtures(context: ServerContext) -> dict[str, object]:
     """Store the recorded systems in the context's storage, let an agent work, and answer every
     recorded route."""
@@ -365,7 +389,8 @@ async def record_fixtures(context: ServerContext) -> dict[str, object]:
     agent_system, searched, computed = await agent_at_work(server)
     with TestClient(build_view(context, server, static=NOWHERE), client=LOOPBACK) as client:
         recorded = record(client, system_id, unfinished_id)
-        return {**recorded, **record_activity(client, agent_system, searched, computed)}
+        activity = record_activity(client, agent_system, searched, computed)
+    return {**recorded, **activity, **await record_panel(server, system_id)}
 
 
 async def main() -> None:

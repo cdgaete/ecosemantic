@@ -4,10 +4,10 @@
       "agent": "fixture-agent",
       "calls": 11,
       "client": "fixture-agent",
-      "first_call_at": "2026-10-20T06:59:18.027535Z",
-      "last_call_at": "2026-10-20T06:59:18.368717Z",
+      "first_call_at": "2026-11-13T18:37:27.529059Z",
+      "last_call_at": "2026-11-13T18:37:27.894420Z",
       "origin": "agent",
-      "product_system_id": "1e5c1bfa-dfa9-4879-b217-0cafec4d1811"
+      "product_system_id": "64aa77ed-8244-410a-b8c0-6fdf25602a6d"
     }
   ]
 }

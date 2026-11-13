@@ -119,6 +119,15 @@ def _distribution(process: o.Process, e: o.Exchange, flow: _Flow, factor: float)
     return {"uncertainty": uncertainty.scaled(factor) if uncertainty else None}
 
 
+def _classifications(process: o.Process) -> list[tuple[str, str] | str]:
+    """The classifications a dataset carries: its category under openLCA's own system, then each
+    tag as the package writes it; a process with neither carries none."""
+    categorised: list[tuple[str, str] | str] = []
+    if process.category:
+        categorised.append(("Category", process.category))
+    return [*categorised, *(process.tags or [])]
+
+
 def exchange_kind(row: Dataset, dataset: str) -> ExchangeKind:
     """The kind an exchange row names, and NotSupported for a kind the port does not name."""
     kind = str(row["type"])
@@ -358,7 +367,7 @@ class _Reader:
                 "reference product": flow.entity.name,
                 "unit": flow.stored.name,
                 "location": location,
-                "classifications": [("Category", process.category)] if process.category else [],
+                "classifications": _classifications(process),
                 "type": "process",
                 "comment": process.description,
                 "exchanges": rows,

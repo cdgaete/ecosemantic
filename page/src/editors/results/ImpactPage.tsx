@@ -1,7 +1,7 @@
 import { Fragment, useState } from 'react'
 import { useContributions } from '@/api/queries'
 import type { Score } from '@/api/types'
-import { cutNotice, formatAmount, formatShare } from '@/lib/format'
+import { cutNotice, formatAmount, formatShare, methodById } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { RequestAction } from '@/requests/RequestAction'
 import { EditorHeader } from '@/window/EditorHeader'
@@ -16,7 +16,7 @@ function signed(delta: number): string {
 }
 
 function Children({ result, score, by, cutoff }: { result: Result; score: Score; by: 'process' | 'flow'; cutoff: number }) {
-  const parts = useContributions(result.id, result.hash, { by, method_id: score.method.id, top_n: 20, cutoff: cutoff / 100, demand: demandOf(result.params!, result.root) }, !result.stale)
+  const parts = useContributions(result.id, result.hash, { by, method_id: score.method_id, top_n: 20, cutoff: cutoff / 100, demand: demandOf(result.params!, result.root) }, !result.stale)
   if (parts.error) return <tr><td colSpan={99} className="px-2 text-destructive">{parts.error.message}</td></tr>
   if (!parts.data) return <tr><td colSpan={99} className="px-2 text-muted-foreground">{result.waiting}</td></tr>
   const rows = by === 'process' ? (parts.data.value.processes ?? []).map((h) => ({ key: `${h.ref.kind === 'background' ? h.ref.id : h.ref.code}`, icon: h.ref.kind === 'foreground' ? ('process' as const) : ('product' as const), name: h.location ? `${h.name} · ${h.location}` : h.name, share: h.fraction, score: h.score })) : (parts.data.value.flows ?? []).map((f) => ({ key: f.flow.id, icon: 'elementary' as const, name: `${f.name} (${f.sub_compartment ? `${f.compartment} / ${f.sub_compartment}` : f.compartment})`, share: f.fraction, score: f.score }))
@@ -64,7 +64,9 @@ export function ImpactPage({ result }: { result: Result }) {
   const [cutoff, setCutoff] = useState(1)
   const [open, setOpen] = useState<string[]>([])
   const value = impact.data?.value
-  const title = params?.impact_method ?? value?.scores[0]?.method.impact_method ?? ''
+  const methods = value?.methods ?? []
+  const first = value?.scores[0]
+  const title = params?.impact_method ?? (first === undefined ? '' : methodById(methods, first.method_id).impact_method)
   return (
     <>
       <EditorHeader icon="result" page="Impact analysis" entity={system?.name ?? ''} />
@@ -103,34 +105,37 @@ export function ImpactPage({ result }: { result: Result }) {
                 </tr>
               </thead>
               <tbody>
-                {value.scores.map((score, i) => (
-                  <Fragment key={score.method.id}>
-                    <tr className={open.includes(score.method.id) ? 'bg-selected' : ''}>
-                      <td className="border-r border-b px-2 py-0.5 break-words">
-                        <button type="button" className="mr-1 text-muted-foreground" aria-label="Expand" onClick={() => setOpen(open.includes(score.method.id) ? open.filter((o) => o !== score.method.id) : [...open, score.method.id])}>
-                          {open.includes(score.method.id) ? '▾' : '▸'}
-                        </button>
-                        <Icon name="result" /> {score.method.impact_category}
-                        {value.variants.map((variant) => (
-                          <span key={variant.name} className="block text-xs text-muted-foreground @lg:hidden">
-                            {variant.name}: {formatAmount(variant.scores[i].value)} ({signed(variant.deltas[i])})
-                          </span>
-                        ))}
-                      </td>
-                      <td className="hidden border-r border-b px-2 @lg:table-cell">
-                        {[score.method.impact_method, score.method.indicator].filter(Boolean).join(' · ')}
-                      </td>
-                      <td className="border-r border-b px-2 text-right tabular-nums">{formatAmount(score.value)}</td>
-                      <td className="border-r border-b px-2">{score.unit}</td>
-                      {value.variants.map((variant) => (
-                        <td key={variant.name} className="hidden border-r border-b px-2 text-right tabular-nums @lg:table-cell">
-                          {formatAmount(variant.scores[i].value)} ({signed(variant.deltas[i])})
+                {value.scores.map((score, i) => {
+                  const method = methodById(value.methods, score.method_id)
+                  return (
+                    <Fragment key={score.method_id}>
+                      <tr className={open.includes(score.method_id) ? 'bg-selected' : ''}>
+                        <td className="border-r border-b px-2 py-0.5 break-words">
+                          <button type="button" className="mr-1 text-muted-foreground" aria-label="Expand" onClick={() => setOpen(open.includes(score.method_id) ? open.filter((o) => o !== score.method_id) : [...open, score.method_id])}>
+                            {open.includes(score.method_id) ? '▾' : '▸'}
+                          </button>
+                          <Icon name="result" /> {method.impact_category}
+                          {value.variants.map((variant) => (
+                            <span key={variant.name} className="block text-xs text-muted-foreground @lg:hidden">
+                              {variant.name}: {formatAmount(variant.scores[i].value)} ({signed(variant.deltas[i])})
+                            </span>
+                          ))}
                         </td>
-                      ))}
-                    </tr>
-                    {open.includes(score.method.id) ? <Children result={result} score={score} by={by} cutoff={cutoff} /> : null}
-                  </Fragment>
-                ))}
+                        <td className="hidden border-r border-b px-2 @lg:table-cell">
+                          {[method.impact_method, method.indicator].filter(Boolean).join(' · ')}
+                        </td>
+                        <td className="border-r border-b px-2 text-right tabular-nums">{formatAmount(score.value)}</td>
+                        <td className="border-r border-b px-2">{score.unit}</td>
+                        {value.variants.map((variant) => (
+                          <td key={variant.name} className="hidden border-r border-b px-2 text-right tabular-nums @lg:table-cell">
+                            {formatAmount(variant.scores[i].value)} ({signed(variant.deltas[i])})
+                          </td>
+                        ))}
+                      </tr>
+                      {open.includes(score.method_id) ? <Children result={result} score={score} by={by} cutoff={cutoff} /> : null}
+                    </Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>

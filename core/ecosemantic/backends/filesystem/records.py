@@ -4,6 +4,7 @@ whole under a lock both processes take."""
 from __future__ import annotations
 
 import asyncio
+import shutil
 import uuid
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterable
 from datetime import datetime
@@ -15,7 +16,7 @@ from pydantic import BaseModel, ValidationError
 
 from ecosemantic.backends.filesystem.watching import touched
 from ecosemantic.errors import NotFound, unreadable
-from ecosemantic.files import read_bytes, write_whole
+from ecosemantic.files import forget, read_bytes, write_whole
 from ecosemantic.ports import posted
 
 SLOT_FILE = "slot.lock"
@@ -33,6 +34,29 @@ def record_of(path: Path, root: Path) -> uuid.UUID | None:
         return uuid.UUID(first)
     except ValueError:
         return None
+
+
+def _lock_id(path: Path) -> uuid.UUID | None:
+    """The record id a lock file's name carries, or none for a name that is not one."""
+    try:
+        return uuid.UUID(path.stem)
+    except ValueError:
+        return None
+
+
+def sweep_locks(folder: Path) -> None:
+    """Remove `<folder>/<id>.lock` for every id whose folder under it is gone, under that lock
+    and once the folder is found missing again; a folder that does not exist holds no lock."""
+    if not folder.is_dir():
+        return
+    for path in folder.glob("*.lock"):
+        record_id = _lock_id(path)
+        if record_id is None or (folder / str(record_id)).is_dir():
+            continue
+        lock = FileLock(path)
+        with lock:
+            if not (folder / str(record_id)).is_dir():
+                forget(lock)
 
 
 class RecordFolder[T: BaseModel]:
@@ -67,10 +91,7 @@ class RecordFolder[T: BaseModel]:
 
     def read(self, record_id: uuid.UUID) -> T:
         """One record, or NotFound when no folder holds it."""
-        record = self.folder(record_id) / self.record_file
-        if not record.is_file():
-            raise NotFound(f"no {self.noun} {record_id}")
-        return self._parsed(record)
+        return self._parsed(self._file(record_id))
 
     def write(self, record_id: uuid.UUID, record: T) -> T:
         """The record written whole: its JSON staged beside its file and moved over it within the
@@ -81,9 +102,20 @@ class RecordFolder[T: BaseModel]:
         return record
 
     def patch(self, record_id: uuid.UUID, change: Callable[[T], T]) -> T:
-        """The record with the change applied, read and written under its lock."""
+        """The record with the change applied, read and written under its lock; a record no
+        folder holds is refused before a lock is made for it."""
+        self._file(record_id)
         with self.lock(record_id):
             return self.write(record_id, change(self.read(record_id)))
+
+    def remove(self, record_id: uuid.UUID) -> None:
+        """The record's folder removed under its lock, and the lock's file with it; a record no
+        folder holds is refused before a lock is made for it."""
+        self._file(record_id)
+        lock = self.lock(record_id)
+        with lock:
+            shutil.rmtree(self.folder(record_id))
+            forget(lock)
 
     def post(self, construct: Callable[[datetime], T]) -> T:
         """A new record posted under the kind's lock, its posted time advanced past the newest
@@ -91,6 +123,10 @@ class RecordFolder[T: BaseModel]:
         with self.post_lock():
             record = construct(self._next_posted_at())
             return self.write(cast(posted.Posted, record).id, record)
+
+    def sweep(self) -> None:
+        """Remove the lock file of every record this folder does not hold."""
+        sweep_locks(self.root / self.kind)
 
     def _next_posted_at(self) -> datetime:
         """The posted time of the next record of this kind: the clock, advanced past the newest."""
@@ -138,6 +174,13 @@ class RecordFolder[T: BaseModel]:
     def _record_of(self, path: Path) -> uuid.UUID | None:
         """The record a written path belongs to, or none for a path that names no record."""
         return record_of(path, self.root / self.kind)
+
+    def _file(self, record_id: uuid.UUID) -> Path:
+        """The record's file, or NotFound when no folder holds it."""
+        record = self.folder(record_id) / self.record_file
+        if not record.is_file():
+            raise NotFound(f"no {self.noun} {record_id}")
+        return record
 
     def slot(self) -> AsyncFileLock:
         """The single slot every process over this directory takes, released when its holder's

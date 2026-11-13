@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import { App } from '@/App'
 import { useRequestDialog } from '@/requests/useRequestDialog'
 import { renderAt } from './render'
+import { firstMethodOf } from './method'
 import byPath from './fixtures/contributions_path.json'
 import byProcess from './fixtures/contributions_process.json'
 import databases from './fixtures/databases.json'
@@ -36,7 +37,7 @@ vi.mock('@/api/client', async (importOriginal) => {
 })
 
 const id = system.value.id
-const search = `?impact_method=${encodeURIComponent(impactMonteCarlo.value.scores[0].method.impact_method)}`
+const search = `?impact_method=${encodeURIComponent(firstMethodOf(impactMonteCarlo.value).impact_method)}`
 
 it.each([
   [`/systems/${id}/results/general${search}`, ['General information', 'Top 5 direct contributions to impact category results - overview']],

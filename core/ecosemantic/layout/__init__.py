@@ -187,18 +187,30 @@ def bounds(placements: list[Placement]) -> dict[str, float]:
     return {"width": width, "height": height, "wasted": max(height - tallest, 0.0)}
 
 
+def _meets(a: Placement, b: Placement) -> bool:
+    """Whether two cards' rectangles overlap horizontally and come nearer vertically than the row
+    gap, which is the closeness the stack packs a card around."""
+    return (
+        a.x < b.x + b.width
+        and b.x < a.x + a.width
+        and a.y < b.y + b.height + ROW_GAP
+        and b.y < a.y + a.height + ROW_GAP
+    )
+
+
 def _centred(placements: list[Placement], reference: str | None) -> list[Placement]:
-    """The reference moved to the middle height of everything else, unless someone held it."""
+    """The reference moved to the middle height of everything else, unless someone held it or that
+    height would meet a card someone held."""
     found = next((p for p in placements if p.code == reference), None)
     if found is None or len(placements) < 2:
         return sorted(placements, key=lambda p: p.code)
     others = [p for p in placements if p.code != reference]
     middle = (min(p.y for p in others) + max(p.y + p.height for p in others)) / 2
     shift = middle - (found.y + found.height / 2)
-    moved = [
-        p if p.held or p.code != reference else p.model_copy(update={"y": p.y + shift})
-        for p in placements
-    ]
+    centre = found.model_copy(update={"y": found.y + shift})
+    if any(_meets(centre, p) for p in placements if p.held and p.code != reference):
+        return sorted(placements, key=lambda p: p.code)
+    moved = [p if p.held or p.code != reference else centre for p in placements]
     return sorted(moved, key=lambda p: p.code)
 
 

@@ -52,6 +52,7 @@ from ecosemantic.ports.types import (
     N_MIN_HELP,
     Decomposition,
     InventoryRow,
+    Limit,
     LinkedLoop,
     MonteCarloConfig,
     Page,
@@ -174,6 +175,7 @@ async def impact_of(
     result = ImpactResult(
         product_system=base.name,
         database=base.database,
+        methods=methods,
         scores=scores,
         credit_loops=credit_loops(base),
         linked_credit_loops=inside,
@@ -267,7 +269,10 @@ async def calculate_impact(
     demand: list[DemandItem] | None = None,
     variants: list[str] | None = None,
     monte_carlo: ImpactMonteCarlo | None = None,
+    samples: bool = False,
 ) -> Answer[ImpactResult]:
+    """The characterised impact of a stored product system, its uncertainty and each variant's
+    answered without the draws unless `samples` asks for them."""
     stored = await context.storage.get_product_system(as_uuid(product_system_id))
     await refuse_stale(context, stored, variants or ())
     linked = await linked_documents(stored, context.storage.get_version)
@@ -290,6 +295,12 @@ async def calculate_impact(
         for p in await held_pins(stored, context.storage)
         if p.name is not None and p.current != p.at
     ]
+    if not samples:
+        if result.uncertainty is not None:
+            result.uncertainty = result.uncertainty.without_samples()
+        for variant in result.variants:
+            if variant.uncertainty is not None:
+                variant.uncertainty = variant.uncertainty.without_samples()
     link = result_link(context, stored, "impact", method_id, impact_method, variants or (), demand)
     return Answer[ImpactResult](value=result, hint=hint, view_url=link)
 
@@ -319,6 +330,7 @@ async def contributions_of(
         value = ContributionResult(
             database=base.database,
             by=by,
+            method=method,
             total=found.total,
             processes=found.items,
             cut=found.cut,
@@ -331,6 +343,7 @@ async def contributions_of(
         value = ContributionResult(
             database=base.database,
             by=by,
+            method=method,
             total=flows.total,
             flows=flows.items,
             cut=flows.cut,
@@ -345,6 +358,7 @@ async def contributions_of(
         value = ContributionResult(
             database=base.database,
             by=by,
+            method=method,
             total=tree.total,
             root=tree.root,
             truncated=tree.truncated,
@@ -418,7 +432,7 @@ async def calculate_inventory(
     demand: list[DemandItem] | None = None,
     compartment: str | None = None,
     query: str | None = None,
-    limit: int = 100,
+    limit: Limit = 100,
     cursor: str | None = None,
 ) -> InventoryListing:
     stored = await context.storage.get_product_system(as_uuid(product_system_id))
@@ -439,7 +453,7 @@ async def calculate_inventory(
             page,
             stranger("compartment", compartment, base.database.name, "compartments")
             if compartment is not None and compartment not in held
-            else empty_search_hint(filters, words),
+            else empty_search_hint(filters, words, query),
         )
     return InventoryListing(
         database=result.database,
@@ -472,7 +486,11 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "call. Under that block a "
             "pair is the base's and the variant's draws at one position, over the first "
             "draws of each up to the shorter run, since each run's own stop rule ends it, "
-            "and paired_deltas holds each difference's median, interval and percentage."
+            "and paired_deltas holds each difference's median, interval and percentage. "
+            "samples adds every category's draws to the base's answer and to each variant's; "
+            "without it each category carries its summary and a histogram of twenty bins. "
+            "methods names every method scored once, and each score, each variant's score and "
+            "each uncertainty category names one of them by method_id."
         ),
         app=panel("impact"),
     )(boundary(bound(calculate_impact, context)))
@@ -491,7 +509,8 @@ def register(server: FastMCP, context: ServerContext) -> None:
             f"{CUTOFF}) of the total into a remainder; by='process' and by='flow' answer the "
             f"top_n (default {TOP_N}) largest parts that reach cutoff, and cut says what the "
             "list leaves out: below, the parts under the cut-off, with their share of the total, "
-            "and unlisted, the parts that reach it past top_n, with their unlisted_share. Example: "
+            "and unlisted, the parts that reach it past top_n, with their unlisted_share. "
+            "method names the method once and total names it by method_id. Example: "
             '{"product_system_id": '
             '"…", "by": "path", "method_id": "m_…", "max_level": 4}.'
         ),

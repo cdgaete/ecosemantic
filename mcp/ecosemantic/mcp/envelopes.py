@@ -160,12 +160,16 @@ def stranger(name: str, value: str, database: str, kind: str) -> str:
     )
 
 
-def empty_search_hint(filters: Mapping[str, object], words_match: bool) -> str:
+def empty_search_hint(filters: Mapping[str, object], words_match: bool, query: str | None) -> str:
     """What a search that returned nothing should change: the filters when the words alone match
-    an entry, the words themselves otherwise."""
+    an entry, another word when the query is one word that matches nothing, the words themselves
+    otherwise."""
     named = applied_filters(filters)
     if named and words_match:
         return f"no matches with {', '.join(named)} applied; the words alone match: drop a filter"
+    terms = query.split() if query is not None else []
+    if len(terms) == 1:
+        return f"no entry holds {terms[0]!r}; try another word, or the start of one followed by *"
     return "no entry holds every word of the query; name fewer words"
 
 
@@ -260,19 +264,29 @@ def bound(fn: Callable[..., Awaitable[T]], context: object) -> Callable[..., Awa
     return call
 
 
+_SHOWN_CHARACTERS = 60
+
+
+def _quoted(value: str) -> str:
+    """A string as a refusal names it: quoted, and cut to its first 60 characters with `…`."""
+    cut = value if len(value) <= _SHOWN_CHARACTERS else value[:_SHOWN_CHARACTERS] + "…"
+    return repr(cut)
+
+
 def _sent(value: object) -> str:
-    """What a string argument held, said so that a caller who encoded an object or an array
-    as JSON text learns to send the value itself."""
+    """The string an argument carried, quoted and cut to 60 characters, and what to send instead
+    when the string holds the JSON text of an object or an array; nothing for an argument that is
+    not a string."""
     if not isinstance(value, str):
         return ""
     try:
         decoded = json.loads(value)
     except ValueError:
-        return "; it got a string"
+        return f"; it got {_quoted(value)}"
     if isinstance(decoded, dict | list):
         shape = "object" if isinstance(decoded, dict) else "array"
         return f"; it got a string holding JSON: send the {shape} itself, not its text"
-    return "; it got a string"
+    return f"; it got {_quoted(value)}"
 
 
 def _refused(name: str, problem: Mapping[str, object]) -> str:

@@ -330,10 +330,7 @@ class NativeStore:
         owner = self._owner(name)
         if owner is not None:
             return NotFound(f"{name!r} holds the elementary flows of {owner!r}; name {owner!r}")
-        return NotFound(
-            f"no database {name!r} under {self.directory}; this store serves "
-            f"{sorted(self._entries)}"
-        )
+        return NotFound(f"no database {name!r}; this store serves {sorted(self._entries)}")
 
     def elementary_flows_of(self, name: str) -> str:
         """The elementary flows database a served database names."""
@@ -365,7 +362,7 @@ class NativeStore:
         self._read()
         owner = self._owner(name)
         if owner is None:
-            raise NotFound(f"no database under {self.directory} uses the elementary flows {name!r}")
+            raise NotFound(f"no database uses the elementary flows {name!r}")
         return owner
 
     def _owner(self, name: str) -> str | None:

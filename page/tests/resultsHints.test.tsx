@@ -1,6 +1,7 @@
 import { screen, waitFor } from '@testing-library/react'
 import { App } from '@/App'
 import { renderAt } from './render'
+import { firstMethodOf } from './method'
 import byProcess from './fixtures/contributions_process.json'
 import databases from './fixtures/databases.json'
 import impact from './fixtures/impact.json'
@@ -27,7 +28,7 @@ vi.mock('@/api/client', async (importOriginal) => {
   }
 })
 
-const search = `?impact_method=${encodeURIComponent(impact.value.scores[0].method.impact_method)}`
+const search = `?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`
 
 it("shows the impact answer's hint under the impact table", async () => {
   renderAt(`/systems/${system.value.id}/results/impact${search}`, <App router={false} />)

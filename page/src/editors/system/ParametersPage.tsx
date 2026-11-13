@@ -38,7 +38,7 @@ function describeOverride(system: ProductSystem, o: Override): string {
   if (o.amount !== null) return `${label}: amount ${formatAmount(o.amount)}`
   if (o.multiplier !== null) return `${label}: × ${formatAmount(o.multiplier)}`
   const input = o.input
-  return `${label}: input ${input?.kind === 'background' ? input.id : input?.kind === 'elementary_flow' ? input.id : (input?.code ?? '')}`
+  return `${label}: input ${input?.kind === 'background' ? input.id : (input?.code ?? '')}`
 }
 
 export function ParametersPage({ view }: { view: SystemView }) {

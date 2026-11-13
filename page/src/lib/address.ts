@@ -22,11 +22,11 @@ export function useAddress(): Address {
   }
 }
 
-export function useCategory<T extends { method: { id: string } }>(categories: T[]): { chosen: T | undefined; choose: (id: string) => void } {
+export function useCategory<T extends { method_id: string }>(categories: T[]): { chosen: T | undefined; choose: (id: string) => void } {
   const address = useAddress()
   const named = address.read('category')
   return {
-    chosen: categories.find((c) => c.method.id === named) ?? categories[0],
+    chosen: categories.find((c) => c.method_id === named) ?? categories[0],
     choose: (id) => address.write({ category: id }),
   }
 }

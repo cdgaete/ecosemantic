@@ -9,6 +9,7 @@ import threading
 import time
 import uuid
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -19,21 +20,32 @@ from ecosemantic.compute.parameters import materialize
 from ecosemantic.local import build_context
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.server import build_server
-from ecosemantic.model.entities import DemandItem, ProductSystem, method_id
+from ecosemantic.model.entities import DemandItem, Method, ProductSystem, method_id
 from ecosemantic.ports.run import RunLauncher, RunPort
-from ecosemantic.ports.types import MonteCarloConfig, MonteCarloResult, RunDraft, RunPatch, System
+from ecosemantic.ports.types import (
+    MonteCarloCategory,
+    MonteCarloConfig,
+    MonteCarloResult,
+    MonteCarloSummary,
+    Run,
+    RunDraft,
+    RunPatch,
+    System,
+)
 from tests.conftest import fixture_system
-from tests.fixture_data import CODES, GWP
+from tests.fixture_data import CODES, FIXTURE_DATABASE, GWP
 from tests.memory_background import MemoryInventory
 
 GWP_ID = method_id(" > ".join(GWP))
 
 
-async def finished(client: Client, run_id: str, seconds: float = 120) -> dict[str, object]:
+async def finished(
+    client: Client, run_id: str, seconds: float = 120, samples: bool = False
+) -> dict[str, object]:
     """The run once it is no longer open, or an assertion failure when it never settles."""
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
-        out = await client.call_tool("get_run", {"run_id": run_id})
+        out = await client.call_tool("get_run", {"run_id": run_id, "samples": samples})
         run = out.structured_content["value"]
         if not run["open"]:
             return run
@@ -104,7 +116,7 @@ async def test_a_started_run_finishes_with_the_answer_the_synchronous_call_gives
         )
         run = started.structured_content["value"]
         assert run["status"] in ("queued", "running") and run["at_hash"] and run["pid"]
-        done = await finished(client, run["id"])
+        done = await finished(client, run["id"], samples=True)
     assert done["status"] == "done" and done["progress"]["iterations"] == 3
     assert done["at_hash"] == run["at_hash"]
     stored = await context.storage.get_version(fixture_system_stored.id, run["at_hash"])
@@ -236,7 +248,7 @@ async def test_a_cancelled_run_settles_as_cancelled_and_keeps_its_samples(
             assert asked.structured_content["value"]["status"] == "queued"
             gated.opened.set()
             await carrying
-            settled = await finished(client, str(gated.run_id))
+            settled = await finished(client, str(gated.run_id), samples=True)
             with pytest.raises(ToolError) as caught:
                 await client.call_tool("cancel_run", {"run_id": str(gated.run_id)})
         finally:
@@ -396,3 +408,116 @@ async def test_the_run_tools_link_to_the_simulation_page(
     )
     assert started.structured_content["view_url"] == expected
     assert read.structured_content["view_url"] == expected
+
+
+async def test_get_run_answers_a_histogram_unless_the_samples_are_asked_for(
+    context: ServerContext, fixture_system_stored: ProductSystem
+) -> None:
+    async with Client(build_server(context)) as client:
+        started = await client.call_tool(
+            "start_monte_carlo", starting(fixture_system_stored, n=3, n_min=1, seed=1)
+        )
+        run_id = started.structured_content["value"]["id"]
+        await finished(client, run_id)
+        bare = (await client.call_tool("get_run", {"run_id": run_id})).structured_content["value"]
+        asked = (
+            await client.call_tool("get_run", {"run_id": run_id, "samples": True})
+        ).structured_content["value"]
+    assert [category["samples"] for category in bare["result"]["categories"]] == [None]
+    assert bare["result"]["categories"][0]["summary"] == asked["result"]["categories"][0]["summary"]
+    histogram = bare["result"]["categories"][0]["histogram"]
+    assert len(histogram["counts"]) == 20
+    assert sum(histogram["counts"]) == bare["result"]["n"] == 3
+    draws = asked["result"]["categories"][0]["samples"]
+    assert len(draws) == asked["result"]["n"] == 3
+    assert asked["result"]["categories"][0]["histogram"] is None
+
+
+async def test_get_run_answers_a_record_naming_each_method_by_its_whole_record(
+    context: ServerContext, fixture_system_stored: ProductSystem
+) -> None:
+    method = await context.inventory.resolve_method(fixture_system_stored.database.name, GWP_ID)
+    run = recorded_run(fixture_system_stored, method)
+    folder = context.systems_dir / "runs" / str(run.id)
+    try:
+        written_naming_whole_methods(folder, run, method)
+        async with Client(build_server(context)) as client:
+            read = (
+                await client.call_tool("get_run", {"run_id": str(run.id), "samples": True})
+            ).structured_content["value"]
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+    ids = [listed["id"] for listed in read["methods"]]
+    assert ids == [method.id]
+    assert [category["method_id"] for category in read["result"]["categories"]] == ids
+    assert read["result"]["categories"][0]["samples"] == [0.000149, 0.000147, 0.000157]
+
+
+def recorded_run(stored: ProductSystem, method: Method) -> Run:
+    """A finished run of a product system under one method, carrying one category's draws."""
+    return Run(
+        id=uuid.UUID(int=7),
+        product_system_id=stored.id,
+        at_hash="9c1d" + "0" * 60,
+        methods=[method],
+        config=MonteCarloConfig(n=3),
+        posted_at=datetime(2026, 1, 1, tzinfo=UTC),
+        status="done",
+        result=MonteCarloResult(
+            database=FIXTURE_DATABASE,
+            n=3,
+            stopped="fixed",
+            gating_method=method.id,
+            scope="full",
+            normals_at_amount=0,
+            credit_loops=[],
+            dropped_draws=[],
+            dropped_loops=[],
+            dropped_background=[],
+            categories=[
+                MonteCarloCategory(
+                    method_id=method.id,
+                    summary=MonteCarloSummary(
+                        n=3,
+                        mean=0.00016,
+                        median=0.00015,
+                        median_ci95=(0.00014, 0.00017),
+                        percentiles=(0.0001, 0.00025),
+                        rel_se=0.046,
+                    ),
+                    samples=[0.000149, 0.000147, 0.000157],
+                )
+            ],
+        ),
+    )
+
+
+def written_naming_whole_methods(folder: Path, run: Run, method: Method) -> None:
+    """The run's record in the shape a store wrote when a result named each method by its whole
+    record."""
+    stored = run.model_dump(mode="json")
+    result = stored["result"]
+    assert isinstance(result, dict)
+    whole = method.model_dump(mode="json")
+    result["gating_method"] = whole
+    for category in result["categories"]:
+        assert isinstance(category, dict)
+        del category["method_id"]
+        category["method"] = whole
+    folder.mkdir(parents=True)
+    (folder / "run.json").write_text(json.dumps(stored), encoding="utf-8")
+
+
+async def test_a_finished_run_names_each_category_by_the_id_of_one_of_its_methods(
+    context: ServerContext, fixture_system_stored: ProductSystem
+) -> None:
+    async with Client(build_server(context)) as client:
+        started = await client.call_tool(
+            "start_monte_carlo", starting(fixture_system_stored, n=3, n_min=1, seed=1)
+        )
+        run_id = started.structured_content["value"]["id"]
+        run = await finished(client, run_id)
+    ids = [method["id"] for method in run["methods"]]
+    assert ids == [GWP_ID]
+    assert [category["method_id"] for category in run["result"]["categories"]] == ids
+    assert run["result"]["gating_method"] in ids

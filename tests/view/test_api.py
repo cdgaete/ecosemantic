@@ -112,6 +112,11 @@ def test_calculation_routes(client: TestClient, fixture_system_stored: ProductSy
     base = f"/api/product-systems/{fixture_system_stored.id}"
     impact = client.post(f"{base}/impact", json={"method_id": GWP_ID}).json()["value"]
     assert impact["scores"][0]["value"] > 0
+    sampled = client.post(
+        f"{base}/impact", json={"method_id": GWP_ID, "monte_carlo": {"n": 4, "seed": 1}}
+    ).json()["value"]
+    [category] = sampled["uncertainty"]["categories"]
+    assert len(category["samples"]) == sampled["uncertainty"]["n"] == 4
     contributions = client.post(
         f"{base}/contributions", json={"method_id": GWP_ID, "by": "process", "top_n": 3}
     ).json()["value"]
@@ -248,7 +253,10 @@ def test_a_run_started_through_the_route_is_listed_and_reaches_done(
     )
     assert started.status_code == 200
     run = started.json()["value"]
-    assert settled(client, run["id"])["status"] == "done"
+    done = settled(client, run["id"])
+    assert done["status"] == "done"
+    draws = done["result"]["categories"][0]["samples"]
+    assert len(draws) == done["result"]["n"] == 2
     assert client.get(f"{base}/runs").json()["value"][0]["id"] == run["id"]
 
 

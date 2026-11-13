@@ -26,18 +26,18 @@
     "notes": "",
     "parameters": [
       {
-        "description": "",
-        "formula": "frame_mass * 2.4",
-        "name": "frame_steel",
-        "unit": "kilogram",
-        "value": null
-      },
-      {
         "description": "frame per widget",
         "formula": null,
         "name": "frame_mass",
         "unit": "kilogram",
         "value": 0.25
+      },
+      {
+        "description": "",
+        "formula": "frame_mass * 2.4",
+        "name": "frame_steel",
+        "unit": "kilogram",
+        "value": null
       }
     ],
     "processes": [
@@ -113,7 +113,7 @@
             "uncertainty": {
               "params": {
                 "loc": -0.6931471805599453,
-                "scale": 0.10000000000000007
+                "scale": 0.1
               },
               "type": "lognormal"
             },

@@ -63,8 +63,12 @@ async def start_monte_carlo(
         return Answer[Run](value=watched, view_url=simulation_link(context, watched))
 
 
-async def get_run(context: ServerContext, run_id: str) -> Answer[Run]:
+async def get_run(context: ServerContext, run_id: str, samples: bool = False) -> Answer[Run]:
+    """One run, its result answered without each category's draws unless `samples` asks for
+    them."""
     run = await reap(context.runs, context.launcher, await context.runs.get_run(as_uuid(run_id)))
+    if run.result is not None and not samples:
+        run = run.model_copy(update={"result": run.result.without_samples()})
     return Answer[Run](value=run, view_url=simulation_link(context, run))
 
 
@@ -101,7 +105,10 @@ def register(server: FastMCP, context: ServerContext) -> None:
         annotations=READ,
         description=(
             "One run: its status, how many iterations it has taken, and its result once it "
-            "is done. A run whose worker is gone answers as failed."
+            "is done. A run whose worker is gone answers as failed. samples adds every "
+            "category's draws; without it each category carries its summary and a histogram of "
+            "twenty bins. methods names every method the run sampled once, and each result "
+            "category names one of them by method_id."
         ),
     )(boundary(bound(get_run, context)))
     server.tool(

@@ -97,6 +97,47 @@ UNUSED_FACTOR = 3.0
 _CANCEL_FACTOR = -1.0
 UNITS = ("kg", "kWh", "hogshead")
 
+STEEL_GENERAL_COMMENT = (
+    ("text", "Made-up note on the furnace."),
+    ("text", "Made-up note on the rolling mill."),
+    ("imageUrl", "https://example.org/steelworks.png"),
+)
+STEEL_GEOGRAPHY_COMMENT = (("text", "Made-up note on the river beside the plant."),)
+STEEL_TECHNOLOGY_COMMENT = (
+    ("text", "Made-up note on the electric arc furnace."),
+    ("text", "Made-up note on continuous casting."),
+)
+STEEL_TIME_COMMENT = (("text", "Made-up note on the year of operation."),)
+STEEL_INCLUDED_START = "Made-up start of the included activities."
+STEEL_INCLUDED_END = "Made-up end of the included activities."
+STEEL_ACTIVITY_CLASSIFICATIONS = (
+    ("ISIC rev.4 ecoinvent", "2410: Manufacture of basic iron and steel"),
+    ("EcoSpold01Categories", "metals/steel"),
+)
+STEEL_PRODUCT_CLASSIFICATIONS = (
+    ("ISIC rev.4 ecoinvent", "2410: Manufacture of basic iron and steel"),
+    ("By-product classification", "allocatable product"),
+    ("CPC", "4123: Flat-rolled products"),
+)
+STEEL_COMMENT = "\n".join(
+    [
+        "Made-up note on the furnace.",
+        "Made-up note on the rolling mill.",
+        "Image: https://example.org/steelworks.png",
+        f"Included activities start: {STEEL_INCLUDED_START}",
+        f"Included activities end: {STEEL_INCLUDED_END}",
+        "Geography: Made-up note on the river beside the plant.",
+        "Technology: Made-up note on the electric arc furnace.\n"
+        "Made-up note on continuous casting.",
+        "Time period: Made-up note on the year of operation.",
+    ]
+)
+STEEL_CLASSIFICATIONS = (
+    *STEEL_ACTIVITY_CLASSIFICATIONS,
+    ("By-product classification", "allocatable product"),
+    ("CPC", "4123: Flat-rolled products"),
+)
+
 _DEFAULTS: dict[str, object] = {
     "steel_unit": "kg",
     "steel_geography": "NA",
@@ -127,13 +168,22 @@ class _Flow:
 
 @dataclass(frozen=True)
 class _Dataset:
-    """One synthetic dataset: its native id, its activity, and the exchanges it declares."""
+    """One synthetic dataset: its native id, its activity, the exchanges it declares and what it
+    says about itself."""
 
     native: str
     activity: str
     name: str
     geography: str
     flows: tuple[_Flow, ...]
+    general_comment: tuple[tuple[str, str], ...] = ()
+    included_start: str | None = None
+    included_end: str | None = None
+    geography_comment: tuple[tuple[str, str], ...] = ()
+    technology_comment: tuple[tuple[str, str], ...] = ()
+    time_comment: tuple[tuple[str, str], ...] = ()
+    activity_classifications: tuple[tuple[str, str], ...] = ()
+    product_classifications: tuple[tuple[str, str], ...] = ()
 
 
 def _steel_flows(steel_unit: str, variance: float) -> tuple[_Flow, ...]:
@@ -352,6 +402,14 @@ def build_release(root: Path, **overrides: object) -> Release:
             "steel production",
             steel_geography,
             _steel_flows(steel_unit, variance),
+            general_comment=STEEL_GENERAL_COMMENT,
+            included_start=STEEL_INCLUDED_START,
+            included_end=STEEL_INCLUDED_END,
+            geography_comment=STEEL_GEOGRAPHY_COMMENT,
+            technology_comment=STEEL_TECHNOLOGY_COMMENT,
+            time_comment=STEEL_TIME_COMMENT,
+            activity_classifications=STEEL_ACTIVITY_CLASSIFICATIONS,
+            product_classifications=STEEL_PRODUCT_CLASSIFICATIONS,
         ),
         _Dataset(
             ELEC, ELEC_ACTIVITY, "electricity production", "GLO", _elec_flows(cancelling_factor)
@@ -361,13 +419,7 @@ def build_release(root: Path, **overrides: object) -> Release:
     )
     datasets = ecospold / "datasets"
     for dataset in catalogue:
-        _write_dataset(
-            datasets / f"{dataset.native}.spold",
-            dataset.activity,
-            dataset.name,
-            dataset.geography,
-            dataset.flows,
-        )
+        _write_dataset(datasets / f"{dataset.native}.spold", dataset)
 
     lcia = root / "lcia.xlsx"
     _write_lcia(lcia, extra_factor_row, extra_category, cancelling_factor)
@@ -458,23 +510,53 @@ def _write_units(path: Path) -> None:
     _write_xml(path, root)
 
 
-def _write_dataset(
-    path: Path, activity: str, name: str, geography: str, flows: tuple[_Flow, ...]
-) -> None:
+def _write_comment(parent: ET.Element, tag: str, children: tuple[tuple[str, str], ...]) -> None:
+    if not children:
+        return
+    block = _sub(parent, tag)
+    for index, (child, body) in enumerate(children):
+        if child == "imageUrl":
+            _sub(block, child, body, index=str(index))
+        else:
+            _sub(block, child, body, index=str(index), **{_XML_LANG: "en"})
+
+
+def _write_classification(parent: ET.Element, system: str, value: str) -> None:
+    classification = _sub(parent, "classification")
+    _localised(classification, "classificationSystem", system)
+    _localised(classification, "classificationValue", value)
+
+
+def _write_dataset(path: Path, dataset: _Dataset) -> None:
     root = ET.Element(f"{{{NS}}}ecoSpold")
-    dataset = _sub(root, "childActivityDataset")
-    description = _sub(dataset, "activityDescription")
-    activity_element = _sub(description, "activity", id=activity)
-    _localised(activity_element, "activityName", name)
-    geography_element = _sub(description, "geography")
-    _localised(geography_element, "shortname", geography)
-    flow_data = _sub(dataset, "flowData")
-    for flow in flows:
-        _write_flow(flow_data, flow)
+    element = _sub(root, "childActivityDataset")
+    description = _sub(element, "activityDescription")
+    activity = _sub(description, "activity", id=dataset.activity)
+    _localised(activity, "activityName", dataset.name)
+    if dataset.included_start is not None:
+        _localised(activity, "includedActivitiesStart", dataset.included_start)
+    if dataset.included_end is not None:
+        _localised(activity, "includedActivitiesEnd", dataset.included_end)
+    _write_comment(activity, "generalComment", dataset.general_comment)
+    for system, value in dataset.activity_classifications:
+        _write_classification(description, system, value)
+    geography = _sub(description, "geography")
+    _localised(geography, "shortname", dataset.geography)
+    _write_comment(geography, "comment", dataset.geography_comment)
+    technology = _sub(description, "technology")
+    _write_comment(technology, "comment", dataset.technology_comment)
+    period = _sub(description, "timePeriod")
+    _write_comment(period, "comment", dataset.time_comment)
+    flow_data = _sub(element, "flowData")
+    for flow in dataset.flows:
+        reference = not flow.elementary and flow.group == 0 and flow.output
+        _write_flow(flow_data, flow, dataset.product_classifications if reference else ())
     _write_xml(path, root)
 
 
-def _write_flow(flow_data: ET.Element, flow: _Flow) -> None:
+def _write_flow(
+    flow_data: ET.Element, flow: _Flow, classifications: tuple[tuple[str, str], ...] = ()
+) -> None:
     attributes = {"id": flow.id, "unitId": flow.unit_id, "amount": _number(flow.amount)}
     if flow.elementary:
         attributes["elementaryExchangeId"] = flow.masterdata
@@ -486,6 +568,8 @@ def _write_flow(flow_data: ET.Element, flow: _Flow) -> None:
     element = ET.SubElement(flow_data, f"{{{NS}}}{tag}", attributes)
     _localised(element, "name", flow.name)
     _localised(element, "unitName", flow.unit)
+    for system, value in classifications:
+        _write_classification(element, system, value)
     if flow.variance is not None:
         uncertainty = _sub(element, "uncertainty")
         _sub(

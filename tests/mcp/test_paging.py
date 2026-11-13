@@ -39,7 +39,22 @@ async def test_every_tool_taking_a_limit_refuses_one_below_one(
                     await client.call_tool(name, {**arguments, "limit": limit})
                 payload = json.loads(str(caught.value))
                 assert payload["error"] == "invalid", name
-                assert "limit is at least 1" in payload["message"], name
+                assert (
+                    "'limit': Input should be greater than or equal to 1" in payload["message"]
+                ), name
+
+
+async def test_every_tool_taking_a_limit_declares_a_minimum_of_one(full_server: FastMCP) -> None:
+    async with Client(full_server) as client:
+        listed = await client.list_tools()
+    limits = {
+        tool.name: tool.input_schema["properties"]["limit"]
+        for tool in listed
+        if "limit" in tool.input_schema.get("properties", {})
+    }
+    assert set(limits) == set(valid_calls(uuid.uuid4()))
+    for name, stated in limits.items():
+        assert stated["minimum"] == 1, name
 
 
 async def test_a_limit_of_one_pages_to_the_end(

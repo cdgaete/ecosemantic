@@ -7,7 +7,7 @@ import hashlib
 import math
 import re
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
@@ -19,6 +19,7 @@ from ecosemantic.model.refs import (
     ElementaryFlowRef,
     ExchangeInput,
     ForegroundRef,
+    ProcessInput,
     SystemRef,
 )
 from ecosemantic.model.summary import SummaryItem
@@ -237,7 +238,7 @@ class ExchangeOverride(BaseModel):
     exchange_id: uuid.UUID
     amount: float | None = Field(default=None, ge=0)
     multiplier: float | None = Field(default=None, ge=0)
-    input: ExchangeInput | None = None
+    input: ProcessInput | None = None
 
     @model_validator(mode="after")
     def _one_action(self) -> ExchangeOverride:
@@ -246,15 +247,19 @@ class ExchangeOverride(BaseModel):
             raise ValueError("set exactly one of amount, multiplier or input")
         return self
 
-    @model_validator(mode="after")
-    def _a_process_input(self) -> ExchangeOverride:
-        if isinstance(self.input, SystemRef):
+    @field_validator("input", mode="before")
+    @classmethod
+    def _a_process_input(cls, value: object) -> object:
+        """An input is a process: a linked system and an elementary flow are refused in their
+        own words, before the field parses the value."""
+        kind = value.get("kind") if isinstance(value, Mapping) else None
+        if isinstance(value, SystemRef) or kind == "system":
             raise ValueError("a scenario cannot switch an input to a linked system")
-        if isinstance(self.input, ElementaryFlowRef):
+        if isinstance(value, ElementaryFlowRef) or kind == "elementary_flow":
             raise ValueError(
                 "a scenario switches an input to a process, never to an elementary flow"
             )
-        return self
+        return value
 
 
 class ParameterOverride(BaseModel):
@@ -368,6 +373,15 @@ def method_named(methods: list[Method], database: str, reference: str) -> Method
     if _ID.fullmatch(reference):
         raise MethodNotFound(database, reference, [])
     raise MethodNotFound(database, reference, nearest_methods(methods, reference))
+
+
+def method_by_id(methods: list[Method], method_id: str) -> Method:
+    """The method an answer lists under that id; Invalid naming the id when the answer lists
+    none."""
+    for method in methods:
+        if method.id == method_id:
+            return method
+    raise Invalid(f"no method {method_id!r} among the {len(methods)} this answer lists")
 
 
 class Actor(BaseModel):

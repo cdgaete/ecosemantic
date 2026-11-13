@@ -1,9 +1,9 @@
 import { useParams } from 'react-router-dom'
 import { useCancelRun, useRun, useSystem } from '@/api/queries'
 import { useSystemStream } from '@/api/stream'
-import type { MonteCarloResult, ProductSystem, Run, Scope, Stopped } from '@/api/types'
+import type { Method, MonteCarloResult, ProductSystem, Run, Scope, Stopped } from '@/api/types'
 import { Button } from '@/components/ui/button'
-import { backwardsTreatmentNote, categoryLabel, creditLoopNote, formatAmount, shortHash, formatAgo } from '@/lib/format'
+import { backwardsTreatmentNote, categoryLabel, creditLoopNote, formatAmount, methodById, shortHash, formatAgo } from '@/lib/format'
 import { movedSince } from '@/lib/hashes'
 import { paths, useGo } from '@/lib/paths'
 import { AppLink } from '@/lib/router'
@@ -47,10 +47,10 @@ const STOPPED: Record<Stopped, string> = {
   cancelled: 'stopped on request',
 }
 
-function ran(result: MonteCarloResult): string {
+function ran(result: MonteCarloResult, methods: Method[]): string {
   const taken = result.n + result.dropped_draws.length
   const kept = taken === result.n ? `${result.n} ${result.n === 1 ? 'iteration' : 'iterations'}` : `${result.n} of ${taken} iterations kept`
-  return `${kept}, ${STOPPED[result.stopped]}, gated on ${categoryLabel(result.gating_method)}`
+  return `${kept}, ${STOPPED[result.stopped]}, gated on ${categoryLabel(methodById(methods, result.gating_method))}`
 }
 
 function When({ instant }: { instant: string }) {
@@ -129,7 +129,7 @@ export function SimulationEditor() {
         ))}
         {run.result ? (
           <>
-            <p className="pb-2">{ran(run.result)}</p>
+            <p className="pb-2">{ran(run.result, run.methods)}</p>
             {note ? <p className="pb-2 text-muted-foreground">{note}</p> : null}
             {drops ? <p className="pb-2 text-warning">{drops}</p> : null}
             {run.result.credit_loops.map((codes) => (
@@ -137,7 +137,7 @@ export function SimulationEditor() {
                 {creditLoopNote(codes)}
               </p>
             ))}
-            <SimulationResults result={run.result} />
+            <SimulationResults result={run.result} methods={run.methods} />
           </>
         ) : (
           <p className="text-muted-foreground">{run.open ? 'The results appear when the simulation finishes.' : 'This simulation holds no result.'}</p>

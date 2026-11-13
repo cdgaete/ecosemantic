@@ -213,14 +213,14 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             }
         )
 
-    def calculation(tool: str) -> Callable[[Request], Awaitable[Response]]:
+    def calculation(tool: str, **fixed: JsonValue) -> Callable[[Request], Awaitable[Response]]:
         @answering
         async def handler(request: Request) -> Response:
             body = await json_object(request)
             return await call_tool(
                 server,
                 tool,
-                {"product_system_id": request.path_params["id"], **body},
+                {"product_system_id": request.path_params["id"], **body, **fixed},
                 started=request.query_params.get(STARTED_PARAMETER) == "true",
             )
 
@@ -232,7 +232,9 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
         )
 
     async def run_read(request: Request) -> Response:
-        return await call_tool(server, "get_run", {"run_id": request.path_params["run_id"]})
+        return await call_tool(
+            server, "get_run", {"run_id": request.path_params["run_id"], "samples": True}
+        )
 
     async def run_cancelled(request: Request) -> Response:
         return await call_tool(server, "cancel_run", {"run_id": request.path_params["run_id"]})
@@ -310,7 +312,7 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
         Route(f"{base}/versions/{{hash}}", version),
         Route(f"{base}/validation", validation),
         Route(f"{base}/anchors", system_anchors),
-        Route(f"{base}/impact", calculation(IMPACT_TOOL), methods=["POST"]),
+        Route(f"{base}/impact", calculation(IMPACT_TOOL, samples=True), methods=["POST"]),
         Route(f"{base}/contributions", calculation("contribution_analysis"), methods=["POST"]),
         Route(f"{base}/inventory", calculation("calculate_inventory"), methods=["POST"]),
         Route(f"{base}/runs", runs_listed),

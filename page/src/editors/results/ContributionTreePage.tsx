@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useContributions } from '@/api/queries'
 import { useCategory } from '@/lib/address'
 import type { TreeNode } from '@/api/types'
-import { categoryLabel, formatAmount, formatShare } from '@/lib/format'
+import { categoryLabel, formatAmount, formatShare, methodById } from '@/lib/format'
 import { RequestAction } from '@/requests/RequestAction'
 import { EditorHeader } from '@/window/EditorHeader'
 import { Hint } from '@/window/Hint'
@@ -47,12 +47,13 @@ function Rows({ node, depth, unit, open, toggle, id }: { node: TreeNode; depth: 
 export function ContributionTreePage({ result }: { result: Result }) {
   const { id, params, system, impact, hash, root, stale, waiting } = result
   const scores = impact.data?.value.scores ?? []
+  const methods = impact.data?.value.methods ?? []
   const [maxLevel, setMaxLevel] = useState(3)
   const [maxNodes, setMaxNodes] = useState(50)
   const [cutoff, setCutoff] = useState(0.1)
   const [open, setOpen] = useState<Set<string>>(new Set(['root']))
   const { chosen, choose } = useCategory(scores)
-  const tree = useContributions(id, hash, { by: 'path', method_id: chosen?.method.id, max_level: maxLevel, max_nodes: maxNodes, cutoff: cutoff / 100, demand: demandOf(params!, root) }, chosen !== undefined && !stale)
+  const tree = useContributions(id, hash, { by: 'path', method_id: chosen?.method_id, max_level: maxLevel, max_nodes: maxNodes, cutoff: cutoff / 100, demand: demandOf(params!, root) }, chosen !== undefined && !stale)
   const toggle = (key: string) =>
     setOpen((s) => {
       const next = new Set(s)
@@ -67,10 +68,10 @@ export function ContributionTreePage({ result }: { result: Result }) {
         <div className="flex flex-wrap items-center gap-3 pb-2 text-xs">
           <label className="flex min-w-0 max-w-full items-center gap-1">
             Impact category
-            <select id="tree-category" className="min-w-0 max-w-full rounded-sm border bg-background px-1" value={chosen?.method.id ?? ''} onChange={(e) => choose(e.target.value)}>
+            <select id="tree-category" className="min-w-0 max-w-full rounded-sm border bg-background px-1" value={chosen?.method_id ?? ''} onChange={(e) => choose(e.target.value)}>
               {scores.map((s) => (
-                <option key={s.method.id} value={s.method.id}>
-                  {categoryLabel(s.method)}
+                <option key={s.method_id} value={s.method_id}>
+                  {categoryLabel(methodById(methods, s.method_id))}
                 </option>
               ))}
             </select>

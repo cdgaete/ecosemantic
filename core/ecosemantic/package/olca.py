@@ -5,10 +5,18 @@ from __future__ import annotations
 import math
 
 import olca_schema as o
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from ecosemantic.errors import Invalid, NotSupported, said
 from ecosemantic.model.entities import Uncertainty, UncertaintyType
+
+
+class WrittenLognormal(BaseModel):
+    """A lognormal's parameters as they were written, which the geometric mean and deviation
+    return only within their last place."""
+
+    loc: float
+    scale: float
 
 
 def to_olca_uncertainty(u: Uncertainty | None) -> o.Uncertainty | None:
@@ -55,15 +63,29 @@ def _lognormal_reason(u: o.Uncertainty, amount: float) -> str | None:
     return None
 
 
-def _lognormal(u: o.Uncertainty, amount: float) -> Uncertainty | None:
+def _as_written(written: float | None, held: float) -> float:
+    """A lognormal parameter as it was written when its exponential is the value the package
+    holds, and the logarithm of the value the package holds otherwise: an edit in openLCA reads as
+    the edit."""
+    if written is not None and math.exp(written) == held:
+        return written
+    return math.log(held)
+
+
+def _lognormal(
+    u: o.Uncertainty, amount: float, written: WrittenLognormal | None = None
+) -> Uncertainty | None:
     """The model's lognormal for an openLCA one on an exchange of this amount, or None when it
-    samples nothing: a zero amount, or a geometric standard deviation of 1. The geometric mean and
-    deviation are the ones `_lognormal_reason` held."""
+    samples nothing: a zero amount, or a geometric standard deviation of 1. Each of loc and scale
+    is the written one whenever its exponential is the value the package holds, and the logarithm
+    of that value otherwise, as `_as_written` decides."""
     if amount == 0 or u.geom_sd == 1:
         return None
+    loc = written.loc if written is not None else None
+    scale = written.scale if written is not None else None
     params: dict[str, float | bool] = {
-        "loc": math.log(abs(u.geom_mean)),
-        "scale": math.log(u.geom_sd),
+        "loc": _as_written(loc, abs(u.geom_mean)),
+        "scale": _as_written(scale, u.geom_sd),
     }
     if amount < 0:
         params["negative"] = True
@@ -93,11 +115,12 @@ def _model_reason(type: UncertaintyType, params: dict[str, float | bool | None])
     return None
 
 
-def _held(u: o.Uncertainty, amount: float) -> Uncertainty | None:
+def _held(u: o.Uncertainty, amount: float, written: WrittenLognormal | None) -> Uncertainty | None:
     """The model distribution for an openLCA one, or None when it samples nothing; the params are
-    the ones `uncertainty_refusal` held, and a type with no counterpart is NotSupported."""
+    the ones `uncertainty_refusal` held, a lognormal's read as `_lognormal` reads them, and a type
+    with no counterpart is NotSupported."""
     if u.distribution_type == o.UncertaintyType.LOG_NORMAL_DISTRIBUTION:
-        return _lognormal(u, amount)
+        return _lognormal(u, amount, written)
     known = _params(u)
     if known is None:
         raise NotSupported(f"openLCA distribution {u.distribution_type} has no counterpart")
@@ -121,15 +144,21 @@ def uncertainty_refusal(u: o.Uncertainty | None, amount: float) -> str | None:
 
 
 def from_olca_uncertainty(
-    u: o.Uncertainty | None, amount: float, *, owner: str
+    u: o.Uncertainty | None,
+    amount: float,
+    *,
+    owner: str,
+    written: WrittenLognormal | None = None,
 ) -> Uncertainty | None:
     """A model uncertainty for an openLCA distribution on an exchange of this amount; None for
     none. A lognormal's sign is the amount's, since openLCA exports carry the geometric mean of a
     positive amount as its negative; a geometric standard deviation of 1 and a zero amount
-    sample nothing. Invalid names owner and why the core cannot hold the distribution;
-    NotSupported when openLCA's distribution type has no counterpart."""
+    sample nothing. A lognormal's loc and scale are the ones written in the package whenever their
+    exponentials are the geometric mean and deviation it holds, and the logarithms of those
+    otherwise. Invalid names owner and why the core cannot hold the distribution; NotSupported
+    when openLCA's distribution type has no counterpart."""
     if reason := uncertainty_refusal(u, amount):
         raise Invalid(f"{owner}: {reason}")
     if u is None or u.distribution_type is None:
         return None
-    return _held(u, amount)
+    return _held(u, amount, written)

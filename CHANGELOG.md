@@ -2,6 +2,20 @@
 
 Each release names what it adds, changes and removes, newest first.
 
+## 0.1.19
+
+- An impact answer names each method once, in `methods`, and each score, each variant's score and each Monte Carlo category names its method by `method_id`, as `gating_method` does; a contribution answer names its method in `method`, and its `total` names it by `method_id`. A score carried its method's whole record, which a family of 25 categories with two variants answered 75 times. The page, the in-chat panel and a result folder read a method from the answer that lists it, and a run stored by an earlier release reads as it did.
+- `calculate_impact` and `get_run` answer each Monte Carlo category with its summary and a histogram of twenty bins, and take `samples` to answer every draw in the histogram's place, as the Python API's two methods do, where an answer carried every draw of every category. The page asks for the draws and draws its histograms from them.
+- The in-chat panel of `calculate_impact` writes each category's figures under a Monte Carlo, with the 95 % interval of the median, and draws its bars from the histogram, where it read an interval of the mean no answer carries and drew nothing.
+- An ecoinvent build carries each dataset's comment and classifications from the release's files: the general comment with the included activities, the geography, the technology and the time period, and the classifications of the activity and of its reference product. `get_background_process` answers them for a database installed from such a build, where every ecoinvent dataset answered neither. A build keeps its fingerprint, so a database installed again serves the product systems it served.
+- A lognormal's `loc` and `scale` read back as they were written, where a `scale` of 0.1823 came back as 0.18230000000000007 after the next write.
+- `get_parameters` and `set_parameters` answer a product system's parameters in the order they were written, where the order changed from one call to the next.
+- `install_database` refuses a draft its source cannot take, and a `version` or a `system_model` its source does not offer, naming the ones it offers, before it asks for the account the source needs.
+- A tool's `limit` declares its minimum of 1 in the tool's schema, and a scenario's exchange override declares a `background` or a `foreground` input alone, where the schema listed the `system` and `elementary_flow` inputs the tool refuses.
+- `arrange_graph` leaves the reference card where its column put it when its middle height would cover a card held there, where it drew the reference over the held card.
+- Reading a product system or cancelling a run the store does not hold leaves no lock file, deleting a product system or its runs removes their lock files, and a server removes at its start the lock files of the systems, runs and installs it does not hold, where each left a `.lock` file in the data directory.
+- A refused string argument is quoted in the refusal, cut to 60 characters; a database the store lacks is named without the data directory's path; and a one-word query that matches nothing is told to try another word, or the start of one followed by `*`.
+
 ## 0.1.18
 
 - `list_runs` answers each run without its result, which `get_run` answers, where a listing carried every sample of every run.

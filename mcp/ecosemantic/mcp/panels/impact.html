@@ -37,35 +37,42 @@
   });
   const openLink = (url) => send({ jsonrpc: "2.0", id: nextId++, method: "ui/open-link", params: { url } });
   const fmt = (x) => Number(x).toLocaleString(undefined, { maximumSignificantDigits: 4 });
+  const specOf = (value, methodId) => value.methods.find((m) => m.id === methodId).spec;
   function variants(value) {
     const rows = value.scores.map((score, i) => {
       const cells = value.variants.map((v) => `<td class="num">${fmt(v.scores[i].value)} (${v.deltas[i] >= 0 ? "+" : ""}${fmt(v.deltas[i])})</td>`).join("");
-      return `<tr><td>${score.method.spec}</td><td class="num">${fmt(score.value)} ${score.unit}</td>${cells}</tr>`;
+      return `<tr><td>${specOf(value, score.method_id)}</td><td class="num">${fmt(score.value)} ${score.unit}</td>${cells}</tr>`;
     }).join("");
     const heads = value.variants.map((v) => `<th class="num">${v.name}</th>`).join("");
     return `<table><tr><th>Category</th><th class="num">Base</th>${heads}</tr>${rows}</table>`;
   }
-  function histogram(category) {
-    const samples = category.samples.slice().sort((a, b) => a - b);
-    if (!samples.length) return "";
-    const bins = 20, lo = samples[0], hi = samples[samples.length - 1], width = (hi - lo) || 1;
-    const counts = new Array(bins).fill(0);
-    samples.forEach((s) => { counts[Math.min(bins - 1, Math.floor((s - lo) / width * bins))] += 1; });
-    const top = Math.max(...counts);
-    const rects = counts.map((c, i) => `<rect x="${(i * 100 / bins).toFixed(2)}%" y="${(100 - 100 * c / top).toFixed(2)}%" width="${(100 / bins).toFixed(2)}%" height="${(100 * c / top).toFixed(2)}%" fill="#2f7f77"></rect>`).join("");
+  function histogram(value, category) {
     const s = category.summary;
     const spread = `2.5th to 97.5th percentile ${fmt(s.percentiles[0])} to ${fmt(s.percentiles[1])}`;
-    const meanInterval = s.mean_ci95[0] == null || s.mean_ci95[1] == null ? "no interval of the mean" : `95% interval of the mean ${fmt(s.mean_ci95[0])} to ${fmt(s.mean_ci95[1])}`;
-    const interval = `${spread}, ${meanInterval}`;
-    return `<p>${category.method.spec}: mean ${fmt(s.mean)}, median ${fmt(s.median)}, ${interval}, n ${s.n}</p><svg viewBox="0 0 100 100" preserveAspectRatio="none">${rects}</svg>`;
+    const medianInterval = s.median_ci95 === null ? "no interval of the median" : `95% interval of the median ${fmt(s.median_ci95[0])} to ${fmt(s.median_ci95[1])}`;
+    const interval = `${spread}, ${medianInterval}`;
+    const paragraph = `<p>${specOf(value, category.method_id)}: mean ${fmt(s.mean)}, median ${fmt(s.median)}, ${interval}, n ${s.n}</p>`;
+    const counts = category.histogram ? category.histogram.counts : counted(category.samples);
+    if (counts === null) return paragraph;
+    const bins = counts.length, top = Math.max(...counts);
+    const rects = counts.map((c, i) => `<rect x="${(i * 100 / bins).toFixed(2)}%" y="${(100 - 100 * c / top).toFixed(2)}%" width="${(100 / bins).toFixed(2)}%" height="${(100 * c / top).toFixed(2)}%" fill="#2f7f77"></rect>`).join("");
+    return `${paragraph}<svg viewBox="0 0 100 100" preserveAspectRatio="none">${rects}</svg>`;
+  }
+  function counted(samples) {
+    if (!Array.isArray(samples) || !samples.length) return null;
+    const ordered = samples.slice().sort((a, b) => a - b);
+    const bins = 20, lo = ordered[0], hi = ordered[ordered.length - 1], width = (hi - lo) || 1;
+    const counts = new Array(bins).fill(0);
+    ordered.forEach((s) => { counts[Math.min(bins - 1, Math.floor((s - lo) / width * bins))] += 1; });
+    return counts;
   }
   function render(content) {
     const value = content.value;
     document.getElementById("title").textContent = `Impact of ${value.product_system}`;
     let html = "";
-    if (value.uncertainty && value.uncertainty.categories.length) html = value.uncertainty.categories.map(histogram).join("");
+    if (value.uncertainty && value.uncertainty.categories.length) html = value.uncertainty.categories.map((c) => histogram(value, c)).join("");
     else if (value.variants && value.variants.length) html = variants(value);
-    else html = `<table>${value.scores.map((s) => `<tr><td>${s.method.spec}</td><td class="num">${fmt(s.value)} ${s.unit}</td></tr>`).join("")}</table>`;
+    else html = `<table>${value.scores.map((s) => `<tr><td>${specOf(value, s.method_id)}</td><td class="num">${fmt(s.value)} ${s.unit}</td></tr>`).join("")}</table>`;
     document.getElementById("view").innerHTML = html;
     const footer = document.getElementById("footer");
     footer.innerHTML = content.view_url ? `<a href="#" id="open">Open the product system in the browser</a>` : "";

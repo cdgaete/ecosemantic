@@ -86,6 +86,17 @@ async def list_sources(context: ServerContext) -> Answer[list[DatabaseSource]]:
     return Answer[list[DatabaseSource]](value=sources, hint=hint, view_url=databases_link(context))
 
 
+def _unoffered(
+    source: DatabaseSource, named: str | None, offered: Sequence[str], what: str
+) -> None:
+    """Refuse a value the source does not offer, naming the ones it does; a source that offers
+    none of these, as openlca offers no versions, takes any value."""
+    if named is None or not offered:
+        return
+    if named not in offered:
+        raise Invalid(f"{source.name} offers no {what} {named!r}; it offers {', '.join(offered)}")
+
+
 async def install_database(
     context: ServerContext,
     source: SourceName,
@@ -102,14 +113,9 @@ async def install_database(
     asks it to stop. One install at a time: a second is refused while one is open, and a database
     this server serves is refused before anything is downloaded unless replace is passed. An
     install cuts off the inputs no dataset provides, and its summary's cut_off names them: a
-    release cuts off what its profile lists, an openlca package only with drop_unlinked."""
+    release cuts off what its profile lists, an openlca package only with drop_unlinked. It
+    refuses a version or system model its source does not offer before it asks for the account."""
     needed = _offered(context, source)
-    account = context.credentials.get(needed.credential) if needed.credential is not None else None
-    if not needed.held:
-        raise Unavailable(
-            f"{source} installs from an account this server does not hold",
-            hint=account_advice(context.accounts, needed=[needed]).said(),
-        )
     try:
         draft = InstallDraft(
             source=source,
@@ -124,6 +130,14 @@ async def install_database(
         )
     except ValidationError as exc:
         raise Invalid("; ".join(said(error["msg"]) for error in exc.errors())) from exc
+    _unoffered(needed, version, needed.versions, "version")
+    _unoffered(needed, system_model, needed.system_models, "system model")
+    account = context.credentials.get(needed.credential) if needed.credential is not None else None
+    if not needed.held:
+        raise Unavailable(
+            f"{source} installs from an account this server does not hold",
+            hint=account_advice(context.accounts, needed=[needed]).said(),
+        )
     if not replace:
         database = context.installer.database(draft)
         if database in {served.name for served in await context.inventory.list_databases()}:

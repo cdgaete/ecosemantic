@@ -6,15 +6,17 @@ import asyncio
 import shutil
 import tempfile
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from filelock import FileLock
 
-from ecosemantic.backends.filesystem.records import record_of
+from ecosemantic.backends.filesystem.records import record_of, sweep_locks
 from ecosemantic.backends.filesystem.watching import touched
 from ecosemantic.compute.links import pinned, pins
 from ecosemantic.errors import Conflict
+from ecosemantic.files import forget
 from ecosemantic.model.entities import Actor, ProductSystem
 from ecosemantic.package.log import read_log
 from ecosemantic.package.package import (
@@ -59,6 +61,18 @@ class FilesystemStorage:
             raise no_product_system(product_system_id)
         return path
 
+    @contextmanager
+    def _held(self, product_system_id: uuid.UUID) -> Iterator[Path]:
+        """The folder of a stored product system under its lock; a system the store does not
+        hold is refused before a lock is made for it, and again once the lock is held."""
+        self._dir(product_system_id)
+        with self._lock(str(product_system_id)):
+            yield self._dir(product_system_id)
+
+    def sweep(self) -> None:
+        """Remove the lock file of every product system this store does not hold."""
+        sweep_locks(self.root)
+
     def _list(self) -> list[ProductSystemSummary]:
         if not self.root.is_dir():
             return []
@@ -70,12 +84,12 @@ class FilesystemStorage:
         return summaries
 
     def _read(self, product_system_id: uuid.UUID) -> ProductSystem:
-        with self._lock(str(product_system_id)):
-            return read_package(self._dir(product_system_id))[0]
+        with self._held(product_system_id) as root:
+            return read_package(root)[0]
 
     def _version(self, product_system_id: uuid.UUID, content_hash: str) -> ProductSystem:
-        with self._lock(str(product_system_id)):
-            return read_version(self._dir(product_system_id), product_system_id, content_hash)
+        with self._held(product_system_id) as root:
+            return read_version(root, product_system_id, content_hash)
 
     def _pinned(self, product_system: ProductSystem) -> dict[uuid.UUID, ProductSystem]:
         """Each system the document links, as the store holds it at the pin; each is read under
@@ -96,29 +110,31 @@ class FilesystemStorage:
             )
 
     def _delete(self, product_system_id: uuid.UUID) -> None:
-        with self._lock(str(product_system_id)):
+        self._dir(product_system_id)
+        lock = self._lock(str(product_system_id))
+        with lock:
             shutil.rmtree(self._dir(product_system_id))
+            forget(lock)
 
     def _log(self, product_system_id: uuid.UUID) -> list[LogEntry]:
-        with self._lock(str(product_system_id)):
-            return read_log(self._dir(product_system_id))
+        with self._held(product_system_id) as root:
+            return read_log(root)
 
     def _layout(self, product_system_id: uuid.UUID) -> Layout:
-        with self._lock(str(product_system_id)):
-            return read_layout(self._dir(product_system_id))
+        with self._held(product_system_id) as root:
+            return read_layout(root)
 
     def _put_layout(self, product_system_id: uuid.UUID, layout: Layout) -> Layout:
-        with self._lock(str(product_system_id)):
-            write_layout(self._dir(product_system_id), layout)
+        with self._held(product_system_id) as root:
+            write_layout(root, layout)
             return layout
 
     def _requests(self, product_system_id: uuid.UUID) -> list[Request]:
-        with self._lock(str(product_system_id)):
-            return read_requests(self._dir(product_system_id))
+        with self._held(product_system_id) as root:
+            return read_requests(root)
 
     def _post(self, product_system_id: uuid.UUID, draft: RequestDraft) -> Request:
-        with self._lock(str(product_system_id)):
-            root = self._dir(product_system_id)
+        with self._held(product_system_id) as root:
             queue = read_requests(root)
             request = next_request(queue, draft)
             write_requests(root, [*queue, request])
@@ -127,8 +143,7 @@ class FilesystemStorage:
     def _resolve(
         self, product_system_id: uuid.UUID, request_id: uuid.UUID, outcome: Outcome
     ) -> Request:
-        with self._lock(str(product_system_id)):
-            root = self._dir(product_system_id)
+        with self._held(product_system_id) as root:
             queue = resolve(read_requests(root), request_id, outcome)
             write_requests(root, queue)
             return next(r for r in queue if r.id == request_id)
@@ -141,8 +156,7 @@ class FilesystemStorage:
         at_entry: int | None,
     ) -> LogEntry:
         linked = self._pinned(self._read(product_system_id))
-        with self._lock(str(product_system_id)):
-            root = self._dir(product_system_id)
+        with self._held(product_system_id) as root:
             return write_returned(
                 exported_root, root, actor, self.resolver, linked=linked, at_entry=at_entry
             )
@@ -230,8 +244,8 @@ class FilesystemStorage:
         )
 
     def _export(self, product_system_id: uuid.UUID, destination: Path) -> None:
-        with self._lock(str(product_system_id)):
-            zip_package(self._dir(product_system_id), destination)
+        with self._held(product_system_id) as root:
+            zip_package(root, destination)
 
     def _restore(self, source: Path) -> Restored:
         with tempfile.TemporaryDirectory() as work:
