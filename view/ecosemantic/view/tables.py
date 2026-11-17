@@ -17,7 +17,7 @@ from ecosemantic.compute.results import ContributionResult, ImpactResult, Invent
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.envelopes import as_uuid
 from ecosemantic.mcp.tables import apply_tables, result_key, write_tables
-from ecosemantic.model.entities import DemandItem
+from ecosemantic.model.refs import DemandItem
 from ecosemantic.package.package import zip_package
 from ecosemantic.ports.types import InventoryRow, Page
 from ecosemantic.tables.results import (

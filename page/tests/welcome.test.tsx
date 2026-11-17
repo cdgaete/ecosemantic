@@ -2,6 +2,8 @@ import { screen, waitFor, within } from '@testing-library/react'
 import { Screens } from '@/App'
 import { api } from '@/api/client'
 import type { Answer, Database } from '@/api/types'
+import { shortHash } from '@/lib/format'
+import { useUi } from '@/store/ui'
 import databases from './fixtures/databases.json'
 import log from './fixtures/log.json'
 import sources from './fixtures/sources.json'
@@ -53,4 +55,43 @@ it('says to ask the chatbot when a database holds no system', async () => {
   vi.mocked(api.databases).mockResolvedValue(installed)
   renderAt('/', <Screens />)
   expect(await screen.findByText(/On fixture, model one bicycle frame of 2 kg of low-alloyed steel/)).toBeInTheDocument()
+})
+
+it('holds the narrow columns of the home table on one line and gives the name the rest', async () => {
+  vi.mocked(api.systems).mockResolvedValue(systems)
+  vi.mocked(api.databases).mockResolvedValue(installed)
+  renderAt('/', <Screens />)
+  const table = await screen.findByRole('table')
+  await waitFor(() => expect(table.querySelectorAll('td[data-label="Name"]')).toHaveLength(systems.value.length))
+  for (const header of ['Database', 'Processes', 'Last change', 'Validation', 'Requests']) {
+    const cells = [...table.querySelectorAll(`td[data-label="${header}"]`)]
+    expect(cells).toHaveLength(systems.value.length)
+    for (const cell of cells) expect(cell.className).toContain('whitespace-nowrap')
+  }
+  for (const cell of table.querySelectorAll('td[data-label="Name"]')) {
+    expect(cell.className).not.toContain('whitespace-nowrap')
+    expect(cell.className).toContain('w-full')
+  }
+})
+
+it('shows a short id beside a name two systems share, and marks the one on the canvas', async () => {
+  const name = 'Cátodo de cobre — Chile (ruta pirometalúrgica)'
+  const one = { ...systems.value[0], id: 'cc344688-1f2a-4c3d-9e4f-5a6b7c8d9e0f', name }
+  const two = { ...systems.value[1], id: '4b0d7d27-2a3b-4c5d-8e9f-0a1b2c3d4e5f', name }
+  const only = { ...systems.value[2], id: '5c1e8f30-3b4c-5d6e-9f0a-1b2c3d4e5f60', name: 'widget' }
+  vi.mocked(api.systems).mockResolvedValue({ ...systems, value: [one, two, only] } as unknown as typeof systems)
+  vi.mocked(api.databases).mockResolvedValue(installed)
+  renderAt('/', <Screens />)
+  const table = await screen.findByRole('table')
+  await waitFor(() => expect(table.querySelectorAll('td[data-label="Name"]')).toHaveLength(3))
+  useUi.getState().setCanvasSystem(one.id)
+  const [first, second, third] = [...table.querySelectorAll('td[data-label="Name"]')] as HTMLElement[]
+  await waitFor(() => expect(within(first).getByText(shortHash(one.id))).toBeInTheDocument())
+  expect(within(second).getByText(shortHash(two.id))).toBeInTheDocument()
+  expect(within(third).queryByText(shortHash(only.id))).toBeNull()
+  expect(within(first).getByRole('link')).toHaveAttribute('aria-current', 'true')
+  expect(within(first).getByText('on the canvas')).toBeInTheDocument()
+  expect(within(second).getByRole('link')).not.toHaveAttribute('aria-current')
+  expect(within(second).queryByText('on the canvas')).toBeNull()
+  vi.mocked(api.systems).mockResolvedValue(systems)
 })

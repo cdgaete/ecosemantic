@@ -7,21 +7,27 @@ from collections.abc import Collection, Sequence
 from ecosemantic.errors import NotFound
 from ecosemantic.model.entities import Method, method_named
 from ecosemantic.model.refs import BackgroundRef, Database, ElementaryFlowRef
-from ecosemantic.ports.search import Phrase, phrases, spellings
+from ecosemantic.ports.search import Phrase, browsed, phrases, spellings
 from ecosemantic.ports.terms import tokens
 from ecosemantic.ports.types import (
     BackgroundExchange,
     BackgroundProcess,
+    ClassificationScheme,
+    ClassificationValue,
     Compartment,
+    DatabaseSummary,
     ElementaryFlow,
     ElementaryFlowHit,
+    Factor,
     FlowType,
     Page,
     ProcessHit,
+    factor_page,
     flow_side,
     page_start,
 )
 from tests.fixture_data import (
+    CLASSIFICATIONS,
     CODES,
     FIXTURE_BIO,
     FIXTURE_DATABASE,
@@ -49,9 +55,39 @@ def _known(database: str) -> None:
         raise NotFound(f"no database {database!r}; this fixture serves {[FIXTURE_DB]}")
 
 
+def _stored(key: str) -> list[str]:
+    """The classifications of a process as a catalog stores them, each `"<scheme>: <rest>"`, in
+    the fixture's order."""
+    return [f"{scheme}: {rest}" for scheme, rest in CLASSIFICATIONS.get(key, ())]
+
+
+def _scheme_of(value: str) -> str:
+    """The scheme a stored value is under: what its text holds before the first `": "`."""
+    return value.split(": ", 1)[0]
+
+
+def _listed() -> list[tuple[Method, dict[str, float]]]:
+    """The fixture's two methods, built from their keys and units, each with its factors."""
+    return [(Method.of(key, unit), factors) for key, unit, factors in METHODS]
+
+
 def methods() -> list[Method]:
     """The fixture's two methods, built from their keys and units."""
-    return [Method.of(key, unit) for key, unit, _ in METHODS]
+    return [method for method, _ in _listed()]
+
+
+def _factor(flow: str, factor: float) -> Factor:
+    """One of a method's factors as the fixture files it."""
+    name, categories, unit = FLOWS[flow]
+    compartment, sub_compartment = _compartment(categories)
+    return Factor(
+        flow=ElementaryFlowRef(database=FIXTURE_BIO, id=FLOW_IDS[flow]),
+        name=name,
+        compartment=compartment,
+        sub_compartment=sub_compartment,
+        unit=unit,
+        factor=factor,
+    )
 
 
 def _holds(phrase: Phrase, text: str) -> bool:
@@ -74,6 +110,19 @@ def _relevance(found: list[Phrase], *fields: str) -> float | None:
     return float(len(found)) if found and all(matched) else None
 
 
+def _browse_relevance(found: list[Phrase] | None, *fields: str) -> float | None:
+    """0 when there is no phrase to rank by, so a browsed row matches on its filter alone; the
+    number of phrases matched otherwise; None when a phrase the fields do not match is among
+    them."""
+    return 0.0 if found is None else _relevance(found, *fields)
+
+
+def _carries(key: str, classifications: Sequence[str]) -> bool:
+    """Whether a process carries any of the stored classification values given."""
+    stored = _stored(key)
+    return any(value in stored for value in classifications)
+
+
 class MemoryInventory:
     """The fixture background read from its constants."""
 
@@ -93,6 +142,7 @@ class MemoryInventory:
             reference_product=product,
             location="GLO",
             unit=unit,
+            classifications=_stored(key),
             url=None,
             exchanges=self._exchanges(inputs, emissions, key) if exchanges else None,
         )
@@ -146,6 +196,62 @@ class MemoryInventory:
     async def list_compartments(self, database: str) -> list[Compartment]:
         _known(database)
         return Compartment.tally(_compartment(categories) for _, categories, _ in FLOWS.values())
+
+    async def summarize(self, database: str) -> DatabaseSummary:
+        _known(database)
+        return DatabaseSummary(
+            processes=len(PROCESSES),
+            elementary_flows=len(FLOWS),
+            indicators=len(METHODS),
+            units=len(await self.list_units(database)),
+            locations=len(await self.list_locations(database)),
+        )
+
+    async def list_classifications(self, database: str) -> list[ClassificationScheme]:
+        _known(database)
+        covered: dict[str, tuple[set[str], set[str]]] = {}
+        for key in PROCESSES:
+            for value in _stored(key):
+                processes, values = covered.setdefault(_scheme_of(value), (set(), set()))
+                processes.add(key)
+                values.add(value)
+        return [
+            ClassificationScheme(scheme=scheme, processes=len(processes), values=len(values))
+            for scheme, (processes, values) in sorted(covered.items())
+        ]
+
+    async def classification_values(self, database: str, scheme: str) -> list[ClassificationValue]:
+        _known(database)
+        carried: dict[str, set[str]] = {}
+        for key in PROCESSES:
+            for value in _stored(key):
+                if _scheme_of(value) == scheme:
+                    carried.setdefault(value, set()).add(key)
+        if not carried:
+            raise NotFound(f"no classification scheme {scheme!r} in {database!r}")
+        return [
+            ClassificationValue(value=value, processes=len(processes))
+            for value, processes in sorted(carried.items())
+        ]
+
+    async def factors(
+        self,
+        database: str,
+        method_id: str,
+        query: str | None = None,
+        limit: int = 20,
+        cursor: str | None = None,
+    ) -> Page[Factor]:
+        _known(database)
+        listed = {method.id: factors for method, factors in _listed()}
+        if method_id not in listed:
+            raise NotFound(f"no method {method_id!r} in {database!r}")
+        return factor_page(
+            [_factor(flow, value) for flow, value in listed[method_id].items()],
+            query,
+            limit,
+            cursor,
+        )
 
     def _key(self, native_id: str) -> str:
         for key, code in CODES.items():
@@ -217,9 +323,10 @@ class MemorySearch:
         unit: str | None = None,
         limit: int = 20,
         cursor: str | None = None,
+        classifications: Sequence[str] | None = None,
     ) -> Page[ProcessHit]:
         _known(database)
-        parsed = phrases(query)
+        parsed = browsed(query, classifications is not None)
         offset = page_start(cursor, limit)
         hits = [
             ProcessHit(
@@ -233,7 +340,8 @@ class MemorySearch:
             for key, (name, product, process_unit, _, _) in sorted(
                 PROCESSES.items(), key=lambda item: item[1][0]
             )
-            if (relevance := _relevance(parsed, name, product)) is not None
+            if (classifications is None or _carries(key, classifications))
+            and (relevance := _browse_relevance(parsed, name, product)) is not None
             and (location is None or location == "GLO")
             and (unit is None or unit == process_unit)
         ]
@@ -253,13 +361,15 @@ class MemorySearch:
         cursor: str | None = None,
     ) -> Page[ElementaryFlowHit]:
         _known(database)
-        parsed = phrases(query)
+        parsed = browsed(query, compartment is not None or sub_compartment is not None)
         offset = page_start(cursor, limit)
         hits = []
-        for key, (name, categories, flow_unit) in sorted(FLOWS.items(), key=lambda i: i[1][0]):
+        for key, (name, categories, flow_unit) in sorted(
+            FLOWS.items(), key=lambda item: (item[1][0], _compartment(item[1][1])[0])
+        ):
             found_compartment, found_sub = _compartment(categories)
             found_type = _flow_type(categories)
-            if _relevance(parsed, name, found_compartment, found_sub or "") is None:
+            if _browse_relevance(parsed, name, found_compartment, found_sub or "") is None:
                 continue
             if any(
                 value is not None and value != found

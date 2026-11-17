@@ -506,11 +506,6 @@ class ProductSystem(BaseModel):
         raise NotFound(f"no scenario or case {name!r} in {self.name!r}; it has {names}")
 
 
-class DemandItem(BaseModel):
-    ref: BackgroundRef | ForegroundRef
-    amount: float
-
-
 def state_of(document: ProductSystem) -> str:
     """The hash a stored document was read at."""
     if document.hash is None:

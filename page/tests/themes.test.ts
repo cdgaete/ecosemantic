@@ -6,11 +6,7 @@ import * as url from 'node:url'
 const here = path.dirname(url.fileURLToPath(import.meta.url))
 const css = readFileSync(path.resolve(here, '../src/styles/index.css'), 'utf8')
 
-const SELECTORS = [
-  ':root,\n[data-theme="cobalt"]',
-  '[data-theme="ecosemantic"]',
-  '[data-theme="openlca"]',
-]
+const SELECTORS = [':root,\n[data-theme="light"]', '[data-theme="dark"]']
 
 interface Block {
   selector: string
@@ -33,20 +29,24 @@ function themeBlocks(source: string): Block[] {
 
 const blocks = themeBlocks(css)
 
-it('defines the three themes in the order cobalt, ecosemantic, openlca', () => {
+it('defines two themes, light then dark', () => {
   expect(blocks.map((block) => block.selector)).toEqual(SELECTORS)
 })
 
-it('gives the three themes the same token names in the same order', () => {
-  const [cobalt, ecosemantic, openlca] = blocks.map((block) => block.names)
-  expect(ecosemantic).toEqual(cobalt)
-  expect(openlca).toEqual(cobalt)
-  expect(cobalt).toHaveLength(53)
-  expect(cobalt.slice(-2)).toEqual(['--font-sans', '--font-mono'])
+it('gives the two themes the same token names in the same order, and no typeface', () => {
+  const [light, dark] = blocks.map((block) => block.names)
+  expect(dark).toEqual(light)
+  expect(light).toHaveLength(51)
+  expect(light.filter((name) => name.startsWith('--font'))).toEqual([])
 })
 
-it('ties the dark variant to the ecosemantic theme rather than the operating system', () => {
-  expect(css.split('\n')).toContain(
-    '@custom-variant dark (&:where([data-theme="ecosemantic"], [data-theme="ecosemantic"] *));',
-  )
+it("draws both themes in Tailwind's default system stacks, declaring no typeface and loading no font file", () => {
+  expect(css).not.toMatch(/--font-(sans|mono)\s*:/)
+  expect(css).not.toContain('@font-face')
+  const defaults = readFileSync(path.resolve(here, '../node_modules/tailwindcss/theme.css'), 'utf8')
+  expect(defaults).toMatch(/--font-sans:\s*-apple-system, BlinkMacSystemFont, 'Segoe UI'/)
+})
+
+it('ties the dark variant to the dark theme rather than the operating system', () => {
+  expect(css.split('\n')).toContain('@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));')
 })

@@ -3,11 +3,13 @@ match all of them ranked by SQLite FTS5's BM25, computed in SQL over the catalog
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from ecosemantic.backends.native.catalog import Kind
 from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.model.entities import Method
 from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef
-from ecosemantic.ports.search import Phrase, phrases, spellings
+from ecosemantic.ports.search import Phrase, browsed, phrases, spellings
 from ecosemantic.ports.types import ElementaryFlowHit, FlowType, Page, ProcessHit, page_start
 
 WEIGHTS: dict[Kind, list[float]] = {
@@ -53,6 +55,7 @@ def ranked(
     found: list[Phrase],
     columns: str,
     filters: dict[str, str],
+    classifications: Sequence[str] | None,
     limit: int,
     offset: int,
 ) -> tuple[str, dict[str, object]]:
@@ -77,10 +80,7 @@ def ranked(
         " + 0.75::DOUBLE * lengths.tokens / stats.avgdl))"
         for at in range(len(found))
     )
-    where = ""
-    for column, value in filters.items():
-        parameters[f"filter_{column}"] = value
-        where += f" AND entity.{column} = $filter_{column}"
+    where = _filter(filters, classifications, parameters)
     statement = (
         f"WITH {', '.join(ctes)}, scored AS (SELECT p0.row AS row, {score} AS score FROM p0{joined}"
         " JOIN lengths ON lengths.kind = $kind AND lengths.row = p0.row, stats"
@@ -88,6 +88,49 @@ def ranked(
         f" SELECT {columns}, scored.score FROM scored JOIN {_TABLES[kind]} AS entity"
         f" ON entity.row = scored.row WHERE TRUE{where}"
         " ORDER BY scored.score DESC, entity.row LIMIT $limit OFFSET $offset"
+    )
+    return statement, parameters
+
+
+def _given(filters: dict[str, str | None]) -> dict[str, str]:
+    """The filters that hold a value."""
+    return {column: value for column, value in filters.items() if value is not None}
+
+
+def _filter(
+    filters: dict[str, str],
+    classifications: Sequence[str] | None,
+    parameters: dict[str, object],
+) -> str:
+    """The WHERE clause a statement narrows a table's rows by, with each value bound in
+    parameters: one equality a column filter names, and for classifications, any of a process's
+    stored values."""
+    where = ""
+    for column, value in filters.items():
+        parameters[f"filter_{column}"] = value
+        where += f" AND entity.{column} = $filter_{column}"
+    if classifications is not None:
+        parameters["filter_classifications"] = list(classifications)
+        where += " AND list_has_any(entity.classifications, $filter_classifications)"
+    return where
+
+
+def _browsing(
+    kind: Kind,
+    columns: str,
+    filters: dict[str, str],
+    classifications: Sequence[str] | None,
+    order: str,
+    limit: int,
+    offset: int,
+) -> tuple[str, dict[str, object]]:
+    """The statement and its parameters that list the rows of a kind a filter matches, in the order
+    given, paged and one row past the page, each carrying a relevance of 0."""
+    parameters: dict[str, object] = {"limit": limit + 1, "offset": offset}
+    where = _filter(filters, classifications, parameters)
+    statement = (
+        f"SELECT {columns}, 0.0::DOUBLE FROM {_TABLES[kind]} AS entity WHERE TRUE{where}"
+        f" ORDER BY {order} LIMIT $limit OFFSET $offset"
     )
     return statement, parameters
 
@@ -102,17 +145,44 @@ class NativeSearch:
         self,
         database: str,
         kind: Kind,
-        query: str,
+        found: list[Phrase],
         columns: str,
         filters: dict[str, str | None],
+        classifications: Sequence[str] | None,
         limit: int,
         offset: int,
     ) -> tuple[list[tuple], bool]:
-        found = phrases(query)
+        """The page's rows of a kind, one row past it and whether there is more, ranked best first
+        among the rows matching every phrase and the filters."""
         if not found:
             return [], False
-        given = {column: value for column, value in filters.items() if value is not None}
-        statement, parameters = ranked(kind, found, columns, given, limit, offset)
+        statement, parameters = ranked(
+            kind, found, columns, _given(filters), classifications, limit, offset
+        )
+        return await self._fetch(database, statement, parameters, limit)
+
+    async def _browsed(
+        self,
+        database: str,
+        kind: Kind,
+        columns: str,
+        filters: dict[str, str | None],
+        classifications: Sequence[str] | None,
+        order: str,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[tuple], bool]:
+        """The page's rows of a kind a browsing filter matches, one row past it and whether there is
+        more, in the order given."""
+        statement, parameters = _browsing(
+            kind, columns, _given(filters), classifications, order, limit, offset
+        )
+        return await self._fetch(database, statement, parameters, limit)
+
+    async def _fetch(
+        self, database: str, statement: str, parameters: dict[str, object], limit: int
+    ) -> tuple[list[tuple], bool]:
+        """The statement's rows, cut to the page, and whether it answered one past it."""
         rows = await self.store.run(
             database,
             lambda: self.store.catalog(database).execute(statement, parameters).fetchall(),
@@ -127,17 +197,29 @@ class NativeSearch:
         unit: str | None = None,
         limit: int = 20,
         cursor: str | None = None,
+        classifications: Sequence[str] | None = None,
     ) -> Page[ProcessHit]:
         offset = page_start(cursor, limit)
-        rows, more = await self._rows(
-            database,
-            "process",
-            query,
-            "entity.native_id, entity.name, entity.reference_product, entity.location, entity.unit",
-            {"location": location, "unit": unit},
-            limit,
-            offset,
+        columns = (
+            "entity.native_id, entity.name, entity.reference_product, entity.location, entity.unit"
         )
+        filters = {"location": location, "unit": unit}
+        found = browsed(query, classifications is not None)
+        if found is None:
+            rows, more = await self._browsed(
+                database,
+                "process",
+                columns,
+                filters,
+                classifications,
+                "entity.name, entity.location, entity.row",
+                limit,
+                offset,
+            )
+        else:
+            rows, more = await self._rows(
+                database, "process", found, columns, filters, classifications, limit, offset
+            )
         items = [
             ProcessHit(
                 ref=BackgroundRef(database=database, id=native_id),
@@ -164,21 +246,32 @@ class NativeSearch:
     ) -> Page[ElementaryFlowHit]:
         offset = page_start(cursor, limit)
         elementary_flows = self.store.elementary_flows_of(database)
-        rows, more = await self._rows(
-            database,
-            "flow",
-            query,
+        columns = (
             "entity.code, entity.name, entity.compartment, entity.sub_compartment, entity.unit,"
-            " entity.flow_type, entity.cas",
-            {
-                "compartment": compartment,
-                "sub_compartment": sub_compartment,
-                "flow_type": flow_type,
-                "unit": unit,
-            },
-            limit,
-            offset,
+            " entity.flow_type, entity.cas"
         )
+        filters = {
+            "compartment": compartment,
+            "sub_compartment": sub_compartment,
+            "flow_type": flow_type,
+            "unit": unit,
+        }
+        found = browsed(query, compartment is not None or sub_compartment is not None)
+        if found is None:
+            rows, more = await self._browsed(
+                database,
+                "flow",
+                columns,
+                filters,
+                None,
+                "entity.name, entity.compartment, entity.row",
+                limit,
+                offset,
+            )
+        else:
+            rows, more = await self._rows(
+                database, "flow", found, columns, filters, None, limit, offset
+            )
         items = [
             ElementaryFlowHit(
                 ref=ElementaryFlowRef(database=elementary_flows, id=code),
@@ -198,7 +291,7 @@ class NativeSearch:
     ) -> Page[Method]:
         offset = page_start(cursor, limit)
         rows, more = await self._rows(
-            database, "method", query, "entity.key, entity.unit", {}, limit, offset
+            database, "method", phrases(query), "entity.key, entity.unit", {}, None, limit, offset
         )
         items = [Method.of(tuple(key), unit) for key, unit, _ in rows]
         return Page.at_offset(items, more, offset, limit)

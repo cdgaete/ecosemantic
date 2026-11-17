@@ -22,6 +22,7 @@ from ecosemantic.mcp.envelopes import (
 )
 from ecosemantic.model.entities import Method
 from ecosemantic.model.refs import BackgroundRef, Database, ElementaryFlowRef
+from ecosemantic.ports.search import require_term
 from ecosemantic.ports.types import (
     BackgroundProcess,
     ElementaryFlow,
@@ -65,7 +66,7 @@ async def strange_compartments(
     if compartment is not None and compartment not in {c.name for c in held}:
         found.append(stranger("compartment", compartment, database, "compartments"))
     if sub_compartment is not None and sub_compartment not in {
-        sub for c in held for sub in c.sub_compartments
+        sub.name for c in held for sub in c.sub_compartments
     }:
         found.append(stranger("sub_compartment", sub_compartment, database, "compartments"))
     return found
@@ -80,6 +81,7 @@ async def search_processes(
     limit: Limit = 20,
     cursor: str | None = None,
 ) -> Listing[ProcessHit]:
+    require_term(query)
     page = await context.search.processes(database, query, location, unit, limit, cursor)
     if page.items:
         return listing(page)
@@ -109,6 +111,7 @@ async def search_elementary_flows(
     cursor: str | None = None,
 ) -> Listing[ElementaryFlowHit]:
     database = (await context.inventory.get_database(database)).name
+    require_term(query)
     page = await context.search.elementary_flows(
         database, query, compartment, sub_compartment, flow_type, unit, limit, cursor
     )
@@ -138,6 +141,7 @@ async def search_methods(
     limit: Limit = 20,
     cursor: str | None = None,
 ) -> Listing[Method]:
+    require_term(query)
     page = await context.search.methods(database, query, limit, cursor)
     if not page.items:
         return listing(page, empty_methods_hint(query))
@@ -174,7 +178,8 @@ async def list_vocabulary(
             for compartment in await context.inventory.list_compartments(database):
                 terms.append(Term(value=compartment.name, detail=f"{compartment.flow_count} flows"))
                 terms += [
-                    Term(value=f"{compartment.name}/{sub}") for sub in compartment.sub_compartments
+                    Term(value=f"{compartment.name}/{sub.name}")
+                    for sub in compartment.sub_compartments
                 ]
         case "impact_methods":
             counts: dict[str, int] = {}

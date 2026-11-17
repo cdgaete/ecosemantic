@@ -7,6 +7,13 @@ import pytest
 from ecosemantic.errors import Invalid
 from tests.fixture_data import CODES, FIXTURE_DB, FLOW_IDS
 
+UNDER_24 = [
+    "ISIC rev.4 ecoinvent: 24:Manufacture of basic metals",
+    "ISIC rev.4 ecoinvent: 2410:Manufacture of basic iron and steel",
+    "ISIC rev.4 ecoinvent: 2420:Manufacture of basic precious and other non-ferrous metals",
+]
+BASIC_METALS = ["aluminium production", "copper production", "steel production"]
+
 
 class SearchConformance:
     async def test_membership_and_filters(self, search) -> None:
@@ -69,3 +76,46 @@ class SearchConformance:
     async def test_a_quoted_term_matches_as_its_words(self, search) -> None:
         hits = await search.processes(FIXTURE_DB, '"steel production"')
         assert CODES["steel"] in {h.ref.id for h in hits.items}
+
+    async def test_browse_processes_by_classification(self, search) -> None:
+        page = await search.processes(FIXTURE_DB, "", classifications=UNDER_24)
+        assert [h.name for h in page.items] == BASIC_METALS
+        assert [h.relevance for h in page.items] == [0.0, 0.0, 0.0]
+
+    async def test_a_filter_narrows_a_classification(self, search) -> None:
+        page = await search.processes(FIXTURE_DB, "steel", classifications=UNDER_24)
+        assert [h.name for h in page.items] == ["steel production"]
+
+    async def test_a_query_of_no_term_under_a_classification_lists_it_all(self, search) -> None:
+        page = await search.processes(FIXTURE_DB, "*", classifications=UNDER_24)
+        assert [h.name for h in page.items] == BASIC_METALS
+
+    async def test_browsing_pages(self, search) -> None:
+        first = await search.processes(FIXTURE_DB, "", classifications=UNDER_24, limit=2)
+        assert [h.name for h in first.items] == BASIC_METALS[:2]
+        assert first.has_more and first.next_cursor is not None
+        rest = await search.processes(
+            FIXTURE_DB, "", classifications=UNDER_24, limit=2, cursor=first.next_cursor
+        )
+        assert [h.name for h in rest.items] == BASIC_METALS[2:]
+        assert not rest.has_more and rest.next_cursor is None
+
+    async def test_browse_flows_by_compartment(self, search) -> None:
+        page = await search.elementary_flows(FIXTURE_DB, "", compartment="air")
+        assert [h.name for h in page.items] == [
+            "Carbon dioxide, fossil",
+            "Methane, fossil",
+            "Particulate matter",
+        ]
+        sub = await search.elementary_flows(
+            FIXTURE_DB, "", sub_compartment="urban air close to ground"
+        )
+        assert [h.name for h in sub.items] == ["Particulate matter"]
+
+    async def test_a_filter_that_is_no_browsing_filter_does_not_permit_a_query_of_no_term(
+        self, search
+    ) -> None:
+        with pytest.raises(Invalid, match="a search needs at least one term"):
+            await search.processes(FIXTURE_DB, "", unit="kilogram")
+        with pytest.raises(Invalid, match="a search needs at least one term"):
+            await search.elementary_flows(FIXTURE_DB, "", flow_type="emission")

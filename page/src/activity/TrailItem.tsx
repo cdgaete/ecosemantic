@@ -7,28 +7,38 @@ import { paths } from '@/lib/paths'
 import { cn } from '@/lib/utils'
 import { refKey } from './chosen'
 
-function shown(value: Json): string {
-  return typeof value === 'string' ? value : JSON.stringify(value)
+function speaking(value: Json): string | null {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (Array.isArray(value)) return String(value.length)
+  if (value !== null && typeof value === 'object') return String(Object.keys(value).length)
+  return null
+}
+
+function argumentsShown(arguments_: Call['arguments']): [string, string][] {
+  return Object.entries(arguments_).flatMap(([key, value]) => {
+    const said = key === 'product_system_id' ? null : speaking(value)
+    return said === null ? [] : [[key, said] as [string, string]]
+  })
 }
 
 export function TrailItem({ call, chosen }: { call: Call; chosen: Set<string> }) {
   const rerun = useRerun()
-  const args = Object.entries(call.arguments).filter(([key]) => key !== 'product_system_id')
   const summary = call.summary
+  const args = argumentsShown(call.arguments)
   const again = rerun.data?.value
   return (
     <li className="py-0.5">
       <div className="flex flex-wrap items-baseline gap-x-2">
         <span className={cn('font-medium', call.outcome === 'error' && 'text-destructive')}>{call.tool}</span>
         {args.map(([key, value]) => (
-          <span key={key} className="max-w-64 truncate text-muted-foreground" title={shown(value)}>
-            {key}={shown(value)}
+          <span key={key} className="max-w-64 truncate text-muted-foreground" title={value}>
+            {key}: {value}
           </span>
         ))}
         {summary && summary.count !== null ? (
           <span>
             {summary.count}
-            {summary.more ? '+' : ''} found
+            {summary.more ? '+' : ''} {summary.noun}
           </span>
         ) : null}
         {call.effect === 'read' || call.effect === 'compute' ? (

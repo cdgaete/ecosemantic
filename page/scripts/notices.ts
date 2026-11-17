@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import * as path from 'node:path'
 import * as url from 'node:url'
-import { fontNotices, render, type Notice } from './render-notices.ts'
+import { render, type Notice } from './render-notices.ts'
 
 type Listed = { name: string; versions: string[]; paths: string[]; license: string; homepage?: string }
 
@@ -32,7 +32,6 @@ const notices: Notice[] = [
         texts: texts(pkg.paths[index]),
       })),
     ),
-  ...fontNotices(path.resolve(here, '../src/assets/fonts')),
 ]
 writeFileSync(TARGET, render(notices))
 console.log(`wrote ${notices.length} notices to ${path.relative(process.cwd(), TARGET)}`)

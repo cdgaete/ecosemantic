@@ -9,8 +9,8 @@ import pytest
 from ecosemantic.engine.background import Background
 from ecosemantic.engine.calculation import NOISE_FLOOR, Calculation
 from ecosemantic.errors import Invalid, NotFound
-from ecosemantic.model.entities import DemandItem, Exchange, Method, ProductSystem, method_id
-from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef, ForegroundRef
+from ecosemantic.model.entities import Exchange, Method, ProductSystem, method_id
+from ecosemantic.model.refs import BackgroundRef, DemandItem, ElementaryFlowRef, ForegroundRef
 from tests.conftest import fixture_system, needs_pardiso, split_system
 from tests.engine.conftest import GWP_METHOD, WATER_METHOD, WIDGET
 from tests.fixture_data import CODES, FIXTURE_DB, FLOW_IDS

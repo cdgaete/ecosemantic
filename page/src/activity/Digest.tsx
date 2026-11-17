@@ -2,7 +2,7 @@ import type { LogEntry } from '@/api/types'
 import { cn } from '@/lib/utils'
 import { useUi } from '@/store/ui'
 import { ValidationBadge } from '@/window/Badges'
-import { digestOf, type DigestFilter } from './digest'
+import { digestOf, digestPhrases, said, type DigestFilter } from './digest'
 
 interface DigestProps {
   systemId: string
@@ -14,19 +14,12 @@ interface DigestProps {
   onFilter: (filter: DigestFilter | null) => void
 }
 
-function said(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`
-}
-
 export function Digest({ systemId, since, latest, fresh, failed, filter, onFilter }: DigestProps) {
   const markSeen = useUi((s) => s.markSeen)
   if (fresh.length === 0) return <p className="px-4 pt-2 text-xs text-muted-foreground">Nothing new since #{since}.</p>
   const digest = digestOf(fresh)
   const items: [DigestFilter, string][] = [
-    ['processes', said(digest.processes, 'process added', 'processes added')],
-    ['exchanges', said(digest.exchanges, 'exchange added', 'exchanges added')],
-    ['edits', said(digest.edits, 'value edited', 'values edited')],
-    ['deletions', said(digest.deletions, 'deletion', 'deletions')],
+    ...digestPhrases(digest).map(({ key, text }): [DigestFilter, string] => [key, text]),
     ['failed', said(failed, 'failed call', 'failed calls')],
   ]
   return (

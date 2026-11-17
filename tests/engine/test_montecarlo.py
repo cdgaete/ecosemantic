@@ -23,7 +23,6 @@ from ecosemantic.engine.montecarlo import (
 from ecosemantic.engine.solver import Solver
 from ecosemantic.errors import Invalid, NotFound
 from ecosemantic.model.entities import (
-    DemandItem,
     Exchange,
     Method,
     ProductSystem,
@@ -31,7 +30,7 @@ from ecosemantic.model.entities import (
     Uncertainty,
     method_id,
 )
-from ecosemantic.model.refs import BackgroundRef, ForegroundRef
+from ecosemantic.model.refs import BackgroundRef, DemandItem, ForegroundRef
 from tests.conftest import fixture_system, needs_pardiso, split_system
 from tests.engine.conftest import GWP_METHOD, SMALL, SMALL_GWP, WATER_METHOD, WIDGET
 from tests.engine_fixture import looped_background

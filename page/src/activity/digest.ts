@@ -19,3 +19,16 @@ export function digestOf(entries: LogEntry[]): Record<DigestKey, number> {
   const of = (key: DigestKey) => changes.filter((change) => counts(change, key)).length
   return { processes: of('processes'), exchanges: of('exchanges'), edits: of('edits'), deletions: of('deletions') }
 }
+
+export function said(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`
+}
+
+export function digestPhrases(digest: Record<DigestKey, number>): { key: DigestKey; text: string }[] {
+  return [
+    { key: 'processes', text: said(digest.processes, 'process added', 'processes added') },
+    { key: 'exchanges', text: said(digest.exchanges, 'exchange added', 'exchanges added') },
+    { key: 'edits', text: said(digest.edits, 'value edited', 'values edited') },
+    { key: 'deletions', text: said(digest.deletions, 'deletion', 'deletions') },
+  ]
+}

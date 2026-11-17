@@ -5,9 +5,11 @@
     "credit_loops": [],
     "cut": {
       "below": 0,
+      "below_score": 0.0,
       "cutoff": 0.001,
       "share": 0.0,
       "unlisted": 0,
+      "unlisted_score": 0.0,
       "unlisted_share": 0.0
     },
     "database": {

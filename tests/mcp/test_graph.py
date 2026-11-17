@@ -7,6 +7,7 @@ from collections.abc import Callable
 import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.exceptions import ToolError
+from mcp.types import Implementation
 
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.graph import Arrangement
@@ -557,3 +558,31 @@ async def test_a_loop_that_delivers_nothing_draws_every_card_and_names_the_loop(
     assert answer.scaling == "frame uses 2 of its own product and makes 1; it delivers none"
     assert all(c.scaled is None and c.activity is None for c in answer.cards)
     assert all(e.label.scaled is None for e in answer.edges)
+
+
+async def test_arranging_records_a_call_that_names_the_cards_it_placed(
+    full_server: FastMCP, fixture_system_stored: ProductSystem, context: ServerContext
+) -> None:
+    system = fixture_system_stored
+    widget, frame = (p.code for p in system.processes)
+    await context.storage.put_layout(system.id, Layout())
+    try:
+        async with Client(
+            full_server, client_info=Implementation(name="arranger", version="1")
+        ) as client:
+            await client.call_tool(
+                "arrange_graph",
+                {
+                    "product_system_id": str(system.id),
+                    "placements": [{"code": widget, "x": 5.0, "y": 6.0}],
+                },
+            )
+        (call,) = await context.activity.list_calls(agent="arranger")
+        assert call.tool == "arrange_graph"
+        assert call.summary is not None
+        assert call.summary.count == 1
+        assert call.summary.noun == "cards placed"
+        assert [item.label for item in call.summary.items] == [widget]
+        assert frame not in [item.label for item in call.summary.items]
+    finally:
+        await context.storage.put_layout(system.id, Layout())

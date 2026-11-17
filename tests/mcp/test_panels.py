@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import dataclasses
+import uuid
+from urllib.parse import parse_qs, urlsplit
 
 from fastmcp import Client
 
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.panels import PANELS, html
 from ecosemantic.mcp.server import build_server
-from ecosemantic.model.entities import ProductSystem, method_id
+from ecosemantic.model.entities import Case, ProductSystem, method_id
 from tests.fixture_data import GWP
+from tests.memory_storage import MemoryStorage
 
 GWP_ID = method_id(" > ".join(GWP))
 CARRIERS = {
@@ -79,6 +82,32 @@ async def test_each_result_links_to_the_page_that_shows_it(
         f"{base}/impact?impact_method=gwp&amount=2.0&token=abc"
     )
     assert inventory.structured_content["view_url"] == f"{base}/inventory?token=abc"
+
+
+async def test_an_impact_link_carries_one_variants_key_per_name(
+    context: ServerContext, fixture_system_stored: ProductSystem
+) -> None:
+    store = MemoryStorage()
+    named = fixture_system_stored.model_copy(
+        deep=True,
+        update={
+            "id": uuid.uuid4(),
+            "cases": [Case(name="a, b", values={}), Case(name="c", values={})],
+        },
+    )
+    await store.put_product_system(named, context.actor, "created")
+    bound = dataclasses.replace(context, view_url="http://127.0.0.1:1?token=abc", storage=store)
+    async with Client(build_server(bound)) as client:
+        impact = await client.call_tool(
+            "calculate_impact",
+            {
+                "product_system_id": str(named.id),
+                "impact_method": "gwp",
+                "variants": ["a, b", "c"],
+            },
+        )
+    query = parse_qs(urlsplit(impact.structured_content["view_url"]).query)
+    assert query["variants"] == ["a, b", "c"]
 
 
 async def test_each_panel_says_it_is_a_figure_the_host_fills_from_its_call(

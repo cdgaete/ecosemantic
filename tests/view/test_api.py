@@ -18,7 +18,6 @@ from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.server import build_server
 from ecosemantic.model.entities import (
     Case,
-    DemandItem,
     ExchangeOverride,
     Method,
     Parameter,
@@ -26,7 +25,7 @@ from ecosemantic.model.entities import (
     Scenario,
     method_id,
 )
-from ecosemantic.model.refs import ElementaryFlowRef
+from ecosemantic.model.refs import DemandItem, ElementaryFlowRef
 from ecosemantic.ports.types import InventoryRow, Layout, MonteCarloConfig, Spot, System
 from ecosemantic.view.api import call_tool
 from ecosemantic.view.app import build_view

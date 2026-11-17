@@ -5,13 +5,18 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ecosemantic.model.entities import (
         Case,
-        DemandItem,
         ExchangeOverride,
         Parameter,
         ParameterOverride,
         Uncertainty,
     )
-    from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef, ForegroundRef, SystemRef
+    from ecosemantic.model.refs import (
+        BackgroundRef,
+        DemandItem,
+        ElementaryFlowRef,
+        ForegroundRef,
+        SystemRef,
+    )
     from ecosemantic.ports.types import MonteCarloConfig
     from ecosemantic.workspace import Workspace, open
 
@@ -25,7 +30,7 @@ PUBLIC = {
     "Uncertainty": "ecosemantic.model.entities",
     "ExchangeOverride": "ecosemantic.model.entities",
     "ParameterOverride": "ecosemantic.model.entities",
-    "DemandItem": "ecosemantic.model.entities",
+    "DemandItem": "ecosemantic.model.refs",
     "BackgroundRef": "ecosemantic.model.refs",
     "ForegroundRef": "ecosemantic.model.refs",
     "ElementaryFlowRef": "ecosemantic.model.refs",

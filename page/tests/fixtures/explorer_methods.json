@@ -1,0 +1,52 @@
+{
+  "hint": null,
+  "value": [
+    {
+      "categories": [
+        {
+          "indicators": [
+            {
+              "id": "m_bff077f3bd",
+              "impact_category": "climate change",
+              "impact_method": "gwp",
+              "indicator": "GWP100",
+              "spec": "fixture > gwp > climate change > GWP100",
+              "tuple": [
+                "fixture",
+                "gwp",
+                "climate change > GWP100"
+              ],
+              "unit": "kg CO2-Eq"
+            }
+          ],
+          "name": "climate change"
+        }
+      ],
+      "name": "gwp"
+    },
+    {
+      "categories": [
+        {
+          "indicators": [
+            {
+              "id": "m_6c38f3580b",
+              "impact_category": "water use",
+              "impact_method": "water",
+              "indicator": "m3",
+              "spec": "fixture > water > water use > m3",
+              "tuple": [
+                "fixture",
+                "water",
+                "water use > m3"
+              ],
+              "unit": "m3"
+            }
+          ],
+          "name": "water use"
+        }
+      ],
+      "name": "water"
+    }
+  ],
+  "view_url": null
+}

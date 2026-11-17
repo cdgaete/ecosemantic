@@ -1,7 +1,7 @@
 import { focusManager } from '@tanstack/react-query'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { Screens } from '@/App'
-import { api } from '@/api/client'
+import { api, rememberToken } from '@/api/client'
 import type { AccountEntry, Answer, DatabaseSource } from '@/api/types'
 import sources from './fixtures/sources.json'
 import { renderAt } from './render'
@@ -120,4 +120,12 @@ it('reads the held kinds again on focus', async () => {
   expect(await within(card).findByText(SAVED)).toBeInTheDocument()
   focusManager.setFocused(true)
   expect(await within(card).findByText(NOT_SAVED)).toBeInTheDocument()
+})
+
+it('leads back to the page from its logo and from a link under the title', async () => {
+  rememberToken('?token=secret')
+  renderAt('/accounts', <Screens />)
+  await screen.findByRole('region', { name: 'Nexus' })
+  expect(screen.getByRole('link', { name: 'EcoSemantic' })).toHaveAttribute('href', '/?token=secret')
+  expect(screen.getByRole('link', { name: 'Open EcoSemantic' })).toHaveAttribute('href', '/?token=secret')
 })

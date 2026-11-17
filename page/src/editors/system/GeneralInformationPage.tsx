@@ -1,7 +1,8 @@
 import { useLog, useValidation } from '@/api/queries'
+import { actorOf } from '@/activity/agents'
 import { AppLink } from '@/lib/router'
 import { paths } from '@/lib/paths'
-import { shortHash } from '@/lib/format'
+import { formatAgo, shortHash } from '@/lib/format'
 import { RequestAction } from '@/requests/RequestAction'
 import { EditorHeader } from '@/window/EditorHeader'
 import { FieldGrid } from '@/window/FieldGrid'
@@ -9,13 +10,15 @@ import { Hint } from '@/window/Hint'
 import { Icon } from '@/window/Icon'
 import { Section } from '@/window/Section'
 import { CurrentValidationLine } from './CurrentValidationLine'
+import { entryAtHash } from './entries'
 import type { SystemView } from './SystemEditor'
 
 export function GeneralInformationPage({ view }: { view: SystemView }) {
   const { id, system } = view
   const log = useLog(id)
   const validation = useValidation(id, view.version === null)
-  const last = log.data?.value.at(-1)
+  const recorded = log.data?.value ?? []
+  const last = view.version === null ? (recorded.at(-1) ?? null) : (entryAtHash(recorded, view.version) ?? null)
   const root = system.reference_process ? system.processes.find((p) => p.code === system.reference_process) : undefined
   const key = (s: string) => `system:${id}:${s}`
   return (
@@ -36,7 +39,15 @@ export function GeneralInformationPage({ view }: { view: SystemView }) {
                     <b>Hash</b> {shortHash(view.version ?? system.hash)}
                   </span>
                   <span>
-                    <b>Last change</b> {last ? `${last.timestamp} · ${last.actor.kind}${last.actor.name ? ` ${last.actor.name}` : ''} (${last.source})` : ''}
+                    <b>Last change</b>{' '}
+                    {last ? (
+                      <>
+                        <time dateTime={last.timestamp} title={last.timestamp}>
+                          {formatAgo(last.timestamp)}
+                        </time>{' '}
+                        · {actorOf(last)} · {last.source}
+                      </>
+                    ) : null}
                   </span>
                   <span>
                     <b>UUID</b> {system.id}

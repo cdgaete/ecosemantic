@@ -64,7 +64,8 @@ def test_importing_a_package_of_the_namespace_imports_nothing_from_the_command()
 def test_the_namespace_answers_open_and_the_types_an_argument_takes() -> None:
     import ecosemantic as es
     from ecosemantic import workspace
-    from ecosemantic.model.entities import DemandItem, Parameter
+    from ecosemantic.model.entities import Parameter
+    from ecosemantic.model.refs import DemandItem
     from ecosemantic.ports.types import MonteCarloConfig
 
     assert es.open is workspace.open and es.Workspace is workspace.Workspace

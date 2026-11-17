@@ -6,6 +6,7 @@ import { paths, isActivityPath, useGo } from '@/lib/paths'
 import { shortHash } from '@/lib/format'
 import { PageTabs } from '@/window/PageTabs'
 import { useEditorTab } from '@/window/useEditorTab'
+import { entryAtHash } from './entries'
 import { GeneralInformationPage } from './GeneralInformationPage'
 import { LogPage } from './LogPage'
 import { ParametersPage } from './ParametersPage'
@@ -56,7 +57,7 @@ function VersionBanner({ id, hash }: { id: string; hash: string }) {
   const named = `Read-only: the product system as it was at ${shortHash(hash)}`
   if (log.error) return <div className="border-b border-warning bg-warning/10 px-4 py-1 text-xs text-warning">{`${named}. ${log.error.message}`}</div>
   if (!log.data) return <div className="border-b border-warning bg-warning/10 px-4 py-1 text-xs text-warning">{`${named}. Loading the log…`}</div>
-  const entry = log.data.value.find((e) => e.result_hash === hash)
+  const entry = entryAtHash(log.data.value, hash)
   return (
     <div className="border-b border-warning bg-warning/10 px-4 py-1 text-xs text-warning">
       {entry ? `${named}, entry #${entry.seq} — ${entry.message}.` : `${named}. No log entry names this hash.`}

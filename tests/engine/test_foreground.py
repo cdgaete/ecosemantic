@@ -7,8 +7,8 @@ import pytest
 
 from ecosemantic.engine.calculation import Calculation
 from ecosemantic.errors import Invalid, NotFound
-from ecosemantic.model.entities import DemandItem, Exchange, Process, ProductSystem
-from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef, ForegroundRef
+from ecosemantic.model.entities import Exchange, Process, ProductSystem
+from ecosemantic.model.refs import BackgroundRef, DemandItem, ElementaryFlowRef, ForegroundRef
 from tests.conftest import fixture_system, split_system
 from tests.engine.conftest import SMALL, small
 from tests.fixture_data import CODES, FIXTURE_DB

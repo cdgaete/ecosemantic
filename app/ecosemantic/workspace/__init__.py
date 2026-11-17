@@ -87,7 +87,6 @@ from ecosemantic.mcp.view import view_link
 from ecosemantic.model.entities import (
     Actor,
     Case,
-    DemandItem,
     Exchange,
     ExchangeType,
     Method,
@@ -98,7 +97,7 @@ from ecosemantic.model.entities import (
 )
 from ecosemantic.model.entities import Process as ProcessEntity
 from ecosemantic.model.refs import Database as DatabaseRecord
-from ecosemantic.model.refs import ExchangeInput, ForegroundRef, SystemRef
+from ecosemantic.model.refs import DemandItem, ExchangeInput, ForegroundRef, SystemRef
 from ecosemantic.model.validation import ValidationReport
 from ecosemantic.ports.calculation import CUTOFF, MAX_LEVEL, MAX_NODES, TOP_N
 from ecosemantic.ports.types import (

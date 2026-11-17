@@ -4,9 +4,8 @@ import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { AccountsScreen } from '@/accounts/AccountsScreen'
 import { rememberToken } from '@/api/client'
 import { useHeldStream } from '@/api/stream'
-import { BackgroundEditor } from '@/editors/background/BackgroundEditor'
-import { SearchEditor } from '@/editors/background/SearchEditor'
 import { DatabasesEditor } from '@/editors/databases/DatabasesEditor'
+import { ExplorerEditor } from '@/editors/explorer/ExplorerEditor'
 import { NoEditor } from '@/editors/NoEditor'
 import { ProcessEditor } from '@/editors/process/ProcessEditor'
 import { ResultsEditor } from '@/editors/results/ResultsEditor'
@@ -41,8 +40,7 @@ export function Screens() {
           <Route path="systems/:id/processes/:code/*" element={<ProcessEditor />} />
           <Route path="systems/:id/results/*" element={<ResultsEditor />} />
           <Route path="databases" element={<DatabasesEditor />} />
-          <Route path="databases/:name/processes/:ref" element={<BackgroundEditor />} />
-          <Route path="databases/:name/search/:kind" element={<SearchEditor />} />
+          <Route path="databases/:name/*" element={<ExplorerEditor />} />
           <Route path="systems/:id/simulations/:runId" element={<SimulationEditor />} />
           <Route path="systems/:id/*" element={<SystemEditor />} />
           <Route path="*" element={<NoEditor />} />

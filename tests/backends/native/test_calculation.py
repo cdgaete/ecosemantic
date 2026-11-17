@@ -3,8 +3,8 @@ import pytest
 from ecosemantic.backends.native.calculation import Named, NativeCalculation
 from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.errors import Invalid, NotFound, OtherBuild
-from ecosemantic.model.entities import DemandItem, Method
-from ecosemantic.model.refs import BackgroundRef, ForegroundRef, LinkedProcessRef
+from ecosemantic.model.entities import Method
+from ecosemantic.model.refs import BackgroundRef, DemandItem, ForegroundRef, LinkedProcessRef
 from ecosemantic.ports.types import System
 from tests.conftest import fixture_system, split_system
 from tests.engine_fixture import LOOP_DB, LOOP_FINGERPRINT

@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import pytest
 
-from ecosemantic.model.entities import DemandItem, Method
-from ecosemantic.model.refs import BackgroundRef, ForegroundRef
+from ecosemantic.model.entities import Method
+from ecosemantic.model.refs import BackgroundRef, DemandItem, ForegroundRef
 from ecosemantic.ports.types import MonteCarloConfig, System
 from tests.fixture_data import CODES, FIXTURE_DB
 

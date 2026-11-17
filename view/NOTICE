@@ -11,3 +11,10 @@ own licences; their notices are in ecosemantic/view/static/THIRD_PARTY_NOTICES.t
 inside that distribution. Components of the page adapt shadcn/ui, Copyright (c)
 2023 shadcn, under the MIT licence, as page/PROVENANCE.md in the source
 repository records.
+
+The names ISIC Rev.4 publishes for its divisions and groups, carried in
+ecosemantic/ports/data/isic_rev4_english_structure.csv inside ecosemantic-core,
+are those of the International Standard Industrial Classification of All
+Economic Activities, Revision 4, published by the United Nations Statistics
+Division at
+https://unstats.un.org/unsd/classifications/Econ/Download/In%20Text/ISIC_Rev_4_english_structure.Txt

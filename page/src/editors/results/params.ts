@@ -16,7 +16,7 @@ export function parseParams(search: string): ResultParams | null {
   return {
     ...(method_id ? { method_id } : {}),
     ...(impact_method ? { impact_method } : {}),
-    variants: (q.get('variants') ?? '').split(',').filter((v) => v.length > 0),
+    variants: q.getAll('variants'),
     amount: Number(q.get('amount') ?? '1'),
   }
 }
@@ -29,7 +29,7 @@ export function serializeParams(p: ResultParams): string {
   const q = new URLSearchParams()
   if (p.method_id) q.set('method_id', p.method_id)
   if (p.impact_method) q.set('impact_method', p.impact_method)
-  if (p.variants.length > 0) q.set('variants', p.variants.join(','))
+  for (const variant of p.variants) q.append('variants', variant)
   if (p.amount !== 1) q.set('amount', String(p.amount))
   return `?${q.toString()}`
 }

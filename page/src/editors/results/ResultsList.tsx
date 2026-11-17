@@ -4,7 +4,7 @@ import { useParams } from 'react-router-dom'
 import { colourOf } from '@/activity/agents'
 import { useCalculations, useSystem } from '@/api/queries'
 import { useSystemStream } from '@/api/stream'
-import type { Call } from '@/api/types'
+import type { Call, ProductSystem } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { formatAgo, formatAmount, shortHash } from '@/lib/format'
 import { movedSince } from '@/lib/hashes'
@@ -13,7 +13,7 @@ import { AppLink } from '@/lib/router'
 import { EditorHeader } from '@/window/EditorHeader'
 import { Section } from '@/window/Section'
 import { useEditorTab } from '@/window/useEditorTab'
-import { methodOf, variantsOf, withoutDatabase } from './recorded'
+import { methodOf, targetOf, variantsOf, withoutDatabase } from './recorded'
 
 function Who({ call }: { call: Call }) {
   if (call.origin === 'view') return <span>you</span>
@@ -25,10 +25,11 @@ function Who({ call }: { call: Call }) {
   )
 }
 
-function Calculation({ call, systemId, database, current }: { call: Call; systemId: string; database: string; current: string | null | undefined }) {
+function Calculation({ call, system, systemId, database, current }: { call: Call; system: ProductSystem | undefined; systemId: string; database: string; current: string | null | undefined }) {
   const [unfolded, setUnfolded] = useState(false)
   const scores = call.summary?.scores ?? []
   const variants = variantsOf(call)
+  const target = targetOf(call.summary?.demand, system)
   const earlier = movedSince(call.at_hash, current)
   return (
     <li className="border-b py-2">
@@ -44,7 +45,14 @@ function Calculation({ call, systemId, database, current }: { call: Call; system
         ) : null}
       </div>
       <p className="font-medium break-words">{methodOf(call, database)}</p>
-      <p className="text-muted-foreground">{variants.length > 0 ? variants.join(', ') : 'base values'}</p>
+      {target !== null ? <p className="break-words">Target: {target}</p> : null}
+      <p className="flex flex-wrap gap-x-2 text-muted-foreground">
+        {variants.length > 0
+          ? variants.map((variant) => (
+              <span key={variant}>{variant}</span>
+            ))
+          : 'base values'}
+      </p>
       {(unfolded ? scores : scores.slice(0, 1)).map((score, at) => (
         <p key={`${score.method}-${at}`} className="break-words">
           {withoutDatabase(score.method, database)}: <span className="tabular-nums">{formatAmount(score.value)}</span> {score.unit}
@@ -89,7 +97,7 @@ export function ResultsList() {
         {calculations.data && recorded.length === 0 ? <p className="text-muted-foreground">No calculation is recorded for this system yet. Calculate one, or ask the agent to.</p> : null}
         <ul className="text-[12.5px]">
           {recorded.map((call) => (
-            <Calculation key={call.id} call={call} systemId={id} database={system?.database.name ?? ''} current={system?.hash} />
+            <Calculation key={call.id} call={call} system={system} systemId={id} database={system?.database.name ?? ''} current={system?.hash} />
           ))}
         </ul>
       </Section>

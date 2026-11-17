@@ -1,7 +1,8 @@
 """Background databases, exchange references, and the id each backend derives from a reference.
 
 A native id is two UUIDs joined by an underscore: ecoinvent process and product, or openLCA
-process and product flow. A process with several products is several references.
+process and product flow. A process with several products is several references. A demand names
+the processes it asks for, each by its reference and an amount.
 """
 
 from __future__ import annotations
@@ -98,6 +99,13 @@ ProcessInput = Annotated[
     BackgroundRef | ForegroundRef,
     Field(discriminator="kind", json_schema_extra={"type": "object"}),
 ]
+
+
+class DemandItem(BaseModel):
+    """One process a demand asks for, and how much of it."""
+
+    ref: BackgroundRef | ForegroundRef
+    amount: float
 
 
 def slug(text: str, separator: str) -> str:

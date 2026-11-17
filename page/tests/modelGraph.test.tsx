@@ -1,13 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import type { Answer, Arrangement, CardGeometry, ProductSystem } from '@/api/types'
+import type { Answer, Arrangement, CardGeometry, LogEntry, ProductSystem } from '@/api/types'
 import { api } from '@/api/client'
 import { formatAmount } from '@/lib/format'
 import { layoutAnswer, placementsFor } from './placements'
+import type { Outlines } from '@/editors/graph/build'
 import { ModelGraph } from '@/editors/graph/ModelGraph'
 import { useUi } from '@/store/ui'
+import { Slot, SlotsProvider } from '@/window/slots'
 import system from './fixtures/system.json'
 import elementaryFlow from './fixtures/elementary_flow.json'
 
@@ -46,22 +48,28 @@ const ROW = 22
 const { rendered } = vi.hoisted(() => ({ rendered: { system: null as unknown, layout: null as unknown as Answer<Arrangement> | null, layouts: {} as Record<string, Answer<Arrangement>> } }))
 
 
-function Graph({ client, product }: { client: QueryClient; product: ProductSystem }) {
+function Graph({ client, product, outlines, latest = null }: { client: QueryClient; product: ProductSystem; outlines?: Outlines; latest?: LogEntry | null }) {
   return (
     <QueryClientProvider client={client}>
       <MemoryRouter>
         <TooltipProvider>
-          <ModelGraph system={product} latest={null} />
+          <SlotsProvider>
+            <Slot name="tools" className="slot-tools" />
+            <Slot name="view" className="slot-view" />
+            <Slot name="minimap" className="slot-minimap" />
+            <Slot name="notice" className="slot-notice" />
+            <ModelGraph system={product} latest={latest} outlines={outlines} />
+          </SlotsProvider>
         </TooltipProvider>
       </MemoryRouter>
     </QueryClientProvider>
   )
 }
 
-function renderGraph(product: ProductSystem) {
+function renderGraph(product: ProductSystem, outlines?: Outlines, latest: LogEntry | null = null) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   rendered.system = product
-  const view = render(<Graph client={client} product={product} />)
+  const view = render(<Graph client={client} product={product} outlines={outlines} latest={latest} />)
   return {
     ...view,
     redraw: (next: ProductSystem) => {
@@ -86,6 +94,8 @@ function choose(name: RegExp): void {
 }
 
 describe('model graph', () => {
+  beforeEach(() => useUi.setState({ canvasSystemId: doc.id, canvasVariant: null }))
+
   it('draws the reference card from the system, and none while the system has no reference', async () => {
     const widget = doc.processes.find((p) => p.code === 'widget')!
     const view = renderGraph({ ...doc, reference_process: 'widget' })
@@ -173,6 +183,33 @@ describe('model graph', () => {
     expect(card().getByText('steel').closest('[data-zero]')?.textContent).not.toContain('0.5')
   })
 
+  it('writes the case the State selector picks to the store', async () => {
+    const { getByLabelText } = renderGraph(doc)
+    fireEvent.change(getByLabelText('State'), { target: { value: 'heavy' } })
+    expect(useUi.getState().canvasVariant).toBe('heavy')
+  })
+
+  it('draws the canvas under the state the store holds', async () => {
+    const { container } = renderGraph(doc)
+    await waitFor(() => expect(container.querySelector('.react-flow__node[data-id="widget"]')).not.toBeNull())
+    const steel = () => within(container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement).getByText('steel').closest('[data-zero]') as HTMLElement
+    await waitFor(() => expect(steel().textContent).toContain('0.5'))
+    act(() => useUi.getState().setCanvasVariant('heavy'))
+    await waitFor(() => expect(steel().textContent).toContain('1'))
+  })
+
+  it('draws the base values while the state belongs to another system on the canvas', async () => {
+    useUi.setState({ canvasSystemId: 'another', canvasVariant: 'heavy' })
+    vi.mocked(api.systemAs).mockClear()
+    vi.mocked(api.layout).mockClear()
+    const { container } = renderGraph(doc)
+    await waitFor(() => expect(container.querySelector('.react-flow__node[data-id="widget"]')).not.toBeNull())
+    const steel = () => within(container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement).getByText('steel').closest('[data-zero]') as HTMLElement
+    await waitFor(() => expect(steel().textContent).toContain('0.5'))
+    expect(vi.mocked(api.systemAs).mock.calls.map((call) => call[1])).not.toContain('heavy')
+    expect(vi.mocked(api.layout).mock.calls.map((call) => call[1])).not.toContain('heavy')
+  })
+
   it('draws the resolved amount of a formula exchange in place of ƒ when asked', async () => {
     const { container } = renderGraph(doc)
     await waitFor(() => expect(container.querySelector('.react-flow__node[data-id="widget"]')).not.toBeNull())
@@ -209,67 +246,96 @@ describe('model graph', () => {
     expect(await view.findByText('No card to draw')).toBeInTheDocument()
   })
 
-  it('keeps its toolbar clear of the zoom controls and the minimap, wrapping within the pane', async () => {
+  it('holds the canvas toolbar in the tools island, wrapping within it', async () => {
     const { container } = renderGraph(doc)
-    await waitFor(() => expect(container.querySelector('[role="toolbar"][aria-label="Canvas"]')).not.toBeNull())
-    const toolbar = container.querySelector('[role="toolbar"][aria-label="Canvas"]') as HTMLElement
-    expect(toolbar.closest('.react-flow__panel')?.className).toContain('bottom')
+    const toolbar = await waitFor(() => {
+      const found = container.querySelector('[role="toolbar"][aria-label="Canvas"]')
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    })
+    expect(toolbar.closest('.react-flow__panel')).toBeNull()
+    expect(toolbar.closest('.slot-tools')).not.toBeNull()
     expect(toolbar.className).toContain('flex-wrap')
     expect(toolbar.className).toContain('max-w-full')
   })
 
-  it('lets the toolbar take its own width, and holds it out of the minimap\'s lane while the minimap is shown', async () => {
-    const width = window.innerWidth
-    useUi.setState({ minimapOpen: null })
-    window.innerWidth = 1280
-    const { container } = renderGraph(doc)
-    await waitFor(() => expect(container.querySelector('[role="toolbar"][aria-label="Canvas"]')).not.toBeNull())
-    const panel = () => (container.querySelector('[role="toolbar"][aria-label="Canvas"]') as HTMLElement).closest('.react-flow__panel') as HTMLElement
-    expect(container.querySelector('.react-flow__minimap')).not.toBeNull()
-    expect(panel().className).toContain('w-max')
-    expect(panel().className).toContain('max-w-[calc(100%-446px)]')
-    choose(/Minimap/)
-    await waitFor(() => expect(container.querySelector('.react-flow__minimap')).toBeNull())
-    expect(panel().className).toContain('w-max')
-    expect(panel().className).toContain('max-w-[calc(100%-1rem)]')
-    expect(panel().className).not.toContain('max-w-[calc(100%-446px)]')
-    window.innerWidth = width
-    useUi.setState({ minimapOpen: null })
-  })
-
-  it('raises the toolbar above the minimap when the canvas is too narrow to hold both side by side', async () => {
+  it('draws the minimap in its own slot at its own size, and nothing there while it is off', async () => {
     useUi.setState({ minimapOpen: true })
-    const canvas = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(504)
-    const { container } = renderGraph(doc)
-    await waitFor(() => expect(container.querySelector('[role="toolbar"][aria-label="Canvas"]')).not.toBeNull())
-    const panel = () => (container.querySelector('[role="toolbar"][aria-label="Canvas"]') as HTMLElement).closest('.react-flow__panel') as HTMLElement
-    // the minimap's 150 px, its 15 px margin and an 8 px gap
-    await waitFor(() => expect(panel().style.marginBottom).toBe('173px'))
-    expect(panel().className).toContain('max-w-[calc(100%-1rem)]')
-    expect(panel().className).not.toContain('max-w-[calc(100%-446px)]')
-    expect(screen.getByRole('combobox', { name: 'State' }).className).toContain('min-w-28')
-    canvas.mockRestore()
+    const on = renderGraph(doc)
+    const minimap = await waitFor(() => {
+      const found = on.container.querySelector('.react-flow__minimap') as HTMLElement | null
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    })
+    expect(minimap.closest('.slot-minimap')).not.toBeNull()
+    expect(minimap.style.position).toBe('static')
+    expect(minimap.style.margin).toBe('0px')
+    expect(minimap.className).toContain('rounded-md')
+    expect(minimap.className).toContain('border')
+    expect(minimap.style.getPropertyValue('--xy-minimap-mask-background-color-props')).toBe('rgb(var(--muted) / 0.6)')
+    on.unmount()
+    useUi.setState({ minimapOpen: false })
+    const off = renderGraph(doc)
+    await waitFor(() => expect(off.container.querySelector('.react-flow__node')).not.toBeNull())
+    expect(off.container.querySelector('.react-flow__minimap')).toBeNull()
     useUi.setState({ minimapOpen: null })
   })
 
-  it('keeps the toolbar beside the minimap on a canvas wide enough for both', async () => {
-    useUi.setState({ minimapOpen: true })
-    const canvas = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(1200)
-    const { container } = renderGraph(doc)
-    await waitFor(() => expect(container.querySelector('[role="toolbar"][aria-label="Canvas"]')).not.toBeNull())
-    const panel = (container.querySelector('[role="toolbar"][aria-label="Canvas"]') as HTMLElement).closest('.react-flow__panel') as HTMLElement
-    expect(panel.style.marginBottom).toBe('')
-    expect(panel.className).toContain('max-w-[calc(100%-446px)]')
-    canvas.mockRestore()
-    useUi.setState({ minimapOpen: null })
-  })
-
-  it('rings the chosen process', async () => {
+  it('rings the chosen process with a dashed outline set off from the card', async () => {
     const widget = doc.processes.find((p) => p.code === 'widget')!
     useUi.setState({ chosenProcess: widget.id })
     const { container } = renderGraph(doc)
     await waitFor(() => expect(container.querySelector('.react-flow__node[data-id="widget"] [data-chosen]')).not.toBeNull())
     expect(container.querySelector('.react-flow__node:not([data-id="widget"]) [data-chosen]')).toBeNull()
+    const mark = await waitFor(() => {
+      const found = container.querySelector<HTMLElement>('.react-flow__node[data-id="widget"] [data-selection]')
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    })
+    expect(mark.className).toContain('outline-dashed')
+    expect(mark.className).toContain('outline-foreground')
+    expect(mark.className).toContain('outline-offset-[6px]')
+    expect(container.querySelector('.react-flow__node:not([data-id="widget"]) [data-selection]')).toBeNull()
+    useUi.setState({ chosenProcess: null })
+  })
+
+  it('keeps the highlight ring of a changed card while it is chosen', async () => {
+    const widget = doc.processes.find((p) => p.code === 'widget')!
+    const latest: LogEntry = {
+      seq: 7,
+      timestamp: '2026-11-13T18:37:27.851830Z',
+      actor: { kind: 'agent', id: 'fixture-agent', name: 'fixture-agent' },
+      source: 'mcp',
+      base_hash: null,
+      result_hash: 'f91e47f3ae08c28e8c522a058e430636b15174362a6981b055c38026a107c05d',
+      changes: [{ op: 'update', entity: 'process', id: widget.id, field: 'name', before: 'a', after: 'b' }],
+      message: 'renamed widget',
+    }
+    useUi.setState({ chosenProcess: widget.id })
+    const { container } = renderGraph(doc, undefined, latest)
+    const card = await waitFor(() => {
+      const found = container.querySelector<HTMLElement>('.react-flow__node[data-id="widget"] [data-chosen]')
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    })
+    expect(card.className).toContain('shadow-[0_0_0_3px_rgb(var(--highlight))]')
+    expect(container.querySelector('.react-flow__node[data-id="widget"] [data-selection]')).not.toBeNull()
+    useUi.setState({ chosenProcess: null })
+  })
+
+  it('keeps the change ring and the selection mark on a chosen card an entry changed', async () => {
+    const widget = doc.processes.find((p) => p.code === 'widget')!
+    const outlines: Outlines = new Map([['widget', 'rgb(var(--chart-2))']])
+    useUi.setState({ chosenProcess: widget.id })
+    const { container } = renderGraph(doc, outlines)
+    const card = await waitFor(() => {
+      const found = container.querySelector<HTMLElement>('.react-flow__node[data-id="widget"] [data-chosen]')
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    })
+    expect(card.style.getPropertyValue('--outline')).toBe('rgb(var(--chart-2))')
+    expect(card.className).toContain('shadow-[0_0_0_3px_var(--outline)]')
+    expect(container.querySelector('.react-flow__node[data-id="widget"] [data-selection]')).not.toBeNull()
     useUi.setState({ chosenProcess: null })
   })
 
@@ -308,15 +374,11 @@ describe('model graph', () => {
       expect(positionOf(container, placement.code)?.replace(/\s+/g, '')).toContain(`translate(${placement.x}px,${placement.y}px)`)
     }
   })
-  it.each([
-    ['cobalt', 'light'],
-    ['ecosemantic', 'dark'],
-    ['openlca', 'light'],
-  ] as const)('draws the graph controls in the %s theme as xyflow %s', async (theme, mode) => {
+  it.each(['light', 'dark'] as const)('draws the graph controls in the %s theme in the xyflow colour mode of that name', async (theme) => {
     useUi.getState().setTheme(theme)
     const { container } = renderGraph(doc)
     await waitFor(() => expect(container.querySelector('.react-flow')).not.toBeNull())
-    expect(container.querySelector('.react-flow')?.classList.contains(mode)).toBe(true)
+    expect(container.querySelector('.react-flow')?.classList.contains(theme)).toBe(true)
   })
 
   describe('scaled to one unit', () => {

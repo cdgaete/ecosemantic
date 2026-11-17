@@ -25,6 +25,7 @@ from ecosemantic.view.activity import routes as activity_routes
 from ecosemantic.view.api import BRIDGE_EXTENSION, GATE_PARAMETER, reach
 from ecosemantic.view.api import routes as api_routes
 from ecosemantic.view.credentials import routes as credential_routes
+from ecosemantic.view.explorer import routes as explorer_routes
 from ecosemantic.view.handling import answering, error_response
 from ecosemantic.view.installs import routes as install_routes
 from ecosemantic.view.olca import routes as olca_routes
@@ -183,6 +184,7 @@ def build_view(
         *olca_routes(context),
         *install_routes(server, context),
         *credential_routes(context),
+        *explorer_routes(context),
         *tables_routes(server, context),
         *routes,
         Route(

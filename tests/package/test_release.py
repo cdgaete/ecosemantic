@@ -13,8 +13,8 @@ from ecosemantic.compute.overrides import apply_case
 from ecosemantic.compute.parameters import materialize
 from ecosemantic.compute.render import product_flow_id
 from ecosemantic.errors import Conflict, Invalid, NotFound
-from ecosemantic.model.entities import DemandItem, Method, ProductSystem
-from ecosemantic.model.refs import BackgroundRef, ForegroundRef, SystemRef
+from ecosemantic.model.entities import Method, ProductSystem
+from ecosemantic.model.refs import BackgroundRef, DemandItem, ForegroundRef, SystemRef
 from ecosemantic.package.background import read_background
 from ecosemantic.package.manifest import CHANGELOG, BaseDatabase, Changelog, read_manifest
 from ecosemantic.package.release import build_release

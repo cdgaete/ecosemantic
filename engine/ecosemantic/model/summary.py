@@ -7,6 +7,8 @@ from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
+from ecosemantic.model.refs import DemandItem
+
 SUMMARY_ITEMS = 5
 
 SummaryKind = Literal["background", "elementary_flow"]
@@ -31,12 +33,15 @@ class SummaryScore(BaseModel):
 
 
 class Summary(BaseModel):
-    """How many items an answer held and whether there were more, its first items, its scores."""
+    """How many items an answer held, the word that count is read as, whether there were more, its
+    first items, its scores, and the demand a calculation resolved and scored."""
 
     count: int | None = None
     more: bool = False
+    noun: str = "found"
     items: list[SummaryItem] = Field(default_factory=list)
     scores: list[SummaryScore] = Field(default_factory=list)
+    demand: list[DemandItem] | None = None
 
 
 @runtime_checkable
@@ -49,7 +54,13 @@ class Summarising(Protocol):
     def summarise(self) -> Summary | None: ...
 
 
-def listed(items: Sequence[object], more: bool) -> Summary:
-    """The summary of a listing: its count, whether it went on, and its first items."""
+def listed(items: Sequence[object], more: bool, noun: str = "found") -> Summary:
+    """The summary of a listing: how many it held, the word its count is read as, whether it went
+    on, and its first items."""
     first = [item for item in items[:SUMMARY_ITEMS] if isinstance(item, Itemised)]
-    return Summary(count=len(items), more=more, items=[item.summary_item() for item in first])
+    return Summary(
+        count=len(items),
+        more=more,
+        noun=noun,
+        items=[item.summary_item() for item in first],
+    )

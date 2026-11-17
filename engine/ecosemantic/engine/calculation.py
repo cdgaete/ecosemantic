@@ -17,8 +17,8 @@ from ecosemantic.engine.loops import Loops, loops_of
 from ecosemantic.engine.paths import PathTree, Walked, walk
 from ecosemantic.engine.solver import DEFAULT_SOLVER, Solver, SolverName
 from ecosemantic.errors import Invalid
-from ecosemantic.model.entities import DemandItem, Method, ProductSystem
-from ecosemantic.model.refs import ForegroundRef
+from ecosemantic.model.entities import Method, ProductSystem
+from ecosemantic.model.refs import DemandItem, ForegroundRef
 
 NOISE_FLOOR = 1e-34
 

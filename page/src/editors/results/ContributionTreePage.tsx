@@ -3,8 +3,10 @@ import { useContributions } from '@/api/queries'
 import { useCategory } from '@/lib/address'
 import type { TreeNode } from '@/api/types'
 import { categoryLabel, formatAmount, formatShare, methodById } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { RequestAction } from '@/requests/RequestAction'
 import { EditorHeader } from '@/window/EditorHeader'
+import { NUMERIC } from '@/window/DataTable'
 import { Hint } from '@/window/Hint'
 import { Icon } from '@/window/Icon'
 import { Section } from '@/window/Section'
@@ -17,8 +19,8 @@ function Rows({ node, depth, unit, open, toggle, id }: { node: TreeNode; depth: 
   return (
     <>
       <tr>
-        <td className="border-r border-b px-2 py-0.5 text-right tabular-nums">{formatShare(node.fraction)}</td>
-        <td className="border-r border-b py-0.5 pr-2 whitespace-nowrap" style={{ paddingLeft: 8 + depth * 16 }}>
+        <td className={cn('border-r border-b px-2 py-0.5 text-right', NUMERIC)}>{formatShare(node.fraction)}</td>
+        <td className="border-r border-b py-0.5 pr-2 break-words" style={{ paddingLeft: 8 + depth * 16 }}>
           {children.length > 0 ? (
             <button type="button" className="mr-1 text-muted-foreground" aria-label="Expand" aria-expanded={expanded} onClick={() => toggle(id)}>
               {expanded ? '▾' : '▸'}
@@ -29,15 +31,18 @@ function Rows({ node, depth, unit, open, toggle, id }: { node: TreeNode; depth: 
           {node.kind === 'remainder' ? (
             <i className="text-muted-foreground">rest</i>
           ) : (
-            <span className="inline-flex items-center gap-1">
+            <span className="inline-flex min-w-0 items-center gap-1">
               <Icon name={node.ref?.kind === 'foreground' ? 'process' : 'product'} />
               {node.name}
               {node.location ? <span className="text-muted-foreground">· {node.location}</span> : null}
             </span>
           )}
+          <span className="block text-xs @lg:hidden">
+            <span className="text-muted-foreground">Total result:</span> <span className={NUMERIC}>{formatAmount(node.score)}</span> {unit}
+          </span>
         </td>
-        <td className="border-r border-b px-2 text-right tabular-nums">{formatAmount(node.score)}</td>
-        <td className="border-r border-b px-2">{unit}</td>
+        <td className={cn('hidden border-r border-b px-2 text-right @lg:table-cell', NUMERIC)}>{formatAmount(node.score)}</td>
+        <td className="hidden border-r border-b px-2 @lg:table-cell">{unit}</td>
       </tr>
       {expanded ? children.map((child, i) => <Rows key={`${id}/${i}`} node={child} depth={depth + 1} unit={unit} open={open} toggle={toggle} id={`${id}/${i}`} />) : null}
     </>
@@ -91,14 +96,14 @@ export function ContributionTreePage({ result }: { result: Result }) {
         </div>
         {tree.error ? <p className="text-destructive">{tree.error.message}</p> : null}
         {tree.data?.value.root ? (
-          <div className="overflow-x-auto">
+          <>
             <table className="w-full border-collapse border text-[12.5px]">
               <thead>
                 <tr>
                   <th className="border-r border-b bg-chrome px-2 py-1 text-right font-normal">Contribution</th>
                   <th className="border-r border-b bg-chrome px-2 py-1 text-left font-normal">Process</th>
-                  <th className="border-r border-b bg-chrome px-2 py-1 text-right font-normal">Total result</th>
-                  <th className="border-r border-b bg-chrome px-2 py-1 text-left font-normal">Unit</th>
+                  <th className="hidden border-r border-b bg-chrome px-2 py-1 text-right font-normal @lg:table-cell">Total result</th>
+                  <th className="hidden border-r border-b bg-chrome px-2 py-1 text-left font-normal @lg:table-cell">Unit</th>
                 </tr>
               </thead>
               <tbody>
@@ -107,7 +112,7 @@ export function ContributionTreePage({ result }: { result: Result }) {
             </table>
             {tree.data.value.truncated ? <p className="pt-1 text-xs text-muted-foreground">Truncated at the depth and node limit above.</p> : null}
             <Hint of={tree.data} />
-          </div>
+          </>
         ) : !tree.error ? (
           <p className="text-muted-foreground">{waiting}</p>
         ) : null}

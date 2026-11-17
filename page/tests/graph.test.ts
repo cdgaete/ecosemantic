@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import * as path from 'node:path'
 import * as url from 'node:url'
 import { buildGraph, changedCards, changedSuppliers, droppedCards, hotFrom, edgeText, outlinesFrom } from '@/editors/graph/build'
-import { atRest, detailAt, framing, routePath } from '@/editors/graph/layout'
+import { atRest, detailAt, framing, READABLE_ZOOM, routePath, viewportFor } from '@/editors/graph/layout'
 import { layoutAnswer, routed } from './placements'
 import system from './fixtures/system.json'
 import log from './fixtures/log.json'
@@ -163,6 +163,60 @@ describe('framing', () => {
 
   it('frames the changed card when the canvas has not been measured', () => {
     expect(framing(card, { width: 900, height: 200 }, { width: 0, height: 0 })).toBe('changed')
+  })
+})
+
+describe('viewportFor', () => {
+  const drawing = { x: 0, y: 0, width: 2260, height: 370 }
+  const reference = { x: 1990, y: 90, width: 270, height: 190 }
+  const limits = { min: READABLE_ZOOM, max: 1 }
+  const canvasLimits = { min: 0.2, max: 1 }
+  const none = { left: 0, top: 0, right: 0, bottom: 0 }
+
+  it('fits the whole drawing inside a clear area too narrow for it at the readable zoom, down to the floor the overview sets', () => {
+    const view = viewportFor({ target: drawing, anchor: null, canvas: { width: 579, height: 492 }, clearance: none, zoom: canvasLimits })
+    expect(view.zoom).toBeCloseTo(579 / 2260)
+    expect(view.zoom).toBeLessThan(READABLE_ZOOM)
+    expect(view.x + drawing.x * view.zoom).toBeGreaterThanOrEqual(0)
+    expect(view.y + drawing.y * view.zoom).toBeGreaterThanOrEqual(0)
+    expect(view.x + (drawing.x + drawing.width) * view.zoom).toBeLessThanOrEqual(579)
+    expect(view.y + (drawing.y + drawing.height) * view.zoom).toBeLessThanOrEqual(492)
+    expect(view.x).toBeCloseTo(579 / 2 - (drawing.x + drawing.width / 2) * view.zoom)
+  })
+
+  it('holds the readable zoom with the reference card at the right edge of a clear area too narrow for the drawing', () => {
+    const view = viewportFor({ target: drawing, anchor: reference, canvas: { width: 579, height: 492 }, clearance: none, zoom: limits })
+    expect(view.zoom).toBe(READABLE_ZOOM)
+    expect(view.x + (reference.x + reference.width) * view.zoom).toBeCloseTo(579)
+    expect(view.y).toBeCloseTo(492 / 2 - (drawing.height / 2) * view.zoom)
+  })
+
+  it('holds it in a clear area that fits the drawing at four tenths, which it never lands on', () => {
+    const view = viewportFor({ target: drawing, anchor: reference, canvas: { width: 951, height: 328 }, clearance: none, zoom: limits })
+    expect(951 / drawing.width).toBeLessThan(READABLE_ZOOM)
+    expect(view.zoom).toBe(READABLE_ZOOM)
+    expect(view.x + (reference.x + reference.width) * view.zoom).toBeCloseTo(951)
+    expect(view.y + (drawing.y + drawing.height) * view.zoom).toBeLessThanOrEqual(328)
+    expect(view.y + drawing.y * view.zoom).toBeGreaterThanOrEqual(0)
+  })
+
+  it('fits the whole drawing inside the clear area at the zoom that fits it, at most full size', () => {
+    const target = { x: 0, y: 0, width: 1800, height: 1200 }
+    const clearance = { left: 60, top: 60, right: 60, bottom: 60 }
+    const view = viewportFor({ target, anchor: target, canvas: { width: 1024, height: 768 }, clearance, zoom: limits })
+    expect(view.zoom).toBeCloseTo(904 / 1800)
+    expect(view.x).toBeGreaterThanOrEqual(60)
+    expect(view.y).toBeGreaterThanOrEqual(60)
+    expect(view.x + target.width * view.zoom).toBeLessThanOrEqual(1024 - 60)
+    expect(view.y + target.height * view.zoom).toBeLessThanOrEqual(768 - 60)
+    expect(viewportFor({ target: { x: 0, y: 0, width: 400, height: 300 }, anchor: null, canvas: { width: 1024, height: 768 }, clearance, zoom: limits }).zoom).toBe(1)
+  })
+
+  it('centres a target that the clear area cannot hold at the readable zoom', () => {
+    const view = viewportFor({ target: drawing, anchor: null, canvas: { width: 579, height: 492 }, clearance: none, zoom: limits })
+    expect(view.zoom).toBe(READABLE_ZOOM)
+    expect(view.x + ((drawing.x + drawing.x + drawing.width) / 2) * view.zoom).toBeCloseTo(579 / 2)
+    expect(view.y + ((drawing.y + drawing.y + drawing.height) / 2) * view.zoom).toBeCloseTo(492 / 2)
   })
 })
 

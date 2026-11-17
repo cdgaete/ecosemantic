@@ -101,7 +101,7 @@ export type Origin = 'agent' | 'view'
 export type SummaryKind = 'background' | 'elementary_flow'
 export interface SummaryItem { label: string; detail: string | null; kind: SummaryKind | null; database: string | null; ref: string | null }
 export interface SummaryScore { method: string; value: number; unit: string }
-export interface Summary { count: number | null; more: boolean; items: SummaryItem[]; scores: SummaryScore[] }
+export interface Summary { count: number | null; more: boolean; noun: string; items: SummaryItem[]; scores: SummaryScore[]; demand: DemandItem[] | null }
 export type CallOutcome = 'ok' | 'error'
 export interface Call {
   id: string
@@ -202,7 +202,7 @@ export interface MonteCarloCategory { method_id: string; summary: MonteCarloSumm
 export type Stopped = 'target' | 'ceiling' | 'fixed' | 'cancelled'
 export interface MonteCarloResult { database: Database; n: number; stopped: Stopped; gating_method: string; scope: Scope; normals_at_amount: number; credit_loops: string[][]; dropped_draws: number[]; dropped_loops: string[][]; dropped_background: string[]; linked_credit_loops: LinkedLoop[]; dropped_linked_loops: LinkedLoop[]; categories: MonteCarloCategory[] }
 export interface PinBehind { product_system_id: string; name: string; at_hash: string }
-export interface ImpactResult { product_system: string; database: Database; methods: Method[]; scores: Score[]; credit_loops: string[][]; linked_credit_loops: LinkedLoop[]; links_behind: PinBehind[]; treatments_run_backwards: string[]; variants: VariantScores[]; uncertainty: MonteCarloResult | null }
+export interface ImpactResult { product_system: string; database: Database; methods: Method[]; scores: Score[]; demand: DemandItem[]; credit_loops: string[][]; linked_credit_loops: LinkedLoop[]; links_behind: PinBehind[]; treatments_run_backwards: string[]; variants: VariantScores[]; uncertainty: MonteCarloResult | null }
 export type RunStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
 export interface RunProgress { iterations: number; worst_rel_se: number | null }
 export interface Run {
@@ -300,8 +300,10 @@ export interface Cut {
   cutoff: number
   below: number
   share: number
+  below_score: number
   unlisted: number
   unlisted_share: number
+  unlisted_score: number
 }
 export interface ContributionResult {
   database: Database
@@ -375,6 +377,37 @@ export interface BackgroundProcess {
   comment: string | null
   url: string | null
   exchanges: BackgroundExchange[] | null
+}
+export interface Page<T> { items: T[]; has_more: boolean; next_cursor: string | null }
+export interface DatabaseSummary {
+  processes: number
+  elementary_flows: number
+  indicators: number
+  units: number
+  locations: number
+}
+export interface ClassificationScheme { scheme: string; processes: number; values: number }
+export interface ClassificationNode {
+  id: string
+  label: string
+  code: string | null
+  name: string | null
+  value: string | null
+  own: number
+  processes: number
+  children: ClassificationNode[]
+}
+export interface SubCompartment { name: string; flow_count: number }
+export interface Compartment { name: string; flow_count: number; sub_compartments: SubCompartment[] }
+export interface MethodCategory { name: string; indicators: Method[] }
+export interface MethodFamily { name: string; categories: MethodCategory[] }
+export interface Factor {
+  flow: ElementaryFlowRef
+  name: string
+  compartment: string
+  sub_compartment: string | null
+  unit: string
+  factor: number
 }
 export type VocabularyKind = 'units' | 'locations' | 'compartments' | 'impact_methods' | 'impact_categories'
 export interface Term { value: string; detail: string | null }

@@ -21,7 +21,6 @@ from pydantic import (
 from ecosemantic.errors import Conflict, ErrorEnvelope, Invalid, NotSupported
 from ecosemantic.model.entities import (
     Actor,
-    DemandItem,
     ExchangeType,
     Method,
     ProductSystem,
@@ -30,6 +29,7 @@ from ecosemantic.model.entities import (
 from ecosemantic.model.refs import (
     BackgroundRef,
     Database,
+    DemandItem,
     ElementaryFlowRef,
     ForegroundRef,
     LinkedProcessRef,
@@ -220,27 +220,144 @@ class InventoryResult(BaseModel):
     dropped: int
 
 
+class SubCompartment(BaseModel):
+    """One sub-compartment an elementary flow is filed under, with the flows the database holds
+    under it."""
+
+    name: str
+    flow_count: int
+
+
 class Compartment(BaseModel):
     name: str
     flow_count: int
-    sub_compartments: list[str]
+    sub_compartments: list[SubCompartment]
 
     @classmethod
     def tally(cls, placed: Iterable[tuple[str, str | None]]) -> list[Compartment]:
         """The compartments the given flows fall in, in name order, each with its flow count and
-        the sub-compartments found under it. A flow placed in no compartment is not counted."""
+        the sub-compartments found under it with their counts. A flow placed in no compartment is
+        not counted."""
         counts: dict[str, int] = {}
-        subs: dict[str, set[str]] = {}
+        subs: dict[str, dict[str, int]] = {}
         for compartment, sub_compartment in placed:
             if not compartment:
                 continue
             counts[compartment] = counts.get(compartment, 0) + 1
             if sub_compartment is not None:
-                subs.setdefault(compartment, set()).add(sub_compartment)
+                held = subs.setdefault(compartment, {})
+                held[sub_compartment] = held.get(sub_compartment, 0) + 1
         return [
-            cls(name=name, flow_count=counts[name], sub_compartments=sorted(subs.get(name, ())))
+            cls(
+                name=name,
+                flow_count=counts[name],
+                sub_compartments=[
+                    SubCompartment(name=sub, flow_count=count)
+                    for sub, count in sorted(subs.get(name, {}).items())
+                ],
+            )
             for name in sorted(counts)
         ]
+
+
+class Factor(BaseModel):
+    """One characterization factor of one indicator: the elementary flow it applies to, as its
+    database holds it, and the factor."""
+
+    flow: ElementaryFlowRef
+    name: str
+    compartment: str
+    sub_compartment: str | None
+    unit: str
+    factor: float
+
+
+def _factor_order(factor: Factor) -> tuple[str, str, bool, str]:
+    """A factor's flow name, its compartment, and whether it carries a sub-compartment before
+    the sub-compartment itself."""
+    return (
+        factor.name,
+        factor.compartment,
+        factor.sub_compartment is not None,
+        factor.sub_compartment or "",
+    )
+
+
+def _holds(factor: Factor, words: Sequence[str]) -> bool:
+    """Whether the factor's name, compartment and sub-compartment hold every one of the given
+    case-folded words, case-folded together."""
+    text = " ".join((factor.name, factor.compartment, factor.sub_compartment or "")).casefold()
+    return all(word in text for word in words)
+
+
+def factor_page(
+    factors: Sequence[Factor], query: str | None, limit: int, cursor: str | None
+) -> Page[Factor]:
+    """One page of an indicator's factors, in flow-name order, then compartment, then
+    sub-compartment, a factor in no sub-compartment before one in any; a query keeps the factors
+    whose name, compartment and sub-compartment hold every word of it, case-folded."""
+    words = [word.casefold() for word in (query or "").split()]
+    offset = page_start(cursor, limit)
+    matched = [factor for factor in sorted(factors, key=_factor_order) if _holds(factor, words)]
+    return Page.at_offset(
+        matched[offset : offset + limit], len(matched) > offset + limit, offset, limit
+    )
+
+
+class DatabaseSummary(BaseModel):
+    """The counts a background database holds: its processes, its elementary flows, its
+    indicators, the units its processes are in and the locations they are in."""
+
+    processes: int
+    elementary_flows: int
+    indicators: int
+    units: int
+    locations: int
+
+
+class ClassificationScheme(BaseModel):
+    """One classification scheme a background database carries, with the processes and distinct
+    values recorded under it."""
+
+    scheme: str
+    processes: int
+    values: int
+
+
+class ClassificationValue(BaseModel):
+    """One classification value as the catalog stores it, `<scheme>: <rest>`, with the processes
+    that carry it."""
+
+    value: str
+    processes: int
+
+
+class ClassificationNode(BaseModel):
+    """One node of a classification tree: the value it is, its processes alone as `own`, and the
+    processes of every value under it as `processes`."""
+
+    id: str
+    label: str
+    code: str | None
+    name: str | None
+    value: str | None
+    own: int
+    processes: int
+    children: list[ClassificationNode]
+
+
+class MethodCategory(BaseModel):
+    """The indicators one impact category of a method family holds."""
+
+    name: str
+    indicators: list[Method]
+
+
+class MethodFamily(BaseModel):
+    """One impact method's categories, as the explorer lists them."""
+
+    name: str
+    categories: list[MethodCategory]
 
 
 class Activity(BaseModel):
@@ -304,28 +421,36 @@ class Hotspot(BaseModel):
 
 
 class Cut(BaseModel):
-    """What a flat contribution list leaves out, each share summed in magnitude as the cut-off
-    compares them: the share of the total the cut-off was set at, how many parts fell under it
-    and their share, and how many parts reach it past the list's length and their share."""
+    """What a flat contribution list leaves out: the share of the total the cut-off was set at,
+    how many parts fell under it and their share, and how many parts reach it past the list's
+    length and their share. A share sums the magnitudes of its parts, as the cut-off compares
+    them; `below_score` and `unlisted_score` sum their scores as they are signed, so the listed
+    scores plus both make the total."""
 
     cutoff: float
     below: int
     share: float
+    below_score: float
     unlisted: int
     unlisted_share: float
+    unlisted_score: float
 
 
-def listed(fractions: Sequence[float], top_n: int, cutoff: float) -> tuple[int, Cut]:
-    """How many of the fractions, ranked by falling magnitude, a flat list shows, at most top_n
-    of those that reach cutoff, and what it leaves out."""
+def listed(scores: Sequence[float], total: float, top_n: int, cutoff: float) -> tuple[int, Cut]:
+    """How many of the scores, ranked by falling magnitude, a flat list shows, at most top_n of
+    those that reach cutoff, and what it leaves out, each part signed and each share summed in
+    magnitude."""
+    fractions = [fraction_of(score, total) for score in scores]
     reaching = sum(1 for fraction in fractions if abs(fraction) >= cutoff)
     shown = min(top_n, reaching)
     return shown, Cut(
         cutoff=cutoff,
         below=len(fractions) - reaching,
         share=sum(abs(fraction) for fraction in fractions[reaching:]),
+        below_score=sum(scores[reaching:]),
         unlisted=reaching - shown,
         unlisted_share=sum(abs(fraction) for fraction in fractions[shown:reaching]),
+        unlisted_score=sum(scores[shown:reaching]),
     )
 
 

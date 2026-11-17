@@ -1,8 +1,9 @@
 import { useRequests } from '@/api/queries'
 import type { Request } from '@/api/types'
-import { shortHash } from '@/lib/format'
+import { formatAgo, shortHash } from '@/lib/format'
 import { RequestAction } from '@/requests/RequestAction'
 import { RequestForm } from '@/requests/RequestForm'
+import { kindLabel } from '@/requests/kinds'
 import { EditorHeader } from '@/window/EditorHeader'
 import { Section } from '@/window/Section'
 import type { SystemView } from './SystemEditor'
@@ -10,8 +11,8 @@ import type { SystemView } from './SystemEditor'
 function Row({ request }: { request: Request }) {
   return (
     <li className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 border-b py-1.5">
-      <span className="font-semibold capitalize">
-        {request.kind}
+      <span className="font-semibold">
+        {kindLabel(request.kind)}
         {request.open ? <span className="ml-2 rounded-full bg-warning/15 px-1.5 text-xs font-medium text-warning">open</span> : null}
       </span>
       <span>
@@ -24,11 +25,15 @@ function Row({ request }: { request: Request }) {
       </span>
       <span className="text-xs text-muted-foreground">#{request.seq}</span>
       <span className="text-xs text-muted-foreground">
-        {request.actor.name} · {request.timestamp} · at {shortHash(request.at_hash)}
+        {request.actor.name} · <time dateTime={request.timestamp} title={request.timestamp}>{formatAgo(request.timestamp)}</time> · at {shortHash(request.at_hash)}
       </span>
       {request.outcome ? (
         <span className="col-start-2 border-l-2 border-success pl-2 text-xs">
-          <b>{request.outcome.resolution}</b> · {request.outcome.actor.kind} · {request.outcome.timestamp} — {request.outcome.message}
+          <b>{request.outcome.resolution}</b> · {request.outcome.actor.kind} ·{' '}
+          <time dateTime={request.outcome.timestamp} title={request.outcome.timestamp}>
+            {formatAgo(request.outcome.timestamp)}
+          </time>{' '}
+          — {request.outcome.message}
         </span>
       ) : null}
     </li>

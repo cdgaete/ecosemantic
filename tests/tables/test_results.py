@@ -14,7 +14,7 @@ from ecosemantic.compute.results import (
     VariantScores,
 )
 from ecosemantic.model.entities import Method, method_id
-from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef
+from ecosemantic.model.refs import BackgroundRef, DemandItem, ElementaryFlowRef, ForegroundRef
 from ecosemantic.ports.types import (
     Cut,
     FlowHotspot,
@@ -39,6 +39,7 @@ from ecosemantic.tables.results import (
 from tests.fixture_data import FIXTURE_DATABASE
 
 AT = datetime(2026, 9, 17, 14, 32, 5, tzinfo=UTC)
+DEMAND = [DemandItem(ref=ForegroundRef(code="battery"), amount=1.0)]
 SPEC = "IPCC · GWP100"
 GWP = Method(
     id=method_id(SPEC),
@@ -71,6 +72,7 @@ def test_the_scores_table_carries_the_base_and_each_variant(tmp_path: Path) -> N
         database=FIXTURE_DATABASE,
         product_system="Battery pack",
         methods=[GWP],
+        demand=DEMAND,
         scores=[Score(value=4.21, unit="kg CO2-Eq", method_id=GWP.id)],
         credit_loops=[],
         variants=[
@@ -97,6 +99,7 @@ def test_the_run_schema_carries_the_key_it_was_computed_on(tmp_path: Path) -> No
         database=FIXTURE_DATABASE,
         product_system="Battery pack",
         methods=[GWP],
+        demand=DEMAND,
         scores=[],
         credit_loops=[],
     )
@@ -142,7 +145,15 @@ def test_a_contribution_run_records_the_cut_it_made(tmp_path: Path) -> None:
         total=Score(value=4.21, unit="kg CO2-Eq", method_id=GWP.id),
         credit_loops=[],
         processes=[],
-        cut=Cut(cutoff=0.01, below=2, share=0.004, unlisted=3, unlisted_share=0.2),
+        cut=Cut(
+            cutoff=0.01,
+            below=2,
+            share=0.004,
+            below_score=-0.004,
+            unlisted=3,
+            unlisted_share=0.2,
+            unlisted_score=0.15,
+        ),
     )
     folder = write_contribution(tmp_path, key(), result, AT)
     schema = yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))
@@ -150,8 +161,10 @@ def test_a_contribution_run_records_the_cut_it_made(tmp_path: Path) -> None:
         "cutoff": 0.01,
         "below": 2,
         "share": 0.004,
+        "below_score": -0.004,
         "unlisted": 3,
         "unlisted_share": 0.2,
+        "unlisted_score": 0.15,
     }
     root = TreeNode(name="battery", location="CH", score=4.21, fraction=1.0, level=0)
     tree = ContributionResult(
@@ -172,6 +185,7 @@ def test_a_monte_carlo_block_writes_the_summary_and_the_samples(tmp_path: Path) 
         database=FIXTURE_DATABASE,
         product_system="Battery pack",
         methods=[GWP],
+        demand=DEMAND,
         scores=[Score(value=4.21, unit="kg CO2-Eq", method_id=GWP.id)],
         credit_loops=[],
         uncertainty=MonteCarloResult(
@@ -283,6 +297,7 @@ def test_each_run_schema_names_the_loops_holding_a_credit(tmp_path: Path) -> Non
         database=FIXTURE_DATABASE,
         product_system="Widget",
         methods=[GWP],
+        demand=DEMAND,
         scores=[total],
         credit_loops=loop,
         linked_credit_loops=linked,
@@ -340,6 +355,7 @@ def test_each_run_schema_names_the_exchanges_running_a_treatment_backwards(
         database=FIXTURE_DATABASE,
         product_system="Widget",
         methods=[GWP],
+        demand=DEMAND,
         scores=[total],
         credit_loops=[],
         treatments_run_backwards=named,
@@ -391,6 +407,7 @@ def test_the_uncertainty_tables_count_the_dropped_draws_and_number_samples_by_dr
         database=FIXTURE_DATABASE,
         product_system="Widget",
         methods=[GWP],
+        demand=DEMAND,
         scores=[Score(value=4.21, unit="kg CO2-Eq", method_id=GWP.id)],
         credit_loops=[],
         uncertainty=MonteCarloResult(

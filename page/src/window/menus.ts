@@ -1,6 +1,6 @@
 import { api } from '@/api/client'
 import { paths } from '@/lib/paths'
-import type { PanelMode, Theme } from '@/store/ui'
+import type { InspectorMode, Theme } from '@/store/ui'
 
 export interface MenuItem {
   key: string
@@ -29,8 +29,11 @@ export interface MenuContext {
   openNavigation: () => void
   importFile: (format: Format) => void
   downloadResult: (kind: ResultKind) => void
-  panelMode: PanelMode
-  setPanelMode: (mode: PanelMode) => void
+  inspector: InspectorMode
+  inspectorShown: boolean
+  openInspector: () => void
+  closeInspector: () => void
+  toggleWidened: () => void
   setTheme: (theme: Theme) => void
   newRequest: () => void
   reorganise: () => void
@@ -94,13 +97,13 @@ export function menus(context: MenuContext): Menu[] {
         { key: 'activity', label: 'Activity', disabled: none, to: paths.system(system) },
         { key: 'details', label: 'Details', disabled: none, to: paths.systemPage(system, 'general') },
         {
-          key: 'panel',
-          label: 'Panel',
+          key: 'inspector',
+          label: 'Inspector',
           disabled: none,
           items: [
-            { key: 'panel-beside', label: 'Beside the graph', disabled: context.panelMode === 'beside', run: () => context.setPanelMode('beside') },
-            { key: 'panel-expanded', label: 'Expand', disabled: context.panelMode === 'expanded', run: () => context.setPanelMode('expanded') },
-            { key: 'panel-collapsed', label: 'Collapse', disabled: context.panelMode === 'collapsed', run: () => context.setPanelMode('collapsed') },
+            { key: 'inspector-open', label: 'Open', disabled: context.inspectorShown, run: context.openInspector },
+            { key: 'inspector-widen', label: context.inspector === 'widened' ? 'Return to width' : 'Widen', run: context.toggleWidened },
+            { key: 'inspector-close', label: 'Close', disabled: !context.inspectorShown, run: context.closeInspector },
           ],
         },
         { key: 'navigation', label: 'Navigation', run: context.openNavigation },
@@ -110,9 +113,8 @@ export function menus(context: MenuContext): Menu[] {
           key: 'theme',
           label: 'Theme',
           items: [
-            { key: 'theme-cobalt', label: context.theme === 'cobalt' ? '✓ Cobalt' : 'Cobalt', run: () => context.setTheme('cobalt') },
-            { key: 'theme-ecosemantic', label: context.theme === 'ecosemantic' ? '✓ EcoSemantic' : 'EcoSemantic', run: () => context.setTheme('ecosemantic') },
-            { key: 'theme-openlca', label: context.theme === 'openlca' ? '✓ openLCA' : 'openLCA', run: () => context.setTheme('openlca') },
+            { key: 'theme-light', label: context.theme === 'light' ? '✓ Light' : 'Light', run: () => context.setTheme('light') },
+            { key: 'theme-dark', label: context.theme === 'dark' ? '✓ Dark' : 'Dark', run: () => context.setTheme('dark') },
           ],
         },
       ],

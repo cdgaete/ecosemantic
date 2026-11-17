@@ -8,8 +8,8 @@ from ecosemantic.engine.background import Background, Factors, Rows
 from ecosemantic.engine.calculation import Calculation
 from ecosemantic.engine.paths import PathNode
 from ecosemantic.errors import Invalid
-from ecosemantic.model.entities import DemandItem, Exchange, Method, Process, ProductSystem
-from ecosemantic.model.refs import BackgroundRef, Database, ForegroundRef
+from ecosemantic.model.entities import Exchange, Method, Process, ProductSystem
+from ecosemantic.model.refs import BackgroundRef, Database, DemandItem, ForegroundRef
 from tests.conftest import fixture_system
 from tests.engine.conftest import GWP_METHOD, WIDGET
 from tests.fixture_data import CODES, FIXTURE_DB, FLOW_IDS

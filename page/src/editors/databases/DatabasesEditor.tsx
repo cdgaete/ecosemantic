@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useDatabases, useInstalls, useSources } from '@/api/queries'
 import type { Database, Install, SourceName } from '@/api/types'
+import { paths } from '@/lib/paths'
+import { AppLink } from '@/lib/router'
 import { DataTable, type Column } from '@/window/DataTable'
 import { EditorHeader } from '@/window/EditorHeader'
 import { Section } from '@/window/Section'
@@ -9,7 +11,7 @@ import { SourceForm } from './SourceForm'
 import { SourceList } from './SourceList'
 
 const COLUMNS: Column<Database>[] = [
-  { key: 'name', header: 'Name', render: (db) => db.name },
+  { key: 'name', header: 'Name', render: (db) => <AppLink to={paths.explorer(db.name)} className="text-accent [overflow-wrap:anywhere]">{db.name}</AppLink> },
   { key: 'version', header: 'Version', render: (db) => db.version },
   { key: 'model', header: 'System model', render: (db) => db.system_model },
   { key: 'scheme', header: 'Scheme', render: (db) => db.scheme },

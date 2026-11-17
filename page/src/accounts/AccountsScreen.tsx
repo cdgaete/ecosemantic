@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { AccountAdvice, KEPT } from '@/editors/databases/AccountAdvice'
 import { AccountFields } from '@/editors/databases/AccountFields'
 import { entered, type AccountInput } from '@/editors/databases/account'
+import { AppLink } from '@/lib/router'
+import { paths } from '@/lib/paths'
 
 const TITLE = 'Database accounts — EcoSemantic'
 const NOT_SAVED = 'Not saved'
@@ -101,10 +103,15 @@ export function AccountsScreen() {
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 p-6 text-sm leading-snug">
       <header className="flex flex-col gap-1">
         <span className="flex items-center gap-2">
-          <img src={logo} alt="EcoSemantic" className="size-6 shrink-0" />
+          <AppLink to={paths.home()}>
+            <img src={logo} alt="EcoSemantic" className="size-6 shrink-0" />
+          </AppLink>
           <h1 className="text-base font-semibold">Database accounts</h1>
         </span>
         <p className="text-xs text-muted-foreground">on this computer</p>
+        <AppLink to={paths.home()} className="text-xs text-primary hover:underline">
+          Open EcoSemantic
+        </AppLink>
       </header>
       {entry.error ? <p className="break-words text-destructive">{entry.error.message}</p> : null}
       {sources.error ? <p className="break-words text-destructive">{sources.error.message}</p> : null}

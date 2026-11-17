@@ -1,4 +1,4 @@
-import type { Call, DemandItem } from '@/api/types'
+import type { Call, DemandItem, ProductSystem } from '@/api/types'
 import type { ResultParams } from './params'
 
 export function variantsOf(call: Call): string[] {
@@ -34,4 +34,16 @@ export function methodOf(call: Call, database: string): string {
   if (first !== undefined) return withoutDatabase(first, database)
   const named = call.arguments.method_id
   return typeof named === 'string' ? named : ''
+}
+
+export function targetOf(demand: DemandItem[] | null | undefined, system: ProductSystem | undefined): string | null {
+  if (!demand || demand.length === 0) return null
+  return demand
+    .map((item) => {
+      const ref = item.ref
+      if (ref.kind !== 'foreground') return `${item.amount} of ${ref.id}`
+      const process = system?.processes.find((p) => p.code === ref.code)
+      return `${item.amount} ${process?.unit ?? ''} of ${process?.reference_product ?? ref.code}`
+    })
+    .join(', ')
 }

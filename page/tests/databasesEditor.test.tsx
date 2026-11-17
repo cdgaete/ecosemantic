@@ -67,6 +67,14 @@ it('lists the installed databases and the sources', async () => {
   for (const source of offered.value) expect(await screen.findByRole('button', { name: new RegExp(source.name) })).toBeInTheDocument()
 })
 
+it("links each installed database's name to its explorer", async () => {
+  renderAt('/databases', <Screens />)
+  for (const database of databases.value) {
+    const link = await screen.findByRole('link', { name: database.name })
+    expect(link).toHaveAttribute('href', `/databases/${database.name}/datasets`)
+  }
+})
+
 it("asks for an account only when the source's is not held", async () => {
   vi.mocked(api.sources).mockResolvedValue({
     ...offered,

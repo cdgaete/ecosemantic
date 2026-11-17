@@ -1,4 +1,4 @@
-import { splitBackgroundExchanges } from '@/editors/background/exchanges'
+import { splitBackgroundExchanges } from '@/editors/explorer/exchanges'
 import { describeUncertainty } from '@/lib/uncertainty'
 import backgroundProcess from './fixtures/background_process.json'
 import type { BackgroundExchange, BackgroundProcess } from '@/api/types'

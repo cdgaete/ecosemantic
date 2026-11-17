@@ -3,8 +3,9 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from ecosemantic.compute.results import ContributionResult
+from ecosemantic.compute.results import ContributionResult, ImpactResult
 from ecosemantic.model.entities import Method
+from ecosemantic.model.refs import DemandItem, ForegroundRef
 from ecosemantic.ports.types import Score
 from tests.fixture_data import FIXTURE_DATABASE
 
@@ -41,3 +42,33 @@ def test_a_decomposition_carries_the_rows_its_axis_names_and_no_others() -> None
             processes=[],
             credit_loops=[],
         )
+
+
+def test_an_impact_s_summary_carries_the_demand_it_scored() -> None:
+    demand = [DemandItem(ref=ForegroundRef(code="widget"), amount=10.0)]
+    result = ImpactResult(
+        database=FIXTURE_DATABASE,
+        product_system="widget",
+        methods=[GWP],
+        scores=[TOTAL],
+        credit_loops=[],
+        demand=demand,
+    )
+    assert result.demand == demand
+    assert result.summarise().demand == demand
+
+
+def test_a_summary_without_a_demand_carries_none() -> None:
+    assert (
+        ContributionResult(
+            database=FIXTURE_DATABASE,
+            by="process",
+            method=GWP,
+            total=TOTAL,
+            processes=[],
+            credit_loops=[],
+        )
+        .summarise()
+        .demand
+        is None
+    )

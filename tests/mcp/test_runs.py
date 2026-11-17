@@ -20,7 +20,8 @@ from ecosemantic.compute.parameters import materialize
 from ecosemantic.local import build_context
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.server import build_server
-from ecosemantic.model.entities import DemandItem, Method, ProductSystem, method_id
+from ecosemantic.model.entities import Method, ProductSystem, method_id
+from ecosemantic.model.refs import DemandItem
 from ecosemantic.ports.run import RunLauncher, RunPort
 from ecosemantic.ports.types import (
     MonteCarloCategory,

@@ -11,7 +11,7 @@ const inputColumns: Column<Parameter>[] = [
   { key: 'name', header: 'Name', render: (p) => p.name },
   { key: 'value', header: 'Value', align: 'right', render: (p) => (p.value === null ? '' : formatAmount(p.value)) },
   { key: 'unit', header: 'Unit', render: (p) => p.unit },
-  { key: 'description', header: 'Description', render: (p) => p.description },
+  { key: 'description', header: 'Description', folds: true, render: (p) => p.description },
 ]
 
 function dependentColumns(values: Record<string, number>): Column<Parameter>[] {
@@ -20,7 +20,7 @@ function dependentColumns(values: Record<string, number>): Column<Parameter>[] {
     { key: 'formula', header: 'Formula', render: (p) => <code>{p.formula}</code> },
     { key: 'value', header: 'Value', align: 'right', render: (p) => (values[p.name] === undefined ? '' : formatAmount(values[p.name])) },
     { key: 'unit', header: 'Unit', render: (p) => p.unit },
-    { key: 'description', header: 'Description', render: (p) => p.description },
+    { key: 'description', header: 'Description', folds: true, render: (p) => p.description },
   ]
 }
 

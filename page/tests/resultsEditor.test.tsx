@@ -1,9 +1,9 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import { renderAt } from './render'
 import { App, Screens } from '@/App'
-import { api } from '@/api/client'
-import type { Answer, Call, ImpactResult, SystemRead, Value } from '@/api/types'
-import { methodById } from '@/lib/format'
+import { api, ApiError } from '@/api/client'
+import type { Answer, Call, DemandItem, ImpactResult, SystemRead, Value } from '@/api/types'
+import { formatAmount, methodById } from '@/lib/format'
 import system from './fixtures/system.json'
 import systems from './fixtures/systems.json'
 import databases from './fixtures/databases.json'
@@ -45,11 +45,35 @@ it('shows the impact analysis with a row per category', async () => {
   expect(screen.getByText('Sub-group by:')).toBeInTheDocument()
 })
 
+it('holds a right-aligned score on one line in the impact table', async () => {
+  renderAt(`/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`, <App router={false} />)
+  const header = await screen.findByRole('columnheader', { name: 'Impact assessment result' })
+  const cell = await waitFor(() => within(header.closest('table')!).getByText(formatAmount(impact.value.scores[0].value)).closest('td'))
+  expect(cell).toHaveClass('whitespace-nowrap', 'tabular-nums', 'text-right')
+})
+
 it('lists the top 5 contributions in a table beside the chart', async () => {
   renderAt(`/systems/${system.value.id}/results/general?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`, <App router={false} />)
   const heading = await screen.findByText('Top 5 direct contributions to impact category results - overview')
   const table = await waitFor(() => within(heading.closest('section')!).getByRole('table'))
   for (const p of byProcess.value.processes) expect(within(table).getByText(new RegExp(p.name))).toBeInTheDocument()
+})
+
+it('names the target from the demand the answer scored', async () => {
+  const demand: DemandItem[] = [{ ref: { kind: 'foreground', code: 'frame' }, amount: 10 }]
+  vi.mocked(api.impact).mockResolvedValue({ ...impact, value: { ...impact.value, demand } })
+  renderAt(`/systems/${system.value.id}/results/general?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`, <Screens />)
+  expect(await screen.findByText('10 kilogram of frame')).toBeInTheDocument()
+  vi.mocked(api.impact).mockResolvedValue(impact)
+})
+
+it('says what was scored and which variants it was compared with', async () => {
+  renderAt(`/systems/${system.value.id}/results/general?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}&variants=small&variants=heavy`, <App router={false} />)
+  const scored = (await screen.findByText('Scored on')).closest('div')!
+  expect(within(scored).getByText('base values')).toBeInTheDocument()
+  const compared = screen.getByText('Compared with').closest('div')!
+  expect(Array.from(compared.querySelectorAll('dd > span > span')).map((element) => element.textContent)).toEqual(['small', 'heavy'])
+  expect(screen.queryByText('Parameter set')).not.toBeInTheDocument()
 })
 
 it('demands the reference process the system names', async () => {
@@ -65,13 +89,15 @@ it('demands the reference process the system names', async () => {
 it('opens a recorded calculation with the arguments it was made with, and says it also ran a Monte Carlo', async () => {
   vi.mocked(api.impact).mockClear()
   vi.mocked(api.system).mockResolvedValue(system as SystemRead)
-  const demand = [{ ref: { kind: 'foreground', code: 'frame' }, amount: 2 }]
+  const demand = [{ ref: { kind: 'foreground' as const, code: 'frame' }, amount: 2 }]
   vi.mocked(api.calculations).mockResolvedValue(callOn({ arguments: { product_system_id: system.value.id, method_id: 'm_x', variants: ['heavy'], demand, monte_carlo: { n: 10 } } }))
+  vi.mocked(api.impact).mockResolvedValue({ ...impact, value: { ...impact.value, demand } })
   renderAt(`/systems/${system.value.id}/results/general?call=${recorded.id}`, <Screens />)
   await waitFor(() => expect(api.impact).toHaveBeenCalled())
   expect(vi.mocked(api.impact).mock.calls[0][1]).toEqual({ method_id: 'm_x', variants: ['heavy'], demand })
   expect(await screen.findByText(/also ran a Monte Carlo simulation/)).toBeInTheDocument()
   expect(screen.getByText(/2 kilogram of/)).toBeInTheDocument()
+  vi.mocked(api.impact).mockResolvedValue(impact)
 })
 
 it('names both hashes when the calculation was recorded on an earlier version', async () => {
@@ -91,14 +117,16 @@ it('opens a recorded calculation whose demand holds several items, and names eac
   vi.mocked(api.impact).mockClear()
   vi.mocked(api.system).mockResolvedValue(system as SystemRead)
   const demand = [
-    { ref: { kind: 'foreground', code: 'frame' }, amount: 2 },
-    { ref: { kind: 'foreground', code: 'widget' }, amount: 3 },
+    { ref: { kind: 'foreground' as const, code: 'frame' }, amount: 2 },
+    { ref: { kind: 'foreground' as const, code: 'widget' }, amount: 3 },
   ]
   vi.mocked(api.calculations).mockResolvedValue(callOn({ arguments: { product_system_id: system.value.id, method_id: 'm_x', demand } }))
+  vi.mocked(api.impact).mockResolvedValue({ ...impact, value: { ...impact.value, demand } })
   renderAt(`/systems/${system.value.id}/results/general?call=${recorded.id}`, <Screens />)
   await waitFor(() => expect(api.impact).toHaveBeenCalled())
   expect(vi.mocked(api.impact).mock.calls[0][1]).toEqual({ method_id: 'm_x', variants: [], demand })
   expect(await screen.findByText('2 kilogram of frame, 3 unit of widget')).toBeInTheDocument()
+  vi.mocked(api.impact).mockResolvedValue(impact)
 })
 
 it('names the method of a category that has no indicator without a separator', async () => {
@@ -109,4 +137,16 @@ it('names the method of a category that has no indicator without a separator', a
   const row = (await screen.findByText(bare.impact_category)).closest('tr')!
   expect(within(row).getByText(bare.impact_method, { selector: 'td' }).textContent).toBe(bare.impact_method)
   vi.mocked(api.impact).mockResolvedValue(impact)
+})
+
+it('prints an impact error once on Impact analysis and once on General information', async () => {
+  const message = "no scenario or case 'a, b' in 'widget'; it has ['heavy']"
+  vi.mocked(api.impact).mockRejectedValue(new ApiError(400, { error: 'invalid', message, details: {} }))
+  renderAt(`/systems/${system.value.id}/results/impact?impact_method=gwp`, <Screens />)
+  await waitFor(() => expect(screen.getAllByText(message)).toHaveLength(1))
+  expect(screen.queryByText(/Calculating over the background database/)).not.toBeInTheDocument()
+  cleanup()
+  renderAt(`/systems/${system.value.id}/results/general?impact_method=gwp`, <Screens />)
+  await waitFor(() => expect(screen.getAllByText(message)).toHaveLength(1))
+  expect(screen.queryByText(/Calculating over the background database/)).not.toBeInTheDocument()
 })

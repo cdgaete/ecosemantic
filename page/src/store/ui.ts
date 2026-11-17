@@ -2,8 +2,8 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { withoutToken } from '@/api/client'
 
-export type Theme = 'cobalt' | 'ecosemantic' | 'openlca'
-export type EditorKind = 'system' | 'process' | 'background' | 'search' | 'results' | 'simulation'
+export type Theme = 'light' | 'dark'
+export type EditorKind = 'system' | 'process' | 'results' | 'simulation' | 'explorer'
 export interface EditorTab {
   id: string
   kind: EditorKind
@@ -17,47 +17,40 @@ export interface ChosenEntry {
   hash: string
 }
 
-export type PanelMode = 'beside' | 'expanded' | 'collapsed'
-
-export const TRAIL_LENGTH = 4
-export const PANEL_WIDTH = 420
-export const NAV_WIDTH = 260
+export type InspectorMode = 'open' | 'widened' | 'closed'
 
 interface UiState {
   theme: Theme
   person: string | null
-  panelWidth: number
-  panelMode: PanelMode
-  graphCovered: boolean
+  inspector: InspectorMode
+  sheetOpen: boolean
+  toolsOpen: boolean
   navOpen: boolean
-  navDocked: boolean
   paletteOpen: boolean
-  navWidth: number
   pinned: EditorTab[]
   details: EditorTab | null
   lastDetails: EditorTab | null
-  trail: EditorTab[]
   canvasSystemId: string | null
+  canvasVariant: string | null
   chosenEntry: ChosenEntry | null
   chosenProcess: string | null
   startedImpact: string | null
   seen: Record<string, number>
   since: Record<string, number>
   collapsed: Record<string, boolean>
+  explorerSchemes: Record<string, string>
   formulaValues: boolean
   scaledView: boolean
   minimapOpen: boolean | null
   setTheme: (theme: Theme) => void
   setPerson: (person: string) => void
-  setPanelWidth: (width: number) => void
-  resetPanelWidth: () => void
-  setPanelMode: (mode: PanelMode) => void
-  setGraphCovered: (covered: boolean) => void
+  setInspector: (mode: InspectorMode) => void
+  setSheetOpen: (open: boolean) => void
+  setToolsOpen: (open: boolean) => void
   setNavOpen: (open: boolean) => void
-  setNavDocked: (docked: boolean) => void
   setPaletteOpen: (open: boolean) => void
-  setNavWidth: (width: number) => void
   setCanvasSystem: (id: string | null) => void
+  setCanvasVariant: (variant: string | null) => void
   chooseEntry: (entry: ChosenEntry | null) => void
   chooseProcess: (id: string | null) => void
   startImpact: (systemId: string) => void
@@ -73,6 +66,43 @@ interface UiState {
   setFormulaValues: (shown: boolean) => void
   setScaledView: (scaled: boolean) => void
   setMinimapOpen: (open: boolean) => void
+  setExplorerScheme: (database: string, scheme: string) => void
+}
+
+const THEME_OF_VERSION_1 = { cobalt: 'light', ecosemantic: 'dark', openlca: 'light' } as const satisfies Record<string, Theme>
+type Version1State = Omit<Partial<UiState>, 'theme'> & { theme?: keyof typeof THEME_OF_VERSION_1 }
+
+const INSPECTOR_OF_PANEL = { beside: 'open', expanded: 'widened', collapsed: 'closed' } as const satisfies Record<string, InspectorMode>
+type Version4State = { panelMode?: keyof typeof INSPECTOR_OF_PANEL }
+
+const RETIRED_TAB_KINDS = ['background', 'search']
+const RETIRED_FIELDS = ['panelMode', 'panelWidth', 'navDocked', 'navWidth', 'graphCovered'] as const
+
+function withoutRetiredFields(state: Partial<UiState>): Partial<UiState> {
+  const kept: Record<string, unknown> = { ...state }
+  for (const field of RETIRED_FIELDS) delete kept[field]
+  return kept as Partial<UiState>
+}
+
+function explorerPinned(pinned: EditorTab[]): EditorTab[] {
+  return pinned.map((tab) => (RETIRED_TAB_KINDS.includes(tab.kind) ? { ...tab, kind: 'explorer' } : tab))
+}
+
+function version1Theme(state: Partial<UiState>): Partial<UiState> {
+  const saved = state as Version1State
+  return saved.theme === undefined ? state : { ...state, theme: THEME_OF_VERSION_1[saved.theme] }
+}
+
+function migrate(persisted: unknown, version: number): UiState {
+  let state = persisted as Partial<UiState> & Version4State
+  if (version < 1) state = { ...state, theme: 'light' }
+  else if (version < 2) state = version1Theme(state)
+  if (version < 4 && Array.isArray(state.pinned)) state = { ...state, pinned: explorerPinned(state.pinned) }
+  if (version < 5) {
+    const { panelMode } = state
+    state = { ...withoutRetiredFields(state), inspector: panelMode === undefined ? 'open' : INSPECTOR_OF_PANEL[panelMode] }
+  }
+  return state as UiState
 }
 
 function stamp(theme: Theme): void {
@@ -82,26 +112,25 @@ function stamp(theme: Theme): void {
 export const useUi = create<UiState>()(
   persist(
     (set, get) => ({
-      theme: 'cobalt',
+      theme: 'light',
       person: null,
-      panelWidth: PANEL_WIDTH,
-      panelMode: 'beside',
-      graphCovered: false,
+      inspector: 'open',
+      sheetOpen: false,
+      toolsOpen: false,
       navOpen: false,
-      navDocked: false,
       paletteOpen: false,
-      navWidth: NAV_WIDTH,
       pinned: [],
       details: null,
       lastDetails: null,
-      trail: [],
       canvasSystemId: null,
+      canvasVariant: null,
       chosenEntry: null,
       chosenProcess: null,
       startedImpact: null,
       seen: {},
       since: {},
       collapsed: {},
+      explorerSchemes: {},
       formulaValues: false,
       scaledView: true,
       minimapOpen: null,
@@ -110,15 +139,13 @@ export const useUi = create<UiState>()(
         set({ theme })
       },
       setPerson: (person) => set({ person }),
-      setPanelWidth: (panelWidth) => set({ panelWidth }),
-      resetPanelWidth: () => set({ panelWidth: PANEL_WIDTH }),
-      setPanelMode: (panelMode) => set({ panelMode }),
-      setGraphCovered: (graphCovered) => set({ graphCovered }),
+      setInspector: (inspector) => set({ inspector }),
+      setSheetOpen: (open) => set(open ? { sheetOpen: true, toolsOpen: false } : { sheetOpen: false }),
+      setToolsOpen: (open) => set(open ? { toolsOpen: true, sheetOpen: false } : { toolsOpen: false }),
       setNavOpen: (navOpen) => set({ navOpen }),
-      setNavDocked: (navDocked) => set({ navDocked }),
       setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
-      setNavWidth: (navWidth) => set({ navWidth }),
-      setCanvasSystem: (canvasSystemId) => set((state) => (state.canvasSystemId === canvasSystemId ? {} : { canvasSystemId, chosenEntry: null, chosenProcess: null })),
+      setCanvasSystem: (canvasSystemId) => set((state) => (state.canvasSystemId === canvasSystemId ? {} : { canvasSystemId, canvasVariant: null, chosenEntry: null, chosenProcess: null })),
+      setCanvasVariant: (canvasVariant) => set({ canvasVariant }),
       chooseEntry: (chosenEntry) => set({ chosenEntry }),
       chooseProcess: (chosenProcess) => set({ chosenProcess }),
       startImpact: (startedImpact) => set({ startedImpact }),
@@ -136,12 +163,9 @@ export const useUi = create<UiState>()(
       showDetails: (shown) =>
         set((state) => {
           const tab = { ...shown, path: withoutToken(shown.path) }
-          const at = state.trail.findIndex((t) => t.id === tab.id)
-          const trail = at >= 0 ? [...state.trail.slice(0, at), tab] : [...state.trail, tab].slice(-TRAIL_LENGTH)
-          const panelMode = state.panelMode === 'collapsed' ? 'beside' : state.panelMode
-          return { details: tab, lastDetails: tab, trail, graphCovered: true, panelMode, pinned: state.pinned.map((p) => (p.id === tab.id ? tab : p)) }
+          return { details: tab, lastDetails: tab, pinned: state.pinned.map((p) => (p.id === tab.id ? tab : p)) }
         }),
-      showActivity: () => set({ details: null, trail: [] }),
+      showActivity: () => set({ details: null }),
       pin: () =>
         set((state) => {
           const held = state.details
@@ -154,26 +178,25 @@ export const useUi = create<UiState>()(
       setFormulaValues: (shown) => set({ formulaValues: shown }),
       setScaledView: (scaledView) => set({ scaledView }),
       setMinimapOpen: (open) => set({ minimapOpen: open }),
+      setExplorerScheme: (database, scheme) => set((state) => ({ explorerSchemes: { ...state.explorerSchemes, [database]: scheme } })),
     }),
     {
       name: 'ecosemantic-page',
-      version: 1,
-      migrate: (persisted, version) => (version < 1 ? { ...(persisted as Partial<UiState>), theme: 'cobalt' } : persisted) as UiState,
+      version: 5,
+      migrate,
       merge: (persisted, current) => ({ ...current, ...(persisted as Partial<UiState>), scaledView: current.scaledView }),
       partialize: (state) => ({
         theme: state.theme,
         person: state.person,
-        panelWidth: state.panelWidth,
-        panelMode: state.panelMode,
-        navDocked: state.navDocked,
-        navWidth: state.navWidth,
+        inspector: state.inspector,
         pinned: state.pinned,
         seen: state.seen,
         collapsed: state.collapsed,
+        explorerSchemes: state.explorerSchemes,
         formulaValues: state.formulaValues,
         minimapOpen: state.minimapOpen,
       }),
-      onRehydrateStorage: () => (state) => stamp(state?.theme ?? 'cobalt'),
+      onRehydrateStorage: () => (state) => stamp(state?.theme ?? 'light'),
     },
   ),
 )

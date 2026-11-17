@@ -7,7 +7,16 @@ from typing import Protocol, runtime_checkable
 
 from ecosemantic.model.entities import Method
 from ecosemantic.model.refs import BackgroundRef, Database, ElementaryFlowRef
-from ecosemantic.ports.types import BackgroundProcess, Compartment, ElementaryFlow
+from ecosemantic.ports.types import (
+    BackgroundProcess,
+    ClassificationScheme,
+    ClassificationValue,
+    Compartment,
+    DatabaseSummary,
+    ElementaryFlow,
+    Factor,
+    Page,
+)
 
 
 @runtime_checkable
@@ -39,3 +48,20 @@ class InventoryPort(Protocol):
     async def list_locations(self, database: str) -> list[str]: ...
 
     async def list_compartments(self, database: str) -> list[Compartment]: ...
+
+    async def summarize(self, database: str) -> DatabaseSummary: ...
+
+    async def list_classifications(self, database: str) -> list[ClassificationScheme]: ...
+
+    async def classification_values(
+        self, database: str, scheme: str
+    ) -> list[ClassificationValue]: ...
+
+    async def factors(
+        self,
+        database: str,
+        method_id: str,
+        query: str | None = None,
+        limit: int = 20,
+        cursor: str | None = None,
+    ) -> Page[Factor]: ...

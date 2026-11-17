@@ -14,7 +14,7 @@
           "before": null,
           "entity": "product_system",
           "field": null,
-          "id": "64aa77ed-8244-410a-b8c0-6fdf25602a6d",
+          "id": "c5bd37b7-f847-4161-87e7-6505a2e76d11",
           "op": "add"
         }
       ],
@@ -22,7 +22,7 @@
       "result_hash": "960f72b29944171f9bedaaac85bf8c3bf0fb8d17c3e3f5722181136ce66486ae",
       "seq": 1,
       "source": "mcp",
-      "timestamp": "2026-11-13T18:37:27.530018Z"
+      "timestamp": "2026-11-17T01:07:39.220100Z"
     },
     {
       "actor": {
@@ -41,7 +41,7 @@
                 "amount": 1.0,
                 "comment": null,
                 "formula": null,
-                "id": "0c8f5724-d39a-4938-9154-3d28e778e5d0",
+                "id": "30b0fe3c-3355-4c98-98f1-cfd9581e2726",
                 "input": null,
                 "name": "bottle",
                 "type": "production",
@@ -49,7 +49,7 @@
                 "unit": "kilogram"
               }
             ],
-            "id": "792097a7-6092-43a5-81b2-925b535c031a",
+            "id": "aad541d0-4cc5-4fab-b265-66caaeb8901d",
             "location": "GLO",
             "metadata": {
               "hierarchy_level": null,
@@ -63,7 +63,7 @@
           "before": null,
           "entity": "process",
           "field": null,
-          "id": "792097a7-6092-43a5-81b2-925b535c031a",
+          "id": "aad541d0-4cc5-4fab-b265-66caaeb8901d",
           "op": "add"
         },
         {
@@ -71,7 +71,7 @@
             "amount": 1.0,
             "comment": null,
             "formula": null,
-            "id": "0c8f5724-d39a-4938-9154-3d28e778e5d0",
+            "id": "30b0fe3c-3355-4c98-98f1-cfd9581e2726",
             "input": null,
             "name": "bottle",
             "type": "production",
@@ -81,7 +81,7 @@
           "before": null,
           "entity": "exchange",
           "field": null,
-          "id": "0c8f5724-d39a-4938-9154-3d28e778e5d0",
+          "id": "30b0fe3c-3355-4c98-98f1-cfd9581e2726",
           "op": "add"
         }
       ],
@@ -89,7 +89,7 @@
       "result_hash": "9b0f8273834d3fe00f1648ec217280e09d81ff3dc7b56d0d5a67da22b4bc97d5",
       "seq": 2,
       "source": "mcp",
-      "timestamp": "2026-11-13T18:37:27.634688Z"
+      "timestamp": "2026-11-17T01:07:39.320702Z"
     },
     {
       "actor": {
@@ -104,7 +104,7 @@
           "before": null,
           "entity": "product_system",
           "field": "reference_process",
-          "id": "64aa77ed-8244-410a-b8c0-6fdf25602a6d",
+          "id": "c5bd37b7-f847-4161-87e7-6505a2e76d11",
           "op": "update"
         }
       ],
@@ -112,7 +112,7 @@
       "result_hash": "69d0140a2d04a9b2996fb0440c1e22454674d34c01cb83f5ec4b9a9fa9307d49",
       "seq": 3,
       "source": "mcp",
-      "timestamp": "2026-11-13T18:37:27.680336Z"
+      "timestamp": "2026-11-17T01:07:39.366978Z"
     },
     {
       "actor": {
@@ -127,7 +127,7 @@
             "amount": 0.5,
             "comment": null,
             "formula": null,
-            "id": "00cb2312-c3ba-4ca8-a4a4-a259d9f56df5",
+            "id": "77a7d6cc-d1a4-4d07-bc59-dc159741f812",
             "input": {
               "database": "fixture",
               "id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c",
@@ -141,7 +141,7 @@
           "before": null,
           "entity": "exchange",
           "field": null,
-          "id": "00cb2312-c3ba-4ca8-a4a4-a259d9f56df5",
+          "id": "77a7d6cc-d1a4-4d07-bc59-dc159741f812",
           "op": "add"
         }
       ],
@@ -149,7 +149,7 @@
       "result_hash": "07a6bf4ddc0b9dd36be657b755ddd13e908b50af2fb6538e4ed633217c07be59",
       "seq": 4,
       "source": "mcp",
-      "timestamp": "2026-11-13T18:37:27.742530Z"
+      "timestamp": "2026-11-17T01:07:39.430537Z"
     },
     {
       "actor": {
@@ -164,15 +164,15 @@
           "before": 0.5,
           "entity": "exchange",
           "field": "amount",
-          "id": "00cb2312-c3ba-4ca8-a4a4-a259d9f56df5",
+          "id": "77a7d6cc-d1a4-4d07-bc59-dc159741f812",
           "op": "update"
         }
       ],
-      "message": "updated exchange steel (bottle) 00cb2312-c3ba-4ca8-a4a4-a259d9f56df5",
+      "message": "updated exchange steel (bottle) 77a7d6cc-d1a4-4d07-bc59-dc159741f812",
       "result_hash": "f91e47f3ae08c28e8c522a058e430636b15174362a6981b055c38026a107c05d",
       "seq": 5,
       "source": "mcp",
-      "timestamp": "2026-11-13T18:37:27.851830Z"
+      "timestamp": "2026-11-17T01:07:39.550094Z"
     }
   ],
   "view_url": null

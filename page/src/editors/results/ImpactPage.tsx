@@ -4,6 +4,7 @@ import type { Score } from '@/api/types'
 import { cutNotice, formatAmount, formatShare, methodById } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { RequestAction } from '@/requests/RequestAction'
+import { NUMERIC } from '@/window/DataTable'
 import { EditorHeader } from '@/window/EditorHeader'
 import { Hint } from '@/window/Hint'
 import { Icon } from '@/window/Icon'
@@ -47,7 +48,7 @@ function Children({ result, score, by, cutoff }: { result: Result; score: Score;
             </span>
           </td>
           <td className="hidden border-r border-b px-2 text-muted-foreground @lg:table-cell">{formatShare(r.share)}</td>
-          <td className="border-r border-b px-2 text-right tabular-nums">{formatAmount(r.score)}</td>
+          <td className={cn('border-r border-b px-2 text-right', NUMERIC)}>{formatAmount(r.score)}</td>
           <td className="border-r border-b px-2">{score.unit}</td>
           {result.params?.variants.map((v) => (
             <td key={v} className="hidden border-r border-b @lg:table-cell" />
@@ -79,13 +80,19 @@ export function ImpactPage({ result }: { result: Result }) {
           <label className="flex items-center gap-1">
             <input type="radio" name="by" checked={by === 'flow'} onChange={() => setBy('flow')} /> Flows
           </label>
-          <span className="text-muted-foreground">|</span>
           <label className="flex items-center gap-1">
             Don't show &lt; <input id="impact-cutoff" type="number" min="0" max="100" step="0.5" className="w-14 rounded-sm border bg-background px-1 text-right" value={cutoff} onChange={(e) => setCutoff(Number(e.target.value))} /> %
           </label>
-          {params?.variants.length ? <span className="text-muted-foreground">| Variants: {params.variants.join(', ')}</span> : null}
+          {params?.variants.length ? (
+            <span className="flex flex-wrap items-center gap-2 text-muted-foreground">
+              <span>Variants:</span>
+              {params.variants.map((variant) => (
+                <span key={variant}>{variant}</span>
+              ))}
+            </span>
+          ) : null}
         </div>
-        {!value ? <p className="text-muted-foreground">{impact.error?.message ?? result.waiting}</p> : null}
+        {!value && !impact.error ? <p className="text-muted-foreground">{result.waiting}</p> : null}
         {value ? (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse border text-[12.5px]">
@@ -124,10 +131,10 @@ export function ImpactPage({ result }: { result: Result }) {
                         <td className="hidden border-r border-b px-2 @lg:table-cell">
                           {[method.impact_method, method.indicator].filter(Boolean).join(' · ')}
                         </td>
-                        <td className="border-r border-b px-2 text-right tabular-nums">{formatAmount(score.value)}</td>
+                        <td className={cn('border-r border-b px-2 text-right', NUMERIC)}>{formatAmount(score.value)}</td>
                         <td className="border-r border-b px-2">{score.unit}</td>
                         {value.variants.map((variant) => (
-                          <td key={variant.name} className="hidden border-r border-b px-2 text-right tabular-nums @lg:table-cell">
+                          <td key={variant.name} className={cn('hidden border-r border-b px-2 text-right @lg:table-cell', NUMERIC)}>
                             {formatAmount(variant.scores[i].value)} ({signed(variant.deltas[i])})
                           </td>
                         ))}

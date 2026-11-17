@@ -1,23 +1,9 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where([data-theme="ecosemantic"], [data-theme="ecosemantic"] *));
-
-@font-face {
-  font-family: "Source Sans 3";
-  src: url("../assets/fonts/sourcesans3.woff2") format("woff2");
-  font-weight: 200 900;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "JetBrains Mono";
-  src: url("../assets/fonts/jetbrainsmono.woff2") format("woff2");
-  font-weight: 100 800;
-  font-display: swap;
-}
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 :root,
-[data-theme="cobalt"] {
+[data-theme="light"] {
   --radius: 0.5rem;
   --background: 255 255 255;
   --foreground: 26 38 55;
@@ -69,11 +55,9 @@
   --chart-6: 122 79 176;
   --chart-7: 166 124 0;
   color-scheme: light;
-  --font-sans: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 
-[data-theme="ecosemantic"] {
+[data-theme="dark"] {
   --radius: 0.625rem;
   --background: 15 23 42;
   --foreground: 248 250 252;
@@ -125,64 +109,6 @@
   --chart-6: 62 158 91;
   --chart-7: 7 99 108;
   color-scheme: dark;
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-}
-
-[data-theme="openlca"] {
-  --radius: 0.125rem;
-  --background: 255 255 255;
-  --foreground: 26 26 26;
-  --card: 255 255 255;
-  --card-foreground: 26 26 26;
-  --popover: 255 255 255;
-  --popover-foreground: 26 26 26;
-  --primary: 128 0 128;
-  --primary-foreground: 255 255 255;
-  --secondary: 247 247 247;
-  --secondary-foreground: 26 26 26;
-  --accent: 25 76 127;
-  --accent-foreground: 255 255 255;
-  --muted: 240 240 240;
-  --muted-foreground: 102 102 102;
-  --destructive: 196 30 58;
-  --destructive-foreground: 255 255 255;
-  --border: 201 201 201;
-  --input: 201 201 201;
-  --ring: 128 0 128;
-  --highlight: 252 186 3;
-  --warning: 163 95 0;
-  --warning-foreground: 110 68 4;
-  --warning-muted: 250 233 205;
-  --success: 47 127 79;
-  --success-foreground: 13 74 40;
-  --success-muted: 222 241 229;
-  --chrome: 240 240 240;
-  --selected: 217 233 251;
-  --node-border: 128 0 128;
-  --link-stroke: 0 0 0;
-  --xy-edge-stroke: rgb(var(--link-stroke));
-  --role-system: 25 76 127;
-  --role-process: 128 0 128;
-  --role-product: 25 76 127;
-  --role-elementary: 0 111 54;
-  --role-parameter: 163 95 0;
-  --role-result: 237 162 17;
-  --role-simulation: 237 162 17;
-  --role-database: 102 102 102;
-  --role-folder: 102 102 102;
-  --role-log: 102 102 102;
-  --role-request: 102 102 102;
-  --chart-1: 229 48 57;
-  --chart-2: 41 111 196;
-  --chart-3: 255 201 35;
-  --chart-4: 82 168 77;
-  --chart-5: 132 76 173;
-  --chart-6: 127 183 229;
-  --chart-7: 255 137 0;
-  color-scheme: light;
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
 @theme {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useInventory, useVocabulary } from '@/api/queries'
+import { useCompartments, useInventory } from '@/api/queries'
 import type { InventoryRow } from '@/api/types'
 import { formatAmount } from '@/lib/format'
 import { RequestAction } from '@/requests/RequestAction'
@@ -22,11 +22,11 @@ const columns: Column<InventoryRow>[] = [
       </span>
     ),
   },
-  { key: 'compartment', header: 'Compartment', render: (r) => r.compartment },
-  { key: 'sub', header: 'Sub-compartment', render: (r) => r.sub_compartment ?? '' },
+  { key: 'compartment', header: 'Compartment', folds: true, render: (r) => r.compartment },
+  { key: 'sub', header: 'Sub-compartment', folds: true, render: (r) => r.sub_compartment ?? '' },
   { key: 'amount', header: 'Amount', align: 'right', render: (r) => formatAmount(r.amount) },
   { key: 'unit', header: 'Unit', render: (r) => r.unit },
-  { key: 'source', header: 'Dominant process', render: (r) => r.source?.code ?? '' },
+  { key: 'source', header: 'Dominant process', folds: true, render: (r) => r.source?.code ?? '' },
 ]
 
 export function InventoryPage({ result }: { result: Result }) {
@@ -40,7 +40,7 @@ export function InventoryPage({ result }: { result: Result }) {
     setCursor(undefined)
     setEarlier([])
   }
-  const compartments = useVocabulary(system?.database.name ?? '', 'compartments')
+  const compartments = useCompartments(system?.database.name ?? '')
   const rows = useInventory(id, hash, { compartment: compartment || undefined, query: query || undefined, limit: 100, cursor, demand: demandOf(params!, root) }, !stale)
   const items = rows.data?.items ?? []
   const key = (s: string) => `results:${id}:inventory:${s}`
@@ -61,14 +61,12 @@ export function InventoryPage({ result }: { result: Result }) {
             }}
           >
             <option value="">any</option>
-            {(compartments.data?.value ?? [])
-              .filter((t) => !t.value.includes('/'))
-              .map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.value}
-                  {t.detail ? ` (${t.detail})` : ''}
-                </option>
-              ))}
+            {(compartments.data ?? []).map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.value}
+                {t.detail ? ` (${t.detail})` : ''}
+              </option>
+            ))}
           </select>
         </label>
         <form

@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { Screens } from '@/App'
 import { api, ApiError } from '@/api/client'
 import type { Answer, Run } from '@/api/types'
-import { shortHash } from '@/lib/format'
+import { formatAmount, methodById, shortHash } from '@/lib/format'
 import databases from './fixtures/databases.json'
 import run from './fixtures/run.json'
 import system from './fixtures/system.json'
@@ -72,7 +72,27 @@ it("names the median as what the stop rule judges and the table leads with", asy
   await waitFor(() => expect(field('Iterations')).toBe("1 to 200, until every median's relative standard error is under 0.05"))
   expect(field('Worst median relative SE')).toMatch(/, target 0.05$/)
   const headers = screen.getAllByRole('columnheader').map((h) => h.textContent)
-  expect(headers).toEqual(['Impact category', 'n', 'Median', 'Median 95 % low', 'Median 95 % high', 'Median relative SE', '2.5th pct', '97.5th pct', 'Mean', 'Unit'])
+  expect(headers).toEqual(['Impact category', 'n', 'Median', 'Median 95 % low', 'Median 95 % high', 'Median relative SE', '2.5 – 97.5 %', 'Mean', 'Unit'])
+})
+
+it('folds the figures a narrow panel cannot hold under the category, keeping the interval in the row', async () => {
+  open()
+  const table = await waitFor(() => screen.getByRole('table'))
+  for (const name of ['n', 'Median 95 % low', 'Median 95 % high', 'Median relative SE', 'Mean', 'Unit'])
+    expect(within(table).getByRole('columnheader', { name })).toHaveClass('hidden', '@3xl:table-cell')
+  for (const name of ['Impact category', 'Median', '2.5 – 97.5 %'])
+    expect(within(table).getByRole('columnheader', { name })).not.toHaveClass('hidden')
+  const first = done.value.result!.categories[0]
+  const summary = first.summary
+  const folded = [...within(table).getAllByRole('row')[1].querySelectorAll('td')[0].children].filter((el) => el.className.includes('@3xl:hidden'))
+  expect(folded.map((el) => el.textContent?.trim())).toEqual([
+    `n: ${summary.n}`,
+    `Median 95 % low: ${formatAmount(summary.median_ci95![0])}`,
+    `Median 95 % high: ${formatAmount(summary.median_ci95![1])}`,
+    `Median relative SE: ${formatAmount(summary.rel_se!)}`,
+    `Mean: ${formatAmount(summary.mean)}`,
+    `Unit: ${methodById(done.value.methods, first.method_id).unit}`,
+  ])
 })
 
 it("names the demanded process by its name, as the system holds it", async () => {

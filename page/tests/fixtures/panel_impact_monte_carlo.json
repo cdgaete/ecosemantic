@@ -10,6 +10,15 @@
       "system_model": "unit process",
       "version": "1"
     },
+    "demand": [
+      {
+        "amount": 1.0,
+        "ref": {
+          "code": "widget",
+          "kind": "foreground"
+        }
+      }
+    ],
     "linked_credit_loops": [],
     "links_behind": [],
     "methods": [

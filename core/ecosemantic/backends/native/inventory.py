@@ -11,8 +11,33 @@ from ecosemantic.model.refs import BackgroundRef, Database, ElementaryFlowRef
 from ecosemantic.ports.types import (
     BackgroundExchange,
     BackgroundProcess,
+    ClassificationScheme,
+    ClassificationValue,
     Compartment,
+    DatabaseSummary,
     ElementaryFlow,
+    Factor,
+    Page,
+    factor_page,
+)
+
+_UNITS = "SELECT DISTINCT unit FROM processes"
+_LOCATIONS = "SELECT DISTINCT location FROM processes WHERE location IS NOT NULL"
+_SCHEME = "split_part(value, ': ', 1)"
+_CLASSIFICATIONS = (
+    f"SELECT {_SCHEME} AS scheme, count(DISTINCT native_id) AS processes,"
+    " count(DISTINCT value) AS values"
+    " FROM processes CROSS JOIN unnest(processes.classifications) AS stored(value)"
+    " GROUP BY scheme ORDER BY scheme"
+)
+_CLASSIFICATION_VALUES = (
+    "SELECT value, count(DISTINCT native_id) FROM processes"
+    " CROSS JOIN unnest(processes.classifications) AS stored(value)"
+    f" WHERE {_SCHEME} = ? GROUP BY value ORDER BY value"
+)
+_FACTOR_FLOWS = (
+    "SELECT code, name, compartment, sub_compartment, unit FROM flows"
+    " WHERE code IN (SELECT unnest(?::VARCHAR[]))"
 )
 
 
@@ -178,12 +203,47 @@ class NativeInventory:
         return sorted(value for (value,) in rows)
 
     async def list_units(self, database: str) -> list[str]:
-        return await self._values(database, "SELECT DISTINCT unit FROM processes")
+        return await self._values(database, _UNITS)
 
     async def list_locations(self, database: str) -> list[str]:
-        return await self._values(
-            database, "SELECT DISTINCT location FROM processes WHERE location IS NOT NULL"
+        return await self._values(database, _LOCATIONS)
+
+    async def summarize(self, database: str) -> DatabaseSummary:
+        def read() -> tuple[int, int, int]:
+            catalog = self.store.catalog(database)
+            [(processes,)] = catalog.execute("SELECT count(*) FROM processes").fetchall()
+            [(flows,)] = catalog.execute("SELECT count(*) FROM flows").fetchall()
+            [(methods,)] = catalog.execute("SELECT count(*) FROM methods").fetchall()
+            return processes, flows, methods
+
+        processes, elementary_flows, indicators = await self.store.run(database, read)
+        return DatabaseSummary(
+            processes=processes,
+            elementary_flows=elementary_flows,
+            indicators=indicators,
+            units=len(await self.list_units(database)),
+            locations=len(await self.list_locations(database)),
         )
+
+    async def list_classifications(self, database: str) -> list[ClassificationScheme]:
+        rows = await self.store.run(
+            database, lambda: self.store.catalog(database).execute(_CLASSIFICATIONS).fetchall()
+        )
+        return [
+            ClassificationScheme(scheme=scheme, processes=processes, values=values)
+            for scheme, processes, values in rows
+        ]
+
+    async def classification_values(self, database: str, scheme: str) -> list[ClassificationValue]:
+        rows = await self.store.run(
+            database,
+            lambda: (
+                self.store.catalog(database).execute(_CLASSIFICATION_VALUES, [scheme]).fetchall()
+            ),
+        )
+        if not rows:
+            raise NotFound(f"no classification scheme {scheme!r} in {database!r}")
+        return [ClassificationValue(value=value, processes=processes) for value, processes in rows]
 
     async def list_compartments(self, database: str) -> list[Compartment]:
         rows = await self.store.run(
@@ -195,3 +255,41 @@ class NativeInventory:
             ),
         )
         return Compartment.tally((compartment, sub) for compartment, sub in rows)
+
+    async def factors(
+        self,
+        database: str,
+        method_id: str,
+        query: str | None = None,
+        limit: int = 20,
+        cursor: str | None = None,
+    ) -> Page[Factor]:
+        owner = self.store.technosphere_of(database)
+        elementary_flows = self.store.elementary_flows_of(owner)
+
+        def read() -> list[Factor]:
+            factors = self.store.background(owner).factors_of(method_id)
+            rows = (
+                self.store.catalog(owner)
+                .execute(_FACTOR_FLOWS, [[code for code, _ in factors]])
+                .fetchall()
+            )
+            described = {
+                code: (name, compartment, sub, unit) for code, name, compartment, sub, unit in rows
+            }
+            missing = [code for code, _ in factors if code not in described]
+            if missing:
+                raise NotFound(f"no flow {missing[0]!r} in {elementary_flows!r}")
+            return [
+                Factor(
+                    flow=ElementaryFlowRef(database=elementary_flows, id=code),
+                    name=described[code][0],
+                    compartment=described[code][1],
+                    sub_compartment=described[code][2],
+                    unit=described[code][3],
+                    factor=factor,
+                )
+                for code, factor in factors
+            ]
+
+        return factor_page(await self.store.run(owner, read), query, limit, cursor)

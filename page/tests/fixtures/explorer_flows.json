@@ -1,0 +1,23 @@
+{
+  "hint": null,
+  "value": {
+    "has_more": false,
+    "items": [
+      {
+        "cas_number": null,
+        "compartment": "air",
+        "flow_type": "emission",
+        "name": "Particulate matter",
+        "ref": {
+          "database": "fixture-biosphere",
+          "id": "77146159-0a0f-5209-add1-487d1736001e",
+          "kind": "elementary_flow"
+        },
+        "sub_compartment": "urban air close to ground",
+        "unit": "kilogram"
+      }
+    ],
+    "next_cursor": null
+  },
+  "view_url": null
+}

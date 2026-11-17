@@ -4,7 +4,7 @@ import { useCategory } from '@/lib/address'
 import type { Hotspot } from '@/api/types'
 import { categoryLabel, cutNotice, formatAmount, formatShare, methodById } from '@/lib/format'
 import { RequestAction } from '@/requests/RequestAction'
-import { DataTable, type Column } from '@/window/DataTable'
+import { DataTable, type Column, type SummaryRow } from '@/window/DataTable'
 import { EditorHeader } from '@/window/EditorHeader'
 import { Hint } from '@/window/Hint'
 import { Section } from '@/window/Section'
@@ -18,14 +18,26 @@ export function ProcessResultsPage({ result }: { result: Result }) {
   const { chosen, choose } = useCategory(scores)
   const [cutoff, setCutoff] = useState(1)
   const parts = useContributions(id, result.hash, { by: 'process', method_id: chosen?.method_id, top_n: 50, cutoff: cutoff / 100, demand: demandOf(params!, result.root) }, chosen !== undefined && !result.stale)
+  const answer = parts.data?.value
+  const total = answer?.total
+  const cut = answer?.cut ?? null
+  const unit = total?.unit ?? chosen?.unit ?? ''
   const columns: Column<Hotspot>[] = [
     { key: 'share', header: 'Contribution', align: 'right', render: (h) => formatShare(h.fraction) },
     { key: 'process', header: 'Process', render: (h) => h.name },
-    { key: 'location', header: 'Location', render: (h) => h.location ?? '' },
-    { key: 'product', header: 'Reference product', render: (h) => h.reference_product },
-    { key: 'score', header: `Result${chosen ? ` [${chosen.unit}]` : ''}`, align: 'right', render: (h) => formatAmount(h.score) },
+    { key: 'location', header: 'Location', folds: true, render: (h) => h.location ?? '' },
+    { key: 'product', header: 'Reference product', folds: true, render: (h) => h.reference_product },
+    { key: 'score', header: `Result${unit ? ` [${unit}]` : ''}`, align: 'right', render: (h) => formatAmount(h.score) },
   ]
-  const cut = cutNotice(parts.data?.value.cut ?? null)
+  const summary: SummaryRow[] = []
+  if (total !== undefined) {
+    if (cut !== null) {
+      const rest = cut.below_score + cut.unlisted_score
+      summary.push({ key: 'rest', cells: { share: formatShare(total.value === 0 ? 0 : rest / total.value), process: 'Rest', score: formatAmount(rest) } })
+    }
+    summary.push({ key: 'total', className: 'font-medium', cells: { share: formatShare(1), process: 'Total', score: formatAmount(total.value) } })
+  }
+  const cutNoticeText = cutNotice(cut)
   return (
     <>
       <EditorHeader icon="result" page="Process results" entity={system?.name ?? ''} />
@@ -45,8 +57,8 @@ export function ProcessResultsPage({ result }: { result: Result }) {
             Don't show &lt; <input id="processes-cutoff" type="number" min="0" max="100" step="0.5" className="w-14 rounded-sm border bg-background px-1 text-right" value={cutoff} onChange={(e) => setCutoff(Number(e.target.value))} /> %
           </label>
         </div>
-        <DataTable columns={columns} rows={parts.data?.value.processes ?? []} rowKey={(h) => `${h.rank}`} empty={parts.data ? 'No process above the cut-off.' : (parts.error?.message ?? result.waiting)} />
-        {cut ? <p className="pt-1 text-xs text-muted-foreground">{cut}</p> : null}
+        <DataTable columns={columns} rows={parts.data?.value.processes ?? []} rowKey={(h) => `${h.rank}`} summary={summary} empty={parts.data ? 'No process above the cut-off.' : (parts.error?.message ?? result.waiting)} />
+        {cutNoticeText ? <p className="pt-1 text-xs text-muted-foreground">{cutNoticeText}</p> : null}
         <Hint of={parts.data} />
       </Section>
     </>

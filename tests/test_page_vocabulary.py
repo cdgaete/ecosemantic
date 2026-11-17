@@ -17,13 +17,12 @@ from ecosemantic.mcp.installs import databases_link
 from ecosemantic.mcp.runs import simulation_link
 from ecosemantic.model.entities import (
     ActorKind,
-    DemandItem,
     ExchangeType,
     ProductSystem,
     Scope,
     UncertaintyType,
 )
-from ecosemantic.model.refs import ForegroundRef, Scheme
+from ecosemantic.model.refs import DemandItem, ForegroundRef, Scheme
 from ecosemantic.model.summary import SummaryKind
 from ecosemantic.ports.types import (
     CallOutcome,
@@ -55,6 +54,7 @@ STREAM = REPOSITORY / "page" / "src" / "api" / "streamKinds.ts"
 RESULTS_EDITOR = REPOSITORY / "page" / "src" / "editors" / "results" / "ResultsEditor.tsx"
 RESULT_PARAMS = REPOSITORY / "page" / "src" / "editors" / "results" / "params.ts"
 CALCULATION = REPOSITORY / "mcp" / "ecosemantic" / "mcp" / "calculation.py"
+KINDS = REPOSITORY / "page" / "src" / "requests" / "kinds.ts"
 
 VIEW = "http://127.0.0.1:8765"
 RESULT_QUERY = {"method_id", "impact_method", "variants", "amount"}
@@ -101,9 +101,12 @@ STREAM_ARRAY = re.compile(r"STREAM_KINDS\s*=\s*\[([^\]]*)\]")
 BUILDER = re.compile(r"(\w+):\s*\([^)]*\)\s*=>\s*[`']([^`']*)[`'],?[ \t]*$", re.MULTILINE)
 PLACEHOLDERS = re.compile(r"(?:\$\{[^}]*\})+")
 ROUTE = re.compile(r'path="([^"]+)"')
-READ_KEY = re.compile(r"\.get\('([^']*)'\)")
+READ_KEY = re.compile(r"\.(?:get|getAll)\('([^']*)'\)")
 RESULT_PAGE = re.compile(r'result_link\(\s*context,\s*[^,]+,\s*"([^"]+)"')
 SINGLE_QUOTED = re.compile(r"'([^']*)'")
+KIND = re.compile(r"^  (\w+): \{$", re.MULTILINE)
+KIND_LABEL = re.compile(r"^    label: '([^']*)',$", re.MULTILINE)
+KIND_LINE = re.compile(r"^    line: '([^']*)',$", re.MULTILINE)
 
 
 def page_vocabularies(source: str | None = None) -> dict[str, set[str]]:
@@ -179,6 +182,31 @@ def result_page_names(source: str | None = None) -> list[str]:
     if source is None:
         source = CALCULATION.read_text(encoding="utf-8")
     return RESULT_PAGE.findall(source)
+
+
+def kind_words(source: str | None = None) -> dict[str, tuple[str, str]]:
+    """Each request kind the page words, with the label and the line it is shown by."""
+    if source is None:
+        source = KINDS.read_text(encoding="utf-8")
+    blocks = KIND.split(source)
+    words: dict[str, tuple[str, str]] = {}
+    for name, body in zip(blocks[1::2], blocks[2::2], strict=True):
+        label, line = KIND_LABEL.search(body), KIND_LINE.search(body)
+        assert label is not None and line is not None, name
+        words[name] = (label.group(1), line.group(1))
+    return words
+
+
+def test_the_page_words_every_request_kind() -> None:
+    assert set(kind_words()) == set(get_args(RequestKind))
+
+
+def test_a_kind_is_read_with_its_label_and_its_line() -> None:
+    source = (
+        "  return: {\n    label: 'Return with an objection',\n"
+        "    named: false,\n    line: 'It stays open.',\n  },\n"
+    )
+    assert kind_words(source) == {"return": ("Return with an objection", "It stays open.")}
 
 
 def test_the_page_subscribes_to_every_event_kind() -> None:

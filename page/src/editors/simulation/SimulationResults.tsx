@@ -15,15 +15,14 @@ function fmt(value: number | null): string {
 
 const COLUMNS: Column<CategoryRow>[] = [
   { key: 'category', header: 'Impact category', render: (r) => categoryLabel(r.method) },
-  { key: 'n', header: 'n', align: 'right', render: (r) => String(r.category.summary.n) },
+  { key: 'n', header: 'n', align: 'right', folds: true, render: (r) => String(r.category.summary.n) },
   { key: 'median', header: 'Median', align: 'right', render: (r) => formatAmount(r.category.summary.median) },
-  { key: 'median-low', header: 'Median 95 % low', align: 'right', render: (r) => fmt(r.category.summary.median_ci95?.[0] ?? null) },
-  { key: 'median-high', header: 'Median 95 % high', align: 'right', render: (r) => fmt(r.category.summary.median_ci95?.[1] ?? null) },
-  { key: 'rel_se', header: 'Median relative SE', align: 'right', render: (r) => fmt(r.category.summary.rel_se) },
-  { key: 'p-low', header: '2.5th pct', align: 'right', render: (r) => fmt(r.category.summary.percentiles[0]) },
-  { key: 'p-high', header: '97.5th pct', align: 'right', render: (r) => fmt(r.category.summary.percentiles[1]) },
-  { key: 'mean', header: 'Mean', align: 'right', render: (r) => formatAmount(r.category.summary.mean) },
-  { key: 'unit', header: 'Unit', render: (r) => r.method.unit },
+  { key: 'median-low', header: 'Median 95 % low', align: 'right', folds: true, render: (r) => fmt(r.category.summary.median_ci95?.[0] ?? null) },
+  { key: 'median-high', header: 'Median 95 % high', align: 'right', folds: true, render: (r) => fmt(r.category.summary.median_ci95?.[1] ?? null) },
+  { key: 'rel_se', header: 'Median relative SE', align: 'right', folds: true, render: (r) => fmt(r.category.summary.rel_se) },
+  { key: 'interval', header: '2.5 – 97.5 %', align: 'right', render: (r) => `${fmt(r.category.summary.percentiles[0])} – ${fmt(r.category.summary.percentiles[1])}` },
+  { key: 'mean', header: 'Mean', align: 'right', folds: true, render: (r) => formatAmount(r.category.summary.mean) },
+  { key: 'unit', header: 'Unit', folds: true, render: (r) => r.method.unit },
 ]
 
 export function SimulationResults({ result, methods }: { result: MonteCarloResult; methods: Method[] }) {
@@ -44,7 +43,7 @@ export function SimulationResults({ result, methods }: { result: MonteCarloResul
       </label>
       {chosen !== undefined && chosenMethod !== undefined && chosen.samples !== null ? <Histogram samples={chosen.samples} mean={chosen.summary.mean} median={chosen.summary.median} percentiles={chosen.summary.percentiles} medianCi95={chosen.summary.median_ci95} unit={chosenMethod.unit} /> : null}
       <div className="pt-3">
-        <DataTable columns={COLUMNS} rows={rows} rowKey={(r) => r.category.method_id} />
+        <DataTable columns={COLUMNS} rows={rows} rowKey={(r) => r.category.method_id} unfoldAt="3xl" />
       </div>
     </>
   )

@@ -16,7 +16,7 @@ from ecosemantic.mcp.envelopes import Answer, as_uuid, bound, boundary
 from ecosemantic.mcp.treatments import named_backwards, treatments_of
 from ecosemantic.mcp.watcher import reap, watch
 from ecosemantic.model.canonical import content_hash
-from ecosemantic.model.entities import DemandItem
+from ecosemantic.model.refs import DemandItem
 from ecosemantic.ports.types import MonteCarloConfig, Run, RunDraft, RunPatch, RunState
 
 

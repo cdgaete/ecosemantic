@@ -210,7 +210,13 @@ def _parser() -> argparse.ArgumentParser:
     compute.add_argument("--folder", required=True, type=Path)
     compute.add_argument("--method")
     compute.add_argument("--impact-method", dest="impact_method")
-    compute.add_argument("--variants", default="")
+    compute.add_argument(
+        "--variants",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="Score one scenario or case of that name; repeat the flag for each name.",
+    )
     compute.add_argument("--contributions", action="store_true")
     compute.add_argument("--inventory", action="store_true")
     setup = subcommands.add_parser("setup", help="Install a background database.")
@@ -455,7 +461,7 @@ async def _compute(args: argparse.Namespace, progress: Reporter) -> dict[str, ob
             methods, _ = await methods_for(
                 inventory, system.database.name, args.method, args.impact_method
             )
-        names = [name for name in args.variants.split(",") if name]
+        names = list(args.variants)
         treatments = await treatments_in(inventory, [system])
         result = await impact_of(
             calculation, system, methods, variants=names, treatments=treatments

@@ -35,3 +35,11 @@ The payload build itself is written for this repository: the interpreter asset, 
 | ------ | ----------- | ------- |
 | `resources/brand/icon-64.png`, commit `ed32299` | `app/ecosemantic/tray/icon-64.png` | copied unchanged: the tray draws the same mark as the desktop app, with a disc in its corner for the engine's state |
 | `resources/brand/icon.ico`, commit `ed32299` | `installer/windows/icon.ico` | copied unchanged: the installer's own icon, and the uninstaller's |
+
+## Taken from the United Nations Statistics Division
+
+The names ISIC Rev.4 publishes for its divisions and groups travel inside `ecosemantic-core`, in `core/ecosemantic/ports/data/isic_rev4_english_structure.csv`, and label the codes the explorer builds above the values a database stores. `NOTICE` credits the United Nations Statistics Division for them.
+
+| Source | Destination | Changed |
+| ------ | ----------- | ------- |
+| International Standard Industrial Classification of All Economic Activities, Revision 4, English structure of 21 sections, 88 divisions, 238 groups and 419 classes, `https://unstats.un.org/unsd/classifications/Econ/Download/In%20Text/ISIC_Rev_4_english_structure.Txt`, SHA-256 `18b645efc5a0b001fda5852cfd0690eb579011651e405631e50cb2d271ee2cc6` | `core/ecosemantic/ports/data/isic_rev4_english_structure.csv` | unchanged |

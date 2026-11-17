@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils'
 import { useUi } from '@/store/ui'
 import { Icon, type IconName } from '@/window/Icon'
 import type { ProcessNodeType } from './build'
+import { CardToolbar, ProcessMenuItems } from './CardMenu'
 import { detailAt } from './layout'
 
 function iconOf(exchange: Exchange): IconName {
@@ -77,50 +78,55 @@ function ProcessNodeComponent({ data }: NodeProps<ProcessNodeType>) {
   const listed = inputs.slice(0, placement.shown_inputs)
   const hidden = inputs.slice(placement.shown_inputs)
   return (
-    <div
-      style={{ width: card.width, height: placement.height, ...(outline ? ({ '--outline': outline } as CSSProperties) : {}) }}
-      data-chosen={chosen || undefined}
-      className={cn(
-        'overflow-hidden rounded-xl bg-background text-xs shadow-sm outline outline-[1.5px] -outline-offset-[1.5px] outline-node-border',
-        reference && 'outline-[2.5px] -outline-offset-[2.5px]',
-        hot && !outline && !chosen && 'shadow-[0_0_0_3px_rgb(var(--highlight))]',
-        chosen && !outline && 'shadow-[0_0_0_3px_rgb(var(--accent))]',
-        outline && 'shadow-[0_0_0_3px_var(--outline)]',
-      )}
-    >
-      {placement.inputs.map((port) => (
-        <Handle key={port.exchange_id} type="target" position={Position.Left} id={port.exchange_id} style={{ top: port.y }} className="!bg-link-stroke" />
-      ))}
-      <Handle type="source" position={Position.Right} id="out" style={{ top: placement.output }} className="!bg-link-stroke" />
-      <div style={{ height: detail === 'rows' ? card.header_height : '100%' }} className={cn('flex gap-2 overflow-hidden px-3 font-semibold leading-snug', detail === 'rows' ? 'items-start py-1' : 'items-start py-3 text-2xl')}>
-        <Icon name="process" />
-        <AppLink to={paths.process(systemId, process.code)} title={process.name} className={cn('min-w-0 hover:underline nodrag nopan', detail === 'rows' ? 'line-clamp-1 break-all' : 'line-clamp-3 [overflow-wrap:anywhere]')}>
-          {process.name}
-        </AppLink>
-        <span className="ml-auto shrink-0 rounded-full bg-muted px-1.5 font-normal text-muted-foreground">{process.location}</span>
+    <>
+      <CardToolbar size={{ width: card.width, height: placement.height }}>
+        <ProcessMenuItems systemId={systemId} process={process} />
+      </CardToolbar>
+      <div
+        style={{ width: card.width, height: placement.height, ...(outline ? ({ '--outline': outline } as CSSProperties) : {}) }}
+        data-chosen={chosen || undefined}
+        className={cn(
+          'overflow-hidden rounded-xl bg-background text-xs shadow-sm outline outline-[1.5px] -outline-offset-[1.5px] outline-node-border',
+          reference && 'outline-[2.5px] -outline-offset-[2.5px]',
+          hot && !outline && 'shadow-[0_0_0_3px_rgb(var(--highlight))]',
+          outline && 'shadow-[0_0_0_3px_var(--outline)]',
+        )}
+      >
+        {placement.inputs.map((port) => (
+          <Handle key={port.exchange_id} type="target" position={Position.Left} id={port.exchange_id} style={{ top: port.y }} className="!bg-link-stroke" />
+        ))}
+        <Handle type="source" position={Position.Right} id="out" style={{ top: placement.output }} className="!bg-link-stroke" />
+        <div style={{ height: detail === 'rows' ? card.header_height : '100%' }} className={cn('flex gap-2 overflow-hidden px-3 font-semibold leading-snug', detail === 'rows' ? 'items-start py-1' : 'items-start py-3 text-2xl')}>
+          <Icon name="process" />
+          <AppLink to={paths.process(systemId, process.code)} title={process.name} className={cn('min-w-0 hover:underline nodrag nopan', detail === 'rows' ? 'line-clamp-1 break-all' : 'line-clamp-3 [overflow-wrap:anywhere]')}>
+            {process.name}
+          </AppLink>
+          <span className="ml-auto shrink-0 rounded-full bg-muted px-1.5 font-normal text-muted-foreground">{process.location}</span>
+        </div>
+        {detail === 'rows' ? (
+          <>
+            <div style={{ paddingTop: card.section_padding, paddingBottom: card.section_padding }} className="px-2">
+              <div style={{ height: card.section_label }} className="px-1 text-xs text-muted-foreground">›› Input flows</div>
+              {listed.map((e) => (
+                <Row key={e.id} exchange={e} systemId={systemId} hot={hotExchanges.includes(e.id)} scaled={placement.scaled} card={card} />
+              ))}
+              {hidden.length > 0 ? (
+                <AppLink to={paths.process(systemId, process.code, 'io')} style={{ height: card.row_height, lineHeight: `${card.row_height}px` }} className="nodrag nopan block w-full rounded-md text-center text-muted-foreground hover:bg-foreground/8 hover:text-foreground">
+                  {foldLabel(hidden)}
+                </AppLink>
+              ) : null}
+            </div>
+            <div style={{ paddingTop: card.section_padding, paddingBottom: card.section_padding }} className="px-2 shadow-[inset_0_1px_0_rgb(var(--node-border))]">
+              <div style={{ height: card.section_label }} className="px-1 text-right text-xs text-muted-foreground">Output flows ››</div>
+              {outputs.map((e) => (
+                <Row key={e.id} exchange={e} systemId={systemId} hot={hotExchanges.includes(e.id)} scaled={placement.scaled} card={card} />
+              ))}
+            </div>
+          </>
+        ) : null}
       </div>
-      {detail === 'rows' ? (
-        <>
-          <div style={{ paddingTop: card.section_padding, paddingBottom: card.section_padding }} className="px-2">
-            <div style={{ height: card.section_label }} className="px-1 text-xs text-muted-foreground">›› Input flows</div>
-            {listed.map((e) => (
-              <Row key={e.id} exchange={e} systemId={systemId} hot={hotExchanges.includes(e.id)} scaled={placement.scaled} card={card} />
-            ))}
-            {hidden.length > 0 ? (
-              <AppLink to={paths.process(systemId, process.code, 'io')} style={{ height: card.row_height, lineHeight: `${card.row_height}px` }} className="nodrag nopan block w-full rounded-md text-center text-muted-foreground hover:bg-foreground/8 hover:text-foreground">
-                {foldLabel(hidden)}
-              </AppLink>
-            ) : null}
-          </div>
-          <div style={{ paddingTop: card.section_padding, paddingBottom: card.section_padding }} className="px-2 shadow-[inset_0_1px_0_rgb(var(--node-border))]">
-            <div style={{ height: card.section_label }} className="px-1 text-right text-xs text-muted-foreground">Output flows ››</div>
-            {outputs.map((e) => (
-              <Row key={e.id} exchange={e} systemId={systemId} hot={hotExchanges.includes(e.id)} scaled={placement.scaled} card={card} />
-            ))}
-          </div>
-        </>
-      ) : null}
-    </div>
+      {chosen ? <div aria-hidden data-selection className="pointer-events-none absolute inset-0 rounded-xl outline outline-2 outline-dashed outline-foreground outline-offset-[6px]" /> : null}
+    </>
   )
 }
 

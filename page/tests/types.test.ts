@@ -8,9 +8,13 @@ import type {
   CardGeometry,
   Case,
   Change,
+  ClassificationNode,
+  ClassificationScheme,
+  Compartment,
   ContributionResult,
   Cut,
   Database,
+  DatabaseSummary,
   DemandItem,
   ElementaryFlow,
   ElementaryFlowHit,
@@ -18,6 +22,7 @@ import type {
   ErrorEnvelope,
   Exchange,
   ExchangeOverride,
+  Factor,
   FlowHotspot,
   ForegroundRef,
   Hotspot,
@@ -28,12 +33,15 @@ import type {
   Listing,
   LogEntry,
   Method,
+  MethodCategory,
+  MethodFamily,
   MonteCarloCategory,
   MonteCarloConfig,
   MonteCarloResult,
   MonteCarloSummary,
   Outcome,
   Override,
+  Page,
   PairedDelta,
   Parameter,
   ParameterOverride,
@@ -47,6 +55,7 @@ import type {
   RunProgress,
   Scenario,
   Score,
+  SubCompartment,
   SystemCard,
   SystemRead,
   SystemRef,
@@ -83,6 +92,14 @@ import notFound from './fixtures/error_not_found.json'
 import monteCarlo from './fixtures/monte_carlo.json'
 import run from './fixtures/run.json'
 import runs from './fixtures/runs.json'
+import explorerSummary from './fixtures/explorer_summary.json'
+import explorerSchemes from './fixtures/explorer_schemes.json'
+import explorerTree from './fixtures/explorer_tree.json'
+import explorerProcesses from './fixtures/explorer_processes.json'
+import explorerCompartments from './fixtures/explorer_compartments.json'
+import explorerFlows from './fixtures/explorer_flows.json'
+import explorerMethods from './fixtures/explorer_methods.json'
+import explorerFactors from './fixtures/explorer_factors.json'
 
 function expectKeys<T extends object>(value: T, keys: Record<keyof T, true>): void {
   expect(Object.keys(value).sort()).toEqual(Object.keys(keys).sort())
@@ -212,7 +229,7 @@ const MONTE_CARLO_SUMMARY_KEYS = { n: true, mean: true, median: true, median_ci9
 const MONTE_CARLO_CATEGORY_KEYS = { method_id: true, summary: true, samples: true, histogram: true } satisfies Record<keyof MonteCarloCategory, true>
 const MONTE_CARLO_RESULT_KEYS = { database: true, n: true, stopped: true, gating_method: true, scope: true, normals_at_amount: true, credit_loops: true, dropped_draws: true, dropped_loops: true, dropped_background: true, linked_credit_loops: true, dropped_linked_loops: true, categories: true } satisfies Record<keyof MonteCarloResult, true>
 
-const IMPACT_RESULT_KEYS = { product_system: true, database: true, methods: true, scores: true, credit_loops: true, linked_credit_loops: true, links_behind: true, treatments_run_backwards: true, variants: true, uncertainty: true } satisfies Record<keyof ImpactResult, true>
+const IMPACT_RESULT_KEYS = { product_system: true, database: true, methods: true, scores: true, demand: true, credit_loops: true, linked_credit_loops: true, links_behind: true, treatments_run_backwards: true, variants: true, uncertainty: true } satisfies Record<keyof ImpactResult, true>
 
 const MONTE_CARLO_CONFIG_KEYS = { n_min: true, n_max: true, rel_se_target: true, seed: true, scope: true, n: true } satisfies Record<keyof MonteCarloConfig, true>
 const DEMAND_ITEM_KEYS = { ref: true, amount: true } satisfies Record<keyof DemandItem, true>
@@ -285,7 +302,7 @@ const CONTRIBUTION_RESULT_KEYS = {
   cut: true,
 } satisfies Record<keyof ContributionResult, true>
 
-const CUT_KEYS = { cutoff: true, below: true, share: true, unlisted: true, unlisted_share: true } satisfies Record<keyof Cut, true>
+const CUT_KEYS = { cutoff: true, below: true, share: true, below_score: true, unlisted: true, unlisted_share: true, unlisted_score: true } satisfies Record<keyof Cut, true>
 
 const INVENTORY_ROW_KEYS = {
   flow: true,
@@ -386,6 +403,43 @@ const BACKGROUND_PROCESS_KEYS = {
   exchanges: true,
 } satisfies Record<keyof BackgroundProcess, true>
 
+const PAGE_KEYS = { items: true, has_more: true, next_cursor: true } satisfies Record<keyof Page<unknown>, true>
+
+const DATABASE_SUMMARY_KEYS = {
+  processes: true,
+  elementary_flows: true,
+  indicators: true,
+  units: true,
+  locations: true,
+} satisfies Record<keyof DatabaseSummary, true>
+
+const CLASSIFICATION_SCHEME_KEYS = { scheme: true, processes: true, values: true } satisfies Record<keyof ClassificationScheme, true>
+
+const CLASSIFICATION_NODE_KEYS = {
+  id: true,
+  label: true,
+  code: true,
+  name: true,
+  value: true,
+  own: true,
+  processes: true,
+  children: true,
+} satisfies Record<keyof ClassificationNode, true>
+
+const SUB_COMPARTMENT_KEYS = { name: true, flow_count: true } satisfies Record<keyof SubCompartment, true>
+const COMPARTMENT_KEYS = { name: true, flow_count: true, sub_compartments: true } satisfies Record<keyof Compartment, true>
+const METHOD_CATEGORY_KEYS = { name: true, indicators: true } satisfies Record<keyof MethodCategory, true>
+const METHOD_FAMILY_KEYS = { name: true, categories: true } satisfies Record<keyof MethodFamily, true>
+
+const FACTOR_KEYS = {
+  flow: true,
+  name: true,
+  compartment: true,
+  sub_compartment: true,
+  unit: true,
+  factor: true,
+} satisfies Record<keyof Factor, true>
+
 const TERM_KEYS = { value: true, detail: true } satisfies Record<keyof Term, true>
 
 const ERROR_ENVELOPE_KEYS = { error: true, message: true, details: true } satisfies Record<keyof ErrorEnvelope, true>
@@ -433,6 +487,11 @@ function expectTreeNodeKeys(node: TreeNode): void {
   expectKeys(node, TREE_NODE_KEYS)
   expectRefKeys(node.ref)
   node.children.forEach(expectTreeNodeKeys)
+}
+
+function expectClassificationNodeKeys(node: ClassificationNode): void {
+  expectKeys(node, CLASSIFICATION_NODE_KEYS)
+  node.children.forEach(expectClassificationNodeKeys)
 }
 
 function expectRunStateKeys(run: RunState, keys: Record<string, true> = RUN_STATE_KEYS): void {
@@ -484,6 +543,14 @@ const typedBackgroundProcess = backgroundProcess as Answer<BackgroundProcess>
 const typedNotFound = notFound as ErrorEnvelope
 const typedRun = run as unknown as Answer<Run>
 const typedRuns = runs as unknown as Answer<RunState[]>
+const typedExplorerSummary = explorerSummary as Answer<DatabaseSummary>
+const typedExplorerSchemes = explorerSchemes as Answer<ClassificationScheme[]>
+const typedExplorerTree = explorerTree as Answer<ClassificationNode[]>
+const typedExplorerProcesses = explorerProcesses as Answer<Page<ProcessHit>>
+const typedExplorerCompartments = explorerCompartments as Answer<Compartment[]>
+const typedExplorerFlows = explorerFlows as Answer<Page<ElementaryFlowHit>>
+const typedExplorerMethods = explorerMethods as Answer<MethodFamily[]>
+const typedExplorerFactors = explorerFactors as Answer<Page<Factor>>
 
 describe('recorded responses', () => {
   it('carry the fields the page reads', () => {
@@ -705,6 +772,72 @@ describe('recorded response keys match the types field for field', () => {
     expectRunKeys(typedRun.value)
     expectKeys(typedRuns, ANSWER_KEYS)
     typedRuns.value.forEach((listed) => expectRunStateKeys(listed))
+  })
+
+  it('the explorer’s summary and schemes', () => {
+    expectKeys(typedExplorerSummary, ANSWER_KEYS)
+    expectKeys(typedExplorerSummary.value, DATABASE_SUMMARY_KEYS)
+    expectKeys(typedExplorerSchemes, ANSWER_KEYS)
+    typedExplorerSchemes.value.forEach((scheme) => expectKeys(scheme, CLASSIFICATION_SCHEME_KEYS))
+  })
+
+  it('a classification tree, a node and its child', () => {
+    expectKeys(typedExplorerTree, ANSWER_KEYS)
+    expect(typedExplorerTree.value.length).toBeGreaterThan(0)
+    typedExplorerTree.value.forEach(expectClassificationNodeKeys)
+    const parent = typedExplorerTree.value.find((node) => node.children.length > 0)
+    expect(parent).toBeDefined()
+    if (!parent) return
+    expectKeys(parent, CLASSIFICATION_NODE_KEYS)
+    expectKeys(parent.children[0], CLASSIFICATION_NODE_KEYS)
+    expect(parent.children[0].id).not.toBe(parent.id)
+  })
+
+  it('the processes under a node', () => {
+    expectKeys(typedExplorerProcesses, ANSWER_KEYS)
+    expectKeys(typedExplorerProcesses.value, PAGE_KEYS)
+    typedExplorerProcesses.value.items.forEach((hit) => {
+      expectKeys(hit, PROCESS_HIT_KEYS)
+      expectRefKeys(hit.ref)
+    })
+    expect(typedExplorerProcesses.value.items.length).toBeGreaterThan(0)
+  })
+
+  it('the compartments and their sub-compartments', () => {
+    expectKeys(typedExplorerCompartments, ANSWER_KEYS)
+    typedExplorerCompartments.value.forEach((compartment) => {
+      expectKeys(compartment, COMPARTMENT_KEYS)
+      compartment.sub_compartments.forEach((sub) => expectKeys(sub, SUB_COMPARTMENT_KEYS))
+    })
+    expect(typedExplorerCompartments.value.some((compartment) => compartment.sub_compartments.length > 0)).toBe(true)
+  })
+
+  it('the flows in a compartment', () => {
+    expectKeys(typedExplorerFlows, ANSWER_KEYS)
+    expectKeys(typedExplorerFlows.value, PAGE_KEYS)
+    typedExplorerFlows.value.items.forEach((hit) => {
+      expectKeys(hit, ELEMENTARY_FLOW_HIT_KEYS)
+      expectRefKeys(hit.ref)
+    })
+    expect(typedExplorerFlows.value.items.length).toBeGreaterThan(0)
+  })
+
+  it('the method tree and an indicator’s factors', () => {
+    expectKeys(typedExplorerMethods, ANSWER_KEYS)
+    typedExplorerMethods.value.forEach((family) => {
+      expectKeys(family, METHOD_FAMILY_KEYS)
+      family.categories.forEach((category) => {
+        expectKeys(category, METHOD_CATEGORY_KEYS)
+        category.indicators.forEach((indicator) => expectKeys(indicator, METHOD_KEYS))
+      })
+    })
+    expectKeys(typedExplorerFactors, ANSWER_KEYS)
+    expectKeys(typedExplorerFactors.value, PAGE_KEYS)
+    typedExplorerFactors.value.items.forEach((factor) => {
+      expectKeys(factor, FACTOR_KEYS)
+      expectKeys(factor.flow, ELEMENTARY_FLOW_REF_KEYS)
+    })
+    expect(typedExplorerFactors.value.items.length).toBeGreaterThan(0)
   })
 
   it('the not-found error envelope', () => {

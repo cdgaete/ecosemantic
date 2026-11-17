@@ -9,8 +9,8 @@ from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.engine.background import Background
 from ecosemantic.engine.calculation import Calculation
 from ecosemantic.errors import NotFound
-from ecosemantic.model.entities import DemandItem, Method
-from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef
+from ecosemantic.model.entities import Method
+from ecosemantic.model.refs import BackgroundRef, DemandItem, ElementaryFlowRef
 from ecosemantic.package.background import read_background
 from tests.engine_fixture import fixture_bundle, served_build
 from tests.fixture_data import CODES, FIXTURE_BIO, FIXTURE_DB, FLOW_IDS, LOOP_DB
@@ -29,7 +29,15 @@ def inventory(native_store: NativeStore) -> NativeInventory:
 async def test_a_process_read_without_exchanges_has_none(inventory: NativeInventory) -> None:
     steel = await inventory.get_process(STEEL)
     assert steel.exchanges is None
-    assert (steel.reference_product, steel.location, steel.classifications) == ("steel", "GLO", [])
+    assert (steel.reference_product, steel.location) == ("steel", "GLO")
+    assert steel.classifications == [
+        "ISIC rev.4 ecoinvent: 2410:Manufacture of basic iron and steel",
+        "EcoSpold01Categories: metals/production",
+    ]
+
+
+async def test_a_database_with_no_classification(inventory: NativeInventory) -> None:
+    assert await inventory.list_classifications(LOOP_DB) == []
 
 
 async def test_exchanges_come_in_the_dataset_order_with_their_side_and_reference(

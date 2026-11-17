@@ -7,6 +7,7 @@ import uuid
 import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.exceptions import ToolError
+from mcp.types import Implementation
 
 from ecosemantic.compute.parameters import materialize
 from ecosemantic.mcp import calculation
@@ -16,7 +17,6 @@ from ecosemantic.mcp.server import build_server
 from ecosemantic.model.canonical import base_pin
 from ecosemantic.model.entities import (
     Case,
-    DemandItem,
     Exchange,
     ExchangeOverride,
     Parameter,
@@ -25,7 +25,7 @@ from ecosemantic.model.entities import (
     Scenario,
     method_id,
 )
-from ecosemantic.model.refs import BackgroundRef, ForegroundRef
+from ecosemantic.model.refs import BackgroundRef, DemandItem, ForegroundRef
 from ecosemantic.ports.types import MAX_DRAWS, MonteCarloConfig, System
 from tests.fixture_data import CODES, FIXTURE_DB, FIXTURE_FINGERPRINT, GWP, WATER
 
@@ -435,6 +435,35 @@ async def test_a_background_demand_on_an_empty_system_is_scored(
             )
         ).structured_content["value"]
     assert scored["scores"][0]["value"] == pytest.approx(own.value)
+
+
+async def test_the_answer_carries_the_demand_it_scored_and_its_summary_holds_it(
+    context: ServerContext, full_server: FastMCP, widget: uuid.UUID
+) -> None:
+    ten = [{"ref": {"kind": "foreground", "code": "widget"}, "amount": 10.0}]
+    async with Client(
+        full_server, client_info=Implementation(name="impact-reader", version="1")
+    ) as client:
+        default = (
+            await client.call_tool(
+                "calculate_impact", {"product_system_id": str(widget), "method_id": GWP_ID}
+            )
+        ).structured_content["value"]
+        tenfold = (
+            await client.call_tool(
+                "calculate_impact",
+                {"product_system_id": str(widget), "method_id": GWP_ID, "demand": ten},
+            )
+        ).structured_content["value"]
+    assert default["demand"] == WIDGET_DEMAND
+    assert default["scores"][0]["value"] == pytest.approx(4.158)
+    assert tenfold["demand"] == ten
+    assert tenfold["scores"][0]["value"] == pytest.approx(41.58)
+    calls = await context.activity.list_calls("impact-reader")
+    assert [call.summary.demand for call in calls if call.summary is not None] == [
+        [DemandItem(ref=ForegroundRef(code="widget"), amount=1.0)],
+        [DemandItem(ref=ForegroundRef(code="widget"), amount=10.0)],
+    ]
 
 
 async def test_a_demand_naming_a_product_system_is_refused(

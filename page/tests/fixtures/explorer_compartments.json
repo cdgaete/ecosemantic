@@ -1,0 +1,26 @@
+{
+  "hint": null,
+  "value": [
+    {
+      "flow_count": 1,
+      "name": "Resource",
+      "sub_compartments": [
+        {
+          "flow_count": 1,
+          "name": "in water"
+        }
+      ]
+    },
+    {
+      "flow_count": 3,
+      "name": "air",
+      "sub_compartments": [
+        {
+          "flow_count": 1,
+          "name": "urban air close to ground"
+        }
+      ]
+    }
+  ],
+  "view_url": null
+}

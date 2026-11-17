@@ -119,6 +119,21 @@ async def test_list_vocabulary_answers_the_four_original_kinds(server: FastMCP) 
         assert "gwp > climate change" in categories
 
 
+async def test_list_vocabulary_compartments_answers_the_same_terms(server: FastMCP) -> None:
+    recorded = json.loads(
+        (
+            Path(__file__).resolve().parents[2] / "page/tests/fixtures/vocabulary_compartments.json"
+        ).read_text(encoding="utf-8")
+    )
+    async with Client(server) as client:
+        out = (
+            await client.call_tool(
+                "list_vocabulary", {"database": FIXTURE_DB, "kind": "compartments"}
+            )
+        ).structured_content
+    assert out["value"] == recorded["value"]
+
+
 async def test_a_typed_error_arrives_as_the_envelope(server: FastMCP) -> None:
     async with Client(server) as client:
         with pytest.raises(ToolError) as caught:
@@ -303,3 +318,16 @@ async def test_a_flow_search_whose_one_word_matches_nothing_is_told_to_try_anoth
         assert out["items"] == []
         assert "flow_type" not in out["hint"]
         assert out["hint"] is not None and "no entry holds 'unobtainium'" in out["hint"]
+
+
+async def test_search_tools_refuse_a_query_of_no_term_with_a_filter(server: FastMCP) -> None:
+    async with Client(server) as client:
+        for tool, filters in (
+            ("search_elementary_flows", {"compartment": "air"}),
+            ("search_processes", {"location": "GLO"}),
+        ):
+            with pytest.raises(ToolError) as caught:
+                await client.call_tool(tool, {"database": FIXTURE_DB, "query": "", **filters})
+            payload = json.loads(str(caught.value))
+            assert payload["error"] == "invalid"
+            assert "a search needs at least one term" in payload["message"]

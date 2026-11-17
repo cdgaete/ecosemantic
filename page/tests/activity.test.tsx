@@ -96,4 +96,54 @@ describe('activity', () => {
     expect(screen.getByText('search_processes')).toBeInTheDocument()
     expect(screen.getAllByLabelText('chosen')).toHaveLength(1)
   })
+
+  it('shows every argument in words and adds the summary a call carries', () => {
+    const base = trail.value[0] as unknown as Call
+    const searched: Call = {
+      ...base,
+      id: 'searched',
+      tool: 'search_processes',
+      effect: 'read',
+      arguments: { database: 'ecoinvent-3.12-cutoff', query: 'steel', limit: 2 },
+      summary: { count: 0, more: false, noun: 'found', items: [], scores: [], demand: null },
+    }
+    const placed: Call = {
+      ...base,
+      id: 'placed',
+      tool: 'arrange_graph',
+      effect: 'write',
+      arguments: { product_system_id: base.product_system_id, placements: [{ code: 'sen', x: 0, y: 236 }] },
+      summary: {
+        count: 2,
+        more: false,
+        noun: 'cards placed',
+        items: [
+          { label: 'sen', detail: null, kind: null, database: null, ref: null },
+          { label: 'frame', detail: null, kind: null, database: null, ref: null },
+        ],
+        scores: [],
+        demand: null,
+      },
+    }
+    const laid: Call = {
+      ...base,
+      id: 'laid',
+      tool: 'graph_layout',
+      effect: 'read',
+      arguments: {
+        product_system_id: base.product_system_id,
+        placements: Array.from({ length: 7 }, (_, n) => ({ code: `c${n}`, x: 0, y: n })),
+      },
+      summary: null,
+    }
+    renderAt('/', <Trail calls={[searched, placed, laid]} />)
+    const searching = screen.getByText('query: steel').closest('li') as HTMLElement
+    expect(within(searching).getByText('limit: 2')).toBeInTheDocument()
+    expect(within(searching).getByText('0 found')).toBeInTheDocument()
+    const counted = screen.getByText('2 cards placed').closest('li') as HTMLElement
+    expect(within(counted).getByText('placements: 1')).toBeInTheDocument()
+    expect(within(counted).queryByText(/found/)).toBeNull()
+    const quiet = screen.getByText('placements: 7').closest('li') as HTMLElement
+    expect(quiet.textContent).not.toMatch(/[{}[\]]/)
+  })
 })

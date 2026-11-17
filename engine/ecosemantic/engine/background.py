@@ -249,6 +249,19 @@ class Background:
             )
         return at
 
+    def factors_of(self, method_id: str) -> list[tuple[str, float]]:
+        """Each flow's code and the factor the method's category applies to it; NotFound naming
+        the id when the background holds no such method."""
+        at = self._category.get(method_id)
+        if at is None:
+            raise NotFound(f"{self.database.name!r} holds no method {method_id!r}")
+        indices, values, indptr = self.characterization.to_csr()
+        labels = self.coords["flow"].labels
+        return [
+            (str(labels[int(indices[row])]), float(values[row]))
+            for row in range(int(indptr[at]), int(indptr[at + 1]))
+        ]
+
     def positions(self, methods: Sequence[Method]) -> list[int]:
         """The position of each method's category, in the order given; NotFound naming every
         method the background does not hold."""

@@ -1,5 +1,5 @@
 import { useContributions } from '@/api/queries'
-import type { Hotspot, Process, ProductSystem } from '@/api/types'
+import type { Hotspot } from '@/api/types'
 import { categoryLabel, cutNotice, formatAgo, formatAmount, formatShare, methodById } from '@/lib/format'
 import { RequestAction } from '@/requests/RequestAction'
 import { DataTable, type Column } from '@/window/DataTable'
@@ -8,21 +8,9 @@ import { FieldGrid } from '@/window/FieldGrid'
 import { Hint } from '@/window/Hint'
 import { Section } from '@/window/Section'
 import { BarChart } from './figures/BarChart'
-import { demandOf, type ResultParams } from './params'
-import { ranMonteCarlo } from './recorded'
+import { demandOf } from './params'
+import { ranMonteCarlo, targetOf } from './recorded'
 import type { Result } from './ResultsEditor'
-
-function targetOf(params: ResultParams, system: ProductSystem | undefined, rootProcess: Process | undefined): string {
-  if (params.demand === undefined) return `${params.amount} ${rootProcess?.unit ?? ''}`
-  return params.demand
-    .map((item) => {
-      const ref = item.ref
-      if (ref.kind !== 'foreground') return `${item.amount} of ${ref.id}`
-      const process = system?.processes.find((p) => p.code === ref.code)
-      return `${item.amount} ${process?.unit ?? ''} of ${process?.reference_product ?? ref.code}`
-    })
-    .join(', ')
-}
 
 export function GeneralPage({ result }: { result: Result }) {
   const { id, params, hash, system, impact, root, stale, waiting } = result
@@ -48,9 +36,26 @@ export function GeneralPage({ result }: { result: Result }) {
           rows={[
             { label: 'Product system', value: system?.name ?? '' },
             { label: 'Reference process', value: rootProcess?.name ?? (root ?? '') },
-            { label: 'Target amount', value: targetOf(params!, system, rootProcess) },
+            { label: 'Target amount', value: targetOf(impact.data?.value.demand, system) ?? '' },
             { label: 'Impact assessment method', value: params?.impact_method ?? firstMethod?.spec ?? '' },
-            { label: 'Parameter set', value: params?.variants.length ? params.variants.join(', ') : 'base' },
+            {
+              label: 'Scored on',
+              value: 'base values',
+            },
+            ...(params?.variants.length
+              ? [
+                  {
+                    label: 'Compared with',
+                    value: (
+                      <span className="flex flex-wrap gap-2">
+                        {params.variants.map((variant) => (
+                          <span key={variant}>{variant}</span>
+                        ))}
+                      </span>
+                    ),
+                  },
+                ]
+              : []),
             ...(result.call ? [{ label: 'Calculated by', value: `${result.call.origin === 'view' ? 'you' : result.call.agent}, ${formatAgo(result.call.started_at)}` }] : []),
           ]}
         />
@@ -66,8 +71,10 @@ export function GeneralPage({ result }: { result: Result }) {
               <Hint of={top.data} />
             </div>
           </>
-        ) : (
-          <p className="text-muted-foreground">{top.error?.message ?? impact.error?.message ?? waiting}</p>
+        ) : top.error ? (
+          <p className="text-muted-foreground">{top.error.message}</p>
+        ) : impact.error ? null : (
+          <p className="text-muted-foreground">{waiting}</p>
         )}
         {firstMethod ? <p className="pt-1 text-xs text-muted-foreground">{categoryLabel(firstMethod)}</p> : null}
       </Section>

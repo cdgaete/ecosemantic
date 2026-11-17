@@ -1,0 +1,91 @@
+{
+  "hint": null,
+  "value": [
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "children": [],
+              "code": "2410",
+              "id": "2410",
+              "label": "2410",
+              "name": "Manufacture of basic iron and steel",
+              "own": 1,
+              "processes": 1,
+              "value": "ISIC rev.4 ecoinvent: 2410:Manufacture of basic iron and steel"
+            }
+          ],
+          "code": "241",
+          "id": "241",
+          "label": "241",
+          "name": "Manufacture of basic iron and steel",
+          "own": 0,
+          "processes": 1,
+          "value": null
+        },
+        {
+          "children": [
+            {
+              "children": [],
+              "code": "2420",
+              "id": "2420",
+              "label": "2420",
+              "name": "Manufacture of basic precious and other non-ferrous metals",
+              "own": 1,
+              "processes": 1,
+              "value": "ISIC rev.4 ecoinvent: 2420:Manufacture of basic precious and other non-ferrous metals"
+            }
+          ],
+          "code": "242",
+          "id": "242",
+          "label": "242",
+          "name": "Manufacture of basic precious and other non-ferrous metals",
+          "own": 0,
+          "processes": 1,
+          "value": null
+        }
+      ],
+      "code": "24",
+      "id": "24",
+      "label": "24",
+      "name": "Manufacture of basic metals",
+      "own": 1,
+      "processes": 3,
+      "value": "ISIC rev.4 ecoinvent: 24:Manufacture of basic metals"
+    },
+    {
+      "children": [
+        {
+          "children": [
+            {
+              "children": [],
+              "code": "3510",
+              "id": "3510",
+              "label": "3510",
+              "name": "Electric power generation, transmission and distribution",
+              "own": 1,
+              "processes": 1,
+              "value": "ISIC rev.4 ecoinvent: 3510:Electric power generation, transmission and distribution"
+            }
+          ],
+          "code": "351",
+          "id": "351",
+          "label": "351",
+          "name": "Electric power generation, transmission and distribution",
+          "own": 0,
+          "processes": 1,
+          "value": null
+        }
+      ],
+      "code": "35",
+      "id": "35",
+      "label": "35",
+      "name": "Electricity, gas, steam and air conditioning supply",
+      "own": 0,
+      "processes": 1,
+      "value": null
+    }
+  ],
+  "view_url": null
+}

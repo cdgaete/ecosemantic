@@ -10,6 +10,13 @@ describe('result params', () => {
     expect(parseParams('?')).toBeNull()
   })
 
+  it('round-trips a name holding a comma and a name holding an ampersand and an equals sign', () => {
+    const params = { impact_method: 'IPCC 2021', variants: ['Bottled CH PET, walked home', 'a&b=c'], amount: 1 }
+    const search = serializeParams(params)
+    expect(new URLSearchParams(search).getAll('variants')).toEqual(params.variants)
+    expect(parseParams(search)).toEqual(params)
+  })
+
   it('builds the tool arguments, with a demand only when the amount is not one', () => {
     expect(toImpactArguments({ method_id: 'm_1', variants: [], amount: 1 }, 'widget')).toEqual({ method_id: 'm_1', variants: [] })
     expect(toImpactArguments({ impact_method: 'IPCC', variants: ['small'], amount: 3 }, 'widget')).toEqual({

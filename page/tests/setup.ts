@@ -7,19 +7,35 @@ class ResizeObserverStub implements ResizeObserver {
 }
 globalThis.ResizeObserver = globalThis.ResizeObserver ?? ResizeObserverStub
 
+const LIVE_QUERIES = new Set<MediaQueryListStub>()
+
 class MediaQueryListStub extends EventTarget implements MediaQueryList {
   media: string
   matches: boolean
   onchange: ((this: MediaQueryList, ev: MediaQueryListEvent) => void) | null = null
+  private readonly minimum: number
   constructor(media: string) {
     super()
     this.media = media
-    const width = /min-width:\s*(\d+)px/.exec(media)?.[1]
-    this.matches = window.innerWidth >= Number(width ?? 0)
+    this.minimum = Number(/min-width:\s*(\d+)px/.exec(media)?.[1] ?? 0)
+    this.matches = window.innerWidth >= this.minimum
+    LIVE_QUERIES.add(this)
   }
   addListener(): void {}
   removeListener(): void {}
+  settle(): void {
+    const matches = window.innerWidth >= this.minimum
+    if (matches === this.matches) return
+    this.matches = matches
+    this.dispatchEvent(new Event('change'))
+  }
 }
+
+export function resizePage(width: number): void {
+  window.innerWidth = width
+  for (const query of LIVE_QUERIES) query.settle()
+}
+
 globalThis.matchMedia = globalThis.matchMedia ?? ((query: string) => new MediaQueryListStub(query))
 
 class EventSourceStub implements EventSource {

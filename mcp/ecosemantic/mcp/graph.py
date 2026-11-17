@@ -15,6 +15,7 @@ from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import READ, WRITE
 from ecosemantic.mcp.envelopes import Answer, as_uuid, bound, boundary
 from ecosemantic.model.refs import ElementaryFlowRef
+from ecosemantic.model.summary import SUMMARY_ITEMS, Summary, listed
 from ecosemantic.model.validation import SOLVABLE, anchors, validate
 from ecosemantic.ports.types import Layout, Spot, System
 from ecosemantic.routes import Route, route
@@ -36,6 +37,13 @@ class Arrangement(BaseModel):
     bounds: dict[str, float]
     scaling: str | None
     card: CardGeometry
+
+    def summarise(self) -> Summary | None:
+        """The cards someone placed and their codes; nothing while a person has placed none."""
+        placed = [card for card in self.cards if card.held]
+        if not placed:
+            return None
+        return listed(placed, len(placed) > SUMMARY_ITEMS, noun="cards placed")
 
 
 class CardSpot(BaseModel):

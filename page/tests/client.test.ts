@@ -140,6 +140,36 @@ describe('client', () => {
     expect(init.headers).toBeUndefined()
   })
 
+  it('reads a scheme tree, the processes under a node and an indicator’s factors', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => respond(200, { value: [] }))
+    await api.tree('ecoinvent-3.12-cutoff', 'ISIC rev.4 ecoinvent')
+    await api.underNode('ecoinvent-3.12-cutoff', 'EcoSpold01Categories', { node: 'transport systems/road' })
+    await api.factors('fixture', 'm_bff077f3bd', { query: 'methane', limit: 5 })
+    const asked = spy.mock.calls.map(([address]) => withoutToken(String(address)))
+    expect(asked).toEqual([
+      '/api/databases/ecoinvent-3.12-cutoff/classifications/ISIC%20rev.4%20ecoinvent',
+      '/api/databases/ecoinvent-3.12-cutoff/classifications/EcoSpold01Categories/processes?node=transport+systems%2Froad',
+      '/api/databases/fixture/impact-methods/m_bff077f3bd/factors?query=methane&limit=5',
+    ])
+  })
+
+  it('reads the summary, the schemes, the compartments, the flows in one and the method tree', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => respond(200, { value: [] }))
+    await api.summary('fixture')
+    await api.schemes('fixture')
+    await api.compartments('fixture')
+    await api.flowsIn('fixture', 'Resource/in water', { sub_compartment: 'in water', limit: 10 })
+    await api.methodTree('fixture')
+    const asked = spy.mock.calls.map(([address]) => withoutToken(String(address)))
+    expect(asked).toEqual([
+      '/api/databases/fixture/summary',
+      '/api/databases/fixture/classifications',
+      '/api/databases/fixture/compartments',
+      '/api/databases/fixture/compartments/Resource%2Fin%20water/flows?sub_compartment=in+water&limit=10',
+      '/api/databases/fixture/impact-methods',
+    ])
+  })
+
   it('raises the envelope on an error', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => respond(404, notFound))
     await expect(api.system('missing')).rejects.toMatchObject({ status: 404, kind: 'not_found' })

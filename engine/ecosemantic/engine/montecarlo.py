@@ -16,7 +16,8 @@ from ecosemantic.engine.calculation import Calculation
 from ecosemantic.engine.foreground import Block, Entries, Foreground, OwnedLoop
 from ecosemantic.engine.solver import Solver, SolverName, require_solver
 from ecosemantic.errors import Invalid
-from ecosemantic.model.entities import DISTRIBUTION_IDS, DemandItem, Method, Scope
+from ecosemantic.model.entities import DISTRIBUTION_IDS, Method, Scope
+from ecosemantic.model.refs import DemandItem
 from ecosemantic.model.validation import verdict
 
 LOGNORMAL = DISTRIBUTION_IDS["lognormal"]

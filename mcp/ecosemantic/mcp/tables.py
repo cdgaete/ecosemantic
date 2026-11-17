@@ -18,7 +18,8 @@ from ecosemantic.mcp.linking import refuse_dropped_cases
 from ecosemantic.mcp.parameters import ParameterSpace, space_of
 from ecosemantic.mcp.requests import answer_write
 from ecosemantic.model.canonical import content_hash
-from ecosemantic.model.entities import Actor, DemandItem, ProductSystem
+from ecosemantic.model.entities import Actor, ProductSystem
+from ecosemantic.model.refs import DemandItem
 from ecosemantic.ports.types import LogEntry
 from ecosemantic.tables.folder import folder_name, read_model, write_folder
 from ecosemantic.tables.reader import apply_inputs

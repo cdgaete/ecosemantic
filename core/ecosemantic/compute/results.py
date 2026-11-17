@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from ecosemantic.compute.montecarlo import PairedDelta
 from ecosemantic.model.entities import Method, method_by_id
-from ecosemantic.model.refs import Database
+from ecosemantic.model.refs import Database, DemandItem
 from ecosemantic.model.summary import Summary, SummaryScore
 from ecosemantic.ports.types import (
     Cut,
@@ -52,18 +52,20 @@ class PinBehind(BaseModel):
 
 
 class ImpactResult(BaseModel):
-    """The characterised score of a product system over the database build `database` names,
-    with variants and uncertainty, the processes of each loop holding a credit, whose delivery
-    no check decides, the links the score was taken behind, and each exchange sending a
-    positive amount to a treatment, which runs it backwards and scores its emissions as
-    credits. `methods` lists every method scored once, in the order `scores`, each variant's
-    `scores` and each Monte Carlo category follow, and a score names its method by
-    `method_id`."""
+    """The characterised score of a product system over the database build `database` names, for
+    the `demand` it scored: each item's reference and amount, with the one the calculation
+    resolved to when the caller named none. It carries variants and uncertainty, the processes of
+    each loop holding a credit, whose delivery no check decides, the links the score was taken
+    behind, and each exchange sending a positive amount to a treatment, which runs it backwards
+    and scores its emissions as credits. `methods` lists every method scored once, in the order
+    `scores`, each variant's `scores` and each Monte Carlo category follow, and a score names its
+    method by `method_id`."""
 
     product_system: str
     database: Database
     methods: list[Method]
     scores: list[Score]
+    demand: list[DemandItem]
     credit_loops: list[list[str]]
     linked_credit_loops: list[LinkedLoop] = Field(default_factory=list)
     links_behind: list[PinBehind] = Field(default_factory=list)
@@ -72,7 +74,7 @@ class ImpactResult(BaseModel):
     uncertainty: MonteCarloResult | None = None
 
     def summarise(self) -> Summary:
-        """The base scores, one per method."""
+        """The base scores, one per method, and the demand they were scored for."""
         return Summary(
             scores=[
                 SummaryScore(
@@ -81,7 +83,8 @@ class ImpactResult(BaseModel):
                     unit=score.unit,
                 )
                 for score in self.scores
-            ]
+            ],
+            demand=self.demand,
         )
 
 

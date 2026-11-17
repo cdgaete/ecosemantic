@@ -4,23 +4,33 @@
       "agent": "fixture-agent",
       "arguments": {
         "method_id": "m_bff077f3bd",
-        "product_system_id": "64aa77ed-8244-410a-b8c0-6fdf25602a6d"
+        "product_system_id": "c5bd37b7-f847-4161-87e7-6505a2e76d11"
       },
       "at_hash": "07a6bf4ddc0b9dd36be657b755ddd13e908b50af2fb6538e4ed633217c07be59",
       "client": "fixture-agent",
-      "duration_ms": 8,
+      "duration_ms": 9,
       "effect": "compute",
       "entry_seq": null,
       "error": null,
-      "id": "23d461d7-764a-4d91-b866-89b23bcfa2ad",
+      "id": "4356d927-908d-4ae7-91c5-3c6b60c9e014",
       "origin": "agent",
       "outcome": "ok",
-      "product_system_id": "64aa77ed-8244-410a-b8c0-6fdf25602a6d",
-      "started_at": "2026-11-13T18:37:27.792649Z",
+      "product_system_id": "c5bd37b7-f847-4161-87e7-6505a2e76d11",
+      "started_at": "2026-11-17T01:07:39.487594Z",
       "summary": {
         "count": null,
+        "demand": [
+          {
+            "amount": 1.0,
+            "ref": {
+              "code": "bottle",
+              "kind": "foreground"
+            }
+          }
+        ],
         "items": [],
         "more": false,
+        "noun": "found",
         "scores": [
           {
             "method": "fixture > gwp > climate change > GWP100",

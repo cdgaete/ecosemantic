@@ -12,13 +12,14 @@
       "effect": "read",
       "entry_seq": null,
       "error": null,
-      "id": "ed7e5240-0626-4116-82c8-3c3561ba4bd7",
+      "id": "3bd66340-7702-49b7-8f40-49cec51dacf0",
       "origin": "agent",
       "outcome": "ok",
       "product_system_id": null,
-      "started_at": "2026-11-13T18:37:27.887647Z",
+      "started_at": "2026-11-17T01:07:39.587107Z",
       "summary": {
         "count": 1,
+        "demand": null,
         "items": [
           {
             "database": "fixture",
@@ -29,6 +30,7 @@
           }
         ],
         "more": false,
+        "noun": "found",
         "scores": []
       },
       "tool": "search_processes"
@@ -49,11 +51,11 @@
         "error": "not_found",
         "message": "no process 'missing' in 'fixture'"
       },
-      "id": "4f3a8aa3-749c-45a4-a86c-aaab2e8e8520",
+      "id": "a3e95917-95f9-4f24-a38e-099a7f7d018d",
       "origin": "agent",
       "outcome": "error",
       "product_system_id": null,
-      "started_at": "2026-11-13T18:37:27.894420Z",
+      "started_at": "2026-11-17T01:07:39.593858Z",
       "summary": null,
       "tool": "get_background_process"
     }

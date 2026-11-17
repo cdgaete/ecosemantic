@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
-from ecosemantic.model.entities import DemandItem, Method
+from ecosemantic.model.entities import Method
+from ecosemantic.model.refs import DemandItem
 from ecosemantic.ports.types import (
     Activity,
     FlowHotspots,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { colourOfEntry } from '@/activity/agents'
+import { actorOf, colourOfEntry } from '@/activity/agents'
 import { Digest } from '@/activity/Digest'
 import { holds, type DigestFilter } from '@/activity/digest'
 import { touches } from '@/activity/filters'
@@ -51,10 +51,7 @@ function Entry({ entry, systemId, system, fresh }: { entry: LogEntry; systemId: 
         <time dateTime={entry.timestamp} title={entry.timestamp} className="text-muted-foreground">
           {formatAgo(entry.timestamp)}
         </time>
-        <span>
-          {entry.actor.kind}
-          {entry.actor.id ? ` ${entry.actor.id}` : entry.actor.name ? ` ${entry.actor.name}` : ''}
-        </span>
+        <span>{actorOf(entry)}</span>
         <span className="text-muted-foreground">{entry.source}</span>
         {fresh ? <span className="rounded-full bg-accent/15 px-1.5 text-xs font-semibold text-accent">NEW</span> : null}
         <span className="basis-full font-medium">{entry.message}</span>

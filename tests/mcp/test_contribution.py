@@ -194,6 +194,25 @@ async def test_a_list_top_n_cuts_short_says_what_it_leaves_unlisted(
     assert out["cut"]["unlisted_share"] == pytest.approx(1 - out["processes"][0]["fraction"])
 
 
+async def test_the_rows_a_list_shows_and_the_two_scores_it_leaves_out_make_the_total(
+    server: FastMCP, widget: uuid.UUID
+) -> None:
+    async with Client(server) as client:
+        for by in ("process", "flow"):
+            for asked in ({"cutoff": 0.1}, {"top_n": 1, "cutoff": 0.0}):
+                args = {"product_system_id": str(widget), "method_id": GWP_ID, "by": by, **asked}
+                out = (await client.call_tool("contribution_analysis", args)).structured_content[
+                    "value"
+                ]
+                rows = out["processes"] if by == "process" else out["flows"]
+                cut = out["cut"]
+                assert cut["below"] > 0 or cut["unlisted"] > 0, (by, asked)
+                shown = sum(row["score"] for row in rows)
+                assert shown + cut["below_score"] + cut["unlisted_score"] == pytest.approx(
+                    out["total"]["value"]
+                ), (by, asked)
+
+
 async def test_inventory_rows_name_their_source(server: FastMCP, widget: uuid.UUID) -> None:
     async with Client(server) as client:
         listing = (

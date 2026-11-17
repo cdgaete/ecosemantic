@@ -7,6 +7,8 @@ export function useGo() {
   return useCallback((path: string) => navigate(withToken(path)), [navigate])
 }
 
+export type ExplorerSection = 'datasets' | 'flows' | 'methods' | 'units' | 'locations'
+
 export const paths = {
   home: () => '/',
   system: (id: string) => `/systems/${id}`,
@@ -17,7 +19,9 @@ export const paths = {
   results: (id: string, page: string, search: string) => `/systems/${id}/results/${page}${search}`,
   simulation: (id: string, runId: string) => `/systems/${id}/simulations/${runId}`,
   background: (database: string, ref: string) => `/databases/${database}/processes/${ref}`,
-  search: (database: string, kind: string) => `/databases/${database}/search/${kind}`,
+  explorer: (database: string, section: ExplorerSection = 'datasets', search = '') => `/databases/${database}/${section}${search}`,
+  flow: (database: string, ref: string) => `/databases/${database}/flows/${ref}`,
+  indicator: (database: string, id: string) => `/databases/${database}/methods/${id}`,
   databases: () => '/databases',
   accounts: () => '/accounts',
 }

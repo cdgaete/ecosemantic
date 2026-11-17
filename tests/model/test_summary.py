@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ecosemantic.compute.results import ContributionResult, ImpactResult
 from ecosemantic.model.entities import Method
-from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef
+from ecosemantic.model.refs import BackgroundRef, DemandItem, ElementaryFlowRef, ForegroundRef
 from ecosemantic.model.summary import SUMMARY_ITEMS, Summary, SummaryItem, SummaryScore, listed
 from ecosemantic.ports.types import BackgroundProcess, ElementaryFlowHit, ProcessHit, Score
 from tests.fixture_data import FIXTURE_DATABASE
@@ -78,25 +78,21 @@ def test_a_background_process_is_one_item() -> None:
 
 def test_a_result_is_its_scores() -> None:
     score = Score(value=2.5, unit="kg CO2-Eq", method_id=GWP.id)
-    expected = Summary(scores=[SummaryScore(method=GWP_SPEC, value=2.5, unit="kg CO2-Eq")])
-    assert (
-        ImpactResult(
-            database=FIXTURE_DATABASE,
-            product_system="bottle",
-            methods=[GWP],
-            scores=[score],
-            credit_loops=[],
-        ).summarise()
-        == expected
-    )
-    assert (
-        ContributionResult(
-            database=FIXTURE_DATABASE,
-            by="process",
-            method=GWP,
-            total=score,
-            processes=[],
-            credit_loops=[],
-        ).summarise()
-        == expected
-    )
+    scored = SummaryScore(method=GWP_SPEC, value=2.5, unit="kg CO2-Eq")
+    demand = [DemandItem(ref=ForegroundRef(code="bottle"), amount=2.0)]
+    assert ImpactResult(
+        database=FIXTURE_DATABASE,
+        product_system="bottle",
+        methods=[GWP],
+        scores=[score],
+        demand=demand,
+        credit_loops=[],
+    ).summarise() == Summary(scores=[scored], demand=demand)
+    assert ContributionResult(
+        database=FIXTURE_DATABASE,
+        by="process",
+        method=GWP,
+        total=score,
+        processes=[],
+        credit_loops=[],
+    ).summarise() == Summary(scores=[scored])

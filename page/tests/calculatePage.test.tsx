@@ -40,7 +40,14 @@ const id = system.value.id
 const family = families.value[0].value
 const defaults = monteCarlo as unknown as Answer<MonteCarloConfig>
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  useUi.setState({ canvasSystemId: null, canvasVariant: null })
+})
+
+function withCase(name: string): void {
+  vi.mocked(api.system).mockResolvedValue({ ...system, value: { ...system.value, cases: [...system.value.cases, { ...system.value.cases[0], name }] } } as SystemRead)
+}
 
 async function simulationOf(chosenFamily: string): Promise<void> {
   renderAt(`/systems/${id}/results/setup`, <App router={false} />)
@@ -153,4 +160,38 @@ it('names a category that has no indicator in the category list without a separa
   fireEvent.change(screen.getByPlaceholderText('search…'), { target: { value: 'water' } })
   await waitFor(() => expect(screen.getByLabelText('Category').querySelectorAll('option').length).toBe(2))
   expect(screen.getByLabelText('Category').querySelectorAll('option')[1].textContent).toBe('aware › water use [m3]')
+})
+
+it('opens the setup form with the case the canvas shows ticked, and calculates it', async () => {
+  withCase('PPA solar 60%')
+  useUi.setState({ canvasSystemId: id, canvasVariant: 'PPA solar 60%' })
+  renderAt(`/systems/${id}/results/setup`, <Screens />)
+  await waitFor(() => expect(screen.getByLabelText('Family').querySelectorAll('option').length).toBeGreaterThan(1))
+  expect(screen.getByLabelText('PPA solar 60%')).toBeChecked()
+  expect(screen.getByText('The canvas shows case PPA solar 60%; it is ticked below.')).toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('Family'), { target: { value: family } })
+  fireEvent.click(screen.getByRole('button', { name: 'Calculate' }))
+  await waitFor(() => expect(api.impact).toHaveBeenCalled())
+  expect(vi.mocked(api.impact).mock.calls[0][1]).toMatchObject({ variants: ['PPA solar 60%'] })
+})
+
+it('opens the setup form with nothing ticked while the canvas shows the base values', async () => {
+  withCase('PPA solar 60%')
+  useUi.setState({ canvasSystemId: id, canvasVariant: null })
+  renderAt(`/systems/${id}/results/setup`, <Screens />)
+  await waitFor(() => expect(screen.getByLabelText('Family').querySelectorAll('option').length).toBeGreaterThan(1))
+  expect(screen.getByLabelText('PPA solar 60%')).not.toBeChecked()
+  expect(screen.getByLabelText(system.value.cases[0].name)).not.toBeChecked()
+  expect(screen.queryByText(/The canvas shows/)).not.toBeInTheDocument()
+})
+
+it('calculates a case whose name holds a comma', async () => {
+  vi.mocked(api.system).mockResolvedValue({ ...system, value: { ...system.value, cases: [{ ...system.value.cases[0], name: 'a, b' }] } } as SystemRead)
+  renderAt(`/systems/${id}/results/setup`, <Screens />)
+  await waitFor(() => expect(screen.getByLabelText('Family').querySelectorAll('option').length).toBeGreaterThan(1))
+  fireEvent.change(screen.getByLabelText('Family'), { target: { value: family } })
+  fireEvent.click(screen.getByLabelText('a, b'))
+  fireEvent.click(screen.getByRole('button', { name: 'Calculate' }))
+  await waitFor(() => expect(api.impact).toHaveBeenCalled())
+  expect(vi.mocked(api.impact).mock.calls[0][1]).toMatchObject({ variants: ['a, b'] })
 })

@@ -8,7 +8,7 @@ const searched = (n: number): Call => ({
   ...base,
   id: `search-${n}`,
   tool: 'search_processes',
-  summary: { count: 2, more: false, items: [{ label: 'hit', detail: null, kind: 'background', database: 'db', ref: 'r' }], scores: [] },
+  summary: { count: 2, more: false, noun: 'found', items: [{ label: 'hit', detail: null, kind: 'background', database: 'db', ref: 'r' }], scores: [], demand: null },
 })
 
 describe('folded', () => {

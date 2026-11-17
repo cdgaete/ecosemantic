@@ -38,8 +38,8 @@ from ecosemantic.mcp.linking import moved_by
 from ecosemantic.mcp.panels import panel
 from ecosemantic.mcp.treatments import named_backwards, treatments_of
 from ecosemantic.model.canonical import base_pin, stale
-from ecosemantic.model.entities import DemandItem, Method, ProductSystem, nearest_names
-from ecosemantic.model.refs import BackgroundRef, Database, ForegroundRef
+from ecosemantic.model.entities import Method, ProductSystem, nearest_names
+from ecosemantic.model.refs import BackgroundRef, Database, DemandItem, ForegroundRef
 from ecosemantic.model.validation import credit_loops, reference_of
 from ecosemantic.ports.calculation import CUTOFF, MAX_LEVEL, MAX_NODES, TOP_N, CalculationPort
 from ecosemantic.ports.inventory import InventoryPort
@@ -157,11 +157,12 @@ async def impact_of(
     linked: dict[uuid.UUID, ProductSystem] | None = None,
     treatments: frozenset[BackgroundRef] | None = None,
 ) -> ImpactResult:
-    """The scores of a materialised product system and of each named variant against them, with
-    the uncertainty of both when a Monte Carlo block is given. `linked` holds every system the
-    base reaches through its links, each at its pin and materialised; given the background's
-    `treatments`, the base and each variant name every exchange sending a positive amount to
-    one."""
+    """The scores of a materialised product system and of each named variant against them, for
+    the demand as the port takes it: the one given, or a unit of the base's reference process,
+    which the answer carries. The uncertainty of both is scored when a Monte Carlo block is
+    given. `linked` holds every system the base reaches through its links, each at its pin and
+    materialised; given the background's `treatments`, the base and each variant name every
+    exchange sending a positive amount to one."""
     linked = linked or {}
     inside = linked_credit_loops(linked.values())
     items = demand_of(base, demand)
@@ -177,6 +178,7 @@ async def impact_of(
         database=base.database,
         methods=methods,
         scores=scores,
+        demand=items,
         credit_loops=credit_loops(base),
         linked_credit_loops=inside,
         uncertainty=uncertainty,
@@ -226,7 +228,7 @@ def result_link(
     results editor reads: the method, the variants, and the amount of the reference process
     when the demand is that process alone."""
     params = [("method_id", method_id), ("impact_method", impact_method)]
-    params.append(("variants", ",".join(variants) or None))
+    params.extend(("variants", name) for name in variants)
     if (
         demand is not None
         and len(demand) == 1
@@ -508,8 +510,10 @@ def register(server: FastMCP, context: ServerContext) -> None:
             f"max_nodes (default {MAX_NODES}) and folds a branch below cutoff (default "
             f"{CUTOFF}) of the total into a remainder; by='process' and by='flow' answer the "
             f"top_n (default {TOP_N}) largest parts that reach cutoff, and cut says what the "
-            "list leaves out: below, the parts under the cut-off, with their share of the total, "
-            "and unlisted, the parts that reach it past top_n, with their unlisted_share. "
+            "list leaves out: below, the parts under the cut-off, and unlisted, the parts that "
+            "reach it past top_n, each counted, with share and unlisted_share the total of their "
+            "magnitudes and below_score and unlisted_score the signed total of their scores, so "
+            "the rows listed plus these two make the total. "
             "method names the method once and total names it by method_id. Example: "
             '{"product_system_id": '
             '"…", "by": "path", "method_id": "m_…", "max_level": 4}.'

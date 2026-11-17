@@ -4,6 +4,9 @@ import type { Entity, RequestKind } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/window/Icon'
 import { useUi } from '@/store/ui'
+import { KIND_WORDS, kindLabel } from './kinds'
+
+const NOTE = "An open return or change is counted in the answer to the agent's next write and when it reads the product system."
 
 const ENTITY_ICON: Record<Entity, 'system' | 'process' | 'product' | 'parameter'> = {
   product_system: 'system',
@@ -52,10 +55,12 @@ export function RequestForm({ systemId, atHash, entity, entityId, onDone }: { sy
       <select id="request-kind" className="rounded-sm border bg-background px-1.5 py-0.5" value={kind} onChange={(e) => setKind(e.target.value as RequestKind)}>
         {kinds.map((k) => (
           <option key={k} value={k}>
-            {k}
+            {kindLabel(k, entity)}
           </option>
         ))}
       </select>
+      <span />
+      <span className="text-xs text-muted-foreground">{KIND_WORDS[kind].line}</span>
       {named ? (
         <>
           <span>Entity</span>
@@ -72,7 +77,7 @@ export function RequestForm({ systemId, atHash, entity, entityId, onDone }: { sy
         <Button type="submit" size="sm" disabled={post.isPending}>
           Post request
         </Button>
-        <span className="text-xs text-muted-foreground">Posted at the hash you are looking at. The agent sees the count on its next write or read.</span>
+        <span className="text-xs text-muted-foreground">{NOTE}</span>
       </span>
       {post.error ? <p className="col-span-2 text-destructive">{post.error.message}</p> : null}
     </form>

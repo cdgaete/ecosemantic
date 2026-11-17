@@ -3,7 +3,7 @@ import { menus, type MenuContext, type MenuItem } from '@/window/menus'
 const nothing = (): void => undefined
 
 function context(patch: Partial<MenuContext>): MenuContext {
-  return { systemId: null, resultOpen: false, openRequests: 0, theme: 'ecosemantic', openNavigation: nothing, importFile: nothing, downloadResult: nothing, setPanelMode: nothing, panelMode: 'beside', setTheme: nothing, newRequest: nothing, reorganise: nothing, resetLayout: nothing, ...patch }
+  return { systemId: null, resultOpen: false, openRequests: 0, theme: 'dark', inspector: 'open', inspectorShown: true, openInspector: nothing, closeInspector: nothing, toggleWidened: nothing, openNavigation: nothing, importFile: nothing, downloadResult: nothing, setTheme: nothing, newRequest: nothing, reorganise: nothing, resetLayout: nothing, ...patch }
 }
 
 function seek(items: MenuItem[], key: string): MenuItem | null {
@@ -69,18 +69,18 @@ describe('menus', () => {
     expect(find(all({}), 'results').disabled).toBe(true)
   })
 
-  it('offer the panel the two states it is not in', () => {
-    const labels = (mode: 'beside' | 'expanded' | 'collapsed'): string[] =>
-      (find(all({ systemId: 's1', panelMode: mode }), 'panel').items ?? []).filter((item) => !item.disabled).map((item) => item.label)
-    expect(labels('beside')).toEqual(['Expand', 'Collapse'])
-    expect(labels('expanded')).toEqual(['Beside the graph', 'Collapse'])
-    expect(labels('collapsed')).toEqual(['Beside the graph', 'Expand'])
+  it('offer the inspector the states it is not in', () => {
+    const labels = (patch: Partial<MenuContext>): string[] =>
+      (find(all({ systemId: 's1', ...patch }), 'inspector').items ?? []).filter((item) => !item.disabled).map((item) => item.label)
+    expect(labels({ inspector: 'open', inspectorShown: true })).toEqual(['Widen', 'Close'])
+    expect(labels({ inspector: 'widened', inspectorShown: true })).toEqual(['Return to width', 'Close'])
+    expect(labels({ inspector: 'closed', inspectorShown: false })).toEqual(['Open', 'Widen'])
   })
 
-  it('offer the three themes in order, the current one ticked', () => {
-    const themes = find(all({ systemId: 's1', theme: 'cobalt' }), 'theme').items ?? []
-    expect(themes.map((item) => item.key)).toEqual(['theme-cobalt', 'theme-ecosemantic', 'theme-openlca'])
-    expect(themes.map((item) => item.label)).toEqual(['✓ Cobalt', 'EcoSemantic', 'openLCA'])
+  it('offer the light and the dark theme in order, the current one ticked', () => {
+    const themes = find(all({ systemId: 's1', theme: 'light' }), 'theme').items ?? []
+    expect(themes.map((item) => item.key)).toEqual(['theme-light', 'theme-dark'])
+    expect(themes.map((item) => item.label)).toEqual(['✓ Light', 'Dark'])
   })
 
   it('count the open requests', () => {

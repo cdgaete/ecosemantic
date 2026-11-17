@@ -4,15 +4,20 @@ import type {
   Answer,
   BackgroundProcess,
   Call,
+  ClassificationNode,
+  ClassificationScheme,
+  Compartment,
   ContributionArguments,
   ContributionResult,
   Credential,
   CredentialKind,
   Database,
   DatabaseSource,
+  DatabaseSummary,
   ElementaryFlow,
   ElementaryFlowHit,
   ErrorEnvelope,
+  Factor,
   ImpactArguments,
   ImpactResult,
   InventoryArguments,
@@ -24,7 +29,9 @@ import type {
   ParameterSpace,
   Arrangement,
   Method,
+  MethodFamily,
   MonteCarloConfig,
+  Page,
   ProcessHit,
   ProductSystem,
   Request,
@@ -139,6 +146,30 @@ export const api = {
     call<Listing<Method>>(`${databases}/${database}/methods${query(params)}`),
   backgroundProcess: (database: string, ref: string) => call<Answer<BackgroundProcess>>(`${databases}/${database}/processes/${ref}`),
   elementaryFlow: (database: string, id: string) => call<Answer<ElementaryFlow>>(`${databases}/${database}/elementary-flows/${id}`),
+  summary: (database: string) =>
+    call<Answer<DatabaseSummary>>(`${databases}/${encodeURIComponent(database)}/summary`),
+  schemes: (database: string) =>
+    call<Answer<ClassificationScheme[]>>(`${databases}/${encodeURIComponent(database)}/classifications`),
+  tree: (database: string, scheme: string) =>
+    call<Answer<ClassificationNode[]>>(
+      `${databases}/${encodeURIComponent(database)}/classifications/${encodeURIComponent(scheme)}`,
+    ),
+  underNode: (database: string, scheme: string, params: { node: string; query?: string; limit?: number; cursor?: string }) =>
+    call<Answer<Page<ProcessHit>>>(
+      `${databases}/${encodeURIComponent(database)}/classifications/${encodeURIComponent(scheme)}/processes${query(params)}`,
+    ),
+  compartments: (database: string) =>
+    call<Answer<Compartment[]>>(`${databases}/${encodeURIComponent(database)}/compartments`),
+  flowsIn: (database: string, compartment: string, params: { sub_compartment?: string; query?: string; limit?: number; cursor?: string }) =>
+    call<Answer<Page<ElementaryFlowHit>>>(
+      `${databases}/${encodeURIComponent(database)}/compartments/${encodeURIComponent(compartment)}/flows${query(params)}`,
+    ),
+  methodTree: (database: string) =>
+    call<Answer<MethodFamily[]>>(`${databases}/${encodeURIComponent(database)}/impact-methods`),
+  factors: (database: string, id: string, params: { query?: string; limit?: number; cursor?: string }) =>
+    call<Answer<Page<Factor>>>(
+      `${databases}/${encodeURIComponent(database)}/impact-methods/${encodeURIComponent(id)}/factors${query(params)}`,
+    ),
   systems: (signal?: AbortSignal) => call<Answer<SystemCard[]>>(systems, { signal }),
   system: (id: string, signal?: AbortSignal) => call<SystemRead>(`${systems}/${id}`, { signal }),
   systemAs: (id: string, variant: string) => call<SystemRead>(`${systems}/${id}?variant=${encodeURIComponent(variant)}`),

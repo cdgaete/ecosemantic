@@ -416,6 +416,7 @@
           "anyOf": [
             {
               "items": {
+                "description": "One process a demand asks for, and how much of it.",
                 "properties": {
                   "amount": {
                     "type": "number"
@@ -602,7 +603,7 @@
           "default": null
         },
         "value": {
-          "description": "The characterised score of a product system over the database build `database` names,\nwith variants and uncertainty, the processes of each loop holding a credit, whose delivery\nno check decides, the links the score was taken behind, and each exchange sending a\npositive amount to a treatment, which runs it backwards and scores its emissions as\ncredits. `methods` lists every method scored once, in the order `scores`, each variant's\n`scores` and each Monte Carlo category follow, and a score names its method by\n`method_id`.",
+          "description": "The characterised score of a product system over the database build `database` names, for\nthe `demand` it scored: each item's reference and amount, with the one the calculation\nresolved to when the caller named none. It carries variants and uncertainty, the processes of\neach loop holding a credit, whose delivery no check decides, the links the score was taken\nbehind, and each exchange sending a positive amount to a treatment, which runs it backwards\nand scores its emissions as credits. `methods` lists every method scored once, in the order\n`scores`, each variant's `scores` and each Monte Carlo category follow, and a score names its\nmethod by `method_id`.",
           "properties": {
             "credit_loops": {
               "items": {
@@ -655,6 +656,65 @@
                 "system_model"
               ],
               "type": "object"
+            },
+            "demand": {
+              "items": {
+                "description": "One process a demand asks for, and how much of it.",
+                "properties": {
+                  "amount": {
+                    "type": "number"
+                  },
+                  "ref": {
+                    "anyOf": [
+                      {
+                        "description": "A process in a background database, by that database's native id.",
+                        "properties": {
+                          "database": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "background",
+                            "default": "background",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "database",
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "description": "A process in this product system.",
+                        "properties": {
+                          "code": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "foreground",
+                            "default": "foreground",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "code"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "ref",
+                  "amount"
+                ],
+                "type": "object"
+              },
+              "type": "array"
             },
             "linked_credit_loops": {
               "items": {
@@ -1543,6 +1603,7 @@
             "database",
             "methods",
             "scores",
+            "demand",
             "credit_loops"
           ],
           "type": "object"
@@ -1603,6 +1664,7 @@
           "anyOf": [
             {
               "items": {
+                "description": "One process a demand asks for, and how much of it.",
                 "properties": {
                   "amount": {
                     "type": "number"
@@ -2402,6 +2464,7 @@
             },
             "demand": {
               "items": {
+                "description": "One process a demand asks for, and how much of it.",
                 "properties": {
                   "amount": {
                     "type": "number"
@@ -2961,7 +3024,7 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "Decompose one impact. by='process' partitions the total over the processes that emit it, each appearing once. by='path' nests it under the demanded process along the supply chain that caused it, with elementary flows itemised at each node. by='flow' partitions it over the substances emitted or drawn, ranked by characterised score. Same total every way. by='path' stops at max_level (default 3) and max_nodes (default 50) and folds a branch below cutoff (default 0.001) of the total into a remainder; by='process' and by='flow' answer the top_n (default 10) largest parts that reach cutoff, and cut says what the list leaves out: below, the parts under the cut-off, with their share of the total, and unlisted, the parts that reach it past top_n, with their unlisted_share. method names the method once and total names it by method_id. Example: {\"product_system_id\": \"\u2026\", \"by\": \"path\", \"method_id\": \"m_\u2026\", \"max_level\": 4}.",
+    "description": "Decompose one impact. by='process' partitions the total over the processes that emit it, each appearing once. by='path' nests it under the demanded process along the supply chain that caused it, with elementary flows itemised at each node. by='flow' partitions it over the substances emitted or drawn, ranked by characterised score. Same total every way. by='path' stops at max_level (default 3) and max_nodes (default 50) and folds a branch below cutoff (default 0.001) of the total into a remainder; by='process' and by='flow' answer the top_n (default 10) largest parts that reach cutoff, and cut says what the list leaves out: below, the parts under the cut-off, and unlisted, the parts that reach it past top_n, each counted, with share and unlisted_share the total of their magnitudes and below_score and unlisted_score the signed total of their scores, so the rows listed plus these two make the total. method names the method once and total names it by method_id. Example: {\"product_system_id\": \"\u2026\", \"by\": \"path\", \"method_id\": \"m_\u2026\", \"max_level\": 4}.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -2982,6 +3045,7 @@
           "anyOf": [
             {
               "items": {
+                "description": "One process a demand asks for, and how much of it.",
                 "properties": {
                   "amount": {
                     "type": "number"
@@ -3224,10 +3288,13 @@
           "type": "object"
         },
         "Cut": {
-          "description": "What a flat contribution list leaves out, each share summed in magnitude as the cut-off\ncompares them: the share of the total the cut-off was set at, how many parts fell under it\nand their share, and how many parts reach it past the list's length and their share.",
+          "description": "What a flat contribution list leaves out: the share of the total the cut-off was set at,\nhow many parts fell under it and their share, and how many parts reach it past the list's\nlength and their share. A share sums the magnitudes of its parts, as the cut-off compares\nthem; `below_score` and `unlisted_score` sum their scores as they are signed, so the listed\nscores plus both make the total.",
           "properties": {
             "below": {
               "type": "integer"
+            },
+            "below_score": {
+              "type": "number"
             },
             "cutoff": {
               "type": "number"
@@ -3238,6 +3305,9 @@
             "unlisted": {
               "type": "integer"
             },
+            "unlisted_score": {
+              "type": "number"
+            },
             "unlisted_share": {
               "type": "number"
             }
@@ -3246,8 +3316,10 @@
             "cutoff",
             "below",
             "share",
+            "below_score",
             "unlisted",
-            "unlisted_share"
+            "unlisted_share",
+            "unlisted_score"
           ],
           "type": "object"
         },
@@ -8855,6 +8927,7 @@
             },
             "demand": {
               "items": {
+                "description": "One process a demand asks for, and how much of it.",
                 "properties": {
                   "amount": {
                     "type": "number"
@@ -11750,6 +11823,7 @@
               },
               "demand": {
                 "items": {
+                  "description": "One process a demand asks for, and how much of it.",
                   "properties": {
                     "amount": {
                       "type": "number"
@@ -14602,6 +14676,7 @@
           "anyOf": [
             {
               "items": {
+                "description": "One process a demand asks for, and how much of it.",
                 "properties": {
                   "amount": {
                     "type": "number"
@@ -14833,6 +14908,7 @@
             },
             "demand": {
               "items": {
+                "description": "One process a demand asks for, and how much of it.",
                 "properties": {
                   "amount": {
                     "type": "number"

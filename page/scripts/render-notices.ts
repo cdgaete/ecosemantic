@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs'
-import * as path from 'node:path'
-
 export type Notice = {
   name: string
   version: string
@@ -9,24 +6,7 @@ export type Notice = {
   texts: string[]
 }
 
-type Font = { name: string; version: string; licence: string }
-
-const FONTS: Font[] = [
-  { name: 'Source Sans 3', version: '3.052', licence: 'OFL-SourceSans3.txt' },
-  { name: 'JetBrains Mono', version: '2.211', licence: 'OFL-JetBrainsMono.txt' },
-]
-
 const RULE = '-'.repeat(72)
-
-export function fontNotices(directory: string): Notice[] {
-  return FONTS.map((font) => ({
-    name: font.name,
-    version: font.version,
-    license: 'OFL-1.1',
-    homepage: undefined,
-    texts: [readFileSync(path.join(directory, font.licence), 'utf8')],
-  }))
-}
 
 function entry(notice: Notice): string {
   const head = [`${notice.name} ${notice.version} (${notice.license})`, notice.homepage].filter(Boolean).join('\n')

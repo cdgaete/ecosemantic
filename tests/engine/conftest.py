@@ -4,8 +4,8 @@ import pytest
 
 from ecosemantic.engine.background import Background, Factors, Rows
 from ecosemantic.engine.calculation import Calculation
-from ecosemantic.model.entities import DemandItem, Method
-from ecosemantic.model.refs import Database, ForegroundRef
+from ecosemantic.model.entities import Method
+from ecosemantic.model.refs import Database, DemandItem, ForegroundRef
 from tests.engine_fixture import fixture_background
 from tests.fixture_data import GWP, WATER
 

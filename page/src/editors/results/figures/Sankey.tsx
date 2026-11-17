@@ -57,7 +57,7 @@ function Canvas({ elements, drawn, onExpand }: { elements: ReturnType<typeof san
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
-        colorMode={theme === 'ecosemantic' ? 'dark' : 'light'}
+        colorMode={theme}
         proOptions={{ hideAttribution: true }}
       >
         <Background />

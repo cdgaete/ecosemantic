@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from ecosemantic.errors import Invalid
 from ecosemantic.model.entities import Exchange, Process, ProductSystem
 from ecosemantic.model.refs import ElementaryFlowRef, ForegroundRef, SystemRef
+from ecosemantic.model.summary import SummaryItem
 from ecosemantic.model.units import symbol
 from ecosemantic.ports.types import Side
 from ecosemantic.quantity import written
@@ -81,6 +82,10 @@ class Placement(BaseModel):
     output: float
     activity: float | None = None
     scaled: dict[uuid.UUID, float] | None = None
+
+    def summary_item(self) -> SummaryItem:
+        """The card as one item a summary lists: the code it is drawn and named by."""
+        return SummaryItem(label=self.code)
 
 
 def _is_input(exchange: Exchange, sides: Mapping[str, Side]) -> bool:

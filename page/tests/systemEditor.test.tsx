@@ -3,6 +3,7 @@ import { renderAt } from './render'
 import { App, Screens } from '@/App'
 import { api } from '@/api/client'
 import type { Answer, Run } from '@/api/types'
+import { formatAgo } from '@/lib/format'
 import system from './fixtures/system.json'
 import validation from './fixtures/validation.json'
 import anchors from './fixtures/anchors.json'
@@ -44,12 +45,28 @@ describe('system editor', () => {
 
   it('lists the log on its page', async () => {
     renderAt(`/systems/${system.value.id}/log`, <App router={false} />)
-    await waitFor(() => expect(screen.getByText(log.value[0].message)).toBeInTheDocument())
+    const inspector = await screen.findByRole('complementary', { name: 'Inspector' })
+    await waitFor(() => expect(within(inspector).getByText(log.value[0].message)).toBeInTheDocument())
   })
 
   it('lists the requests on its page', async () => {
     renderAt(`/systems/${system.value.id}/requests`, <App router={false} />)
     await waitFor(() => expect(screen.getByText(requests.value[0].message)).toBeInTheDocument())
+  })
+
+  it('says when a request and its outcome were made as how long ago, keeping each instant on it', async () => {
+    renderAt(`/systems/${system.value.id}/requests`, <App router={false} />)
+    const answered = requests.value[1]
+    const outcome = answered.outcome!
+    const row = (await screen.findByText(answered.message)).closest('li') as HTMLElement
+    const stamps = [...row.querySelectorAll('time')]
+    expect(stamps).toHaveLength(2)
+    expect(stamps[0].getAttribute('datetime')).toBe(answered.timestamp)
+    expect(stamps[0].getAttribute('title')).toBe(answered.timestamp)
+    expect(stamps[0].textContent).toBe(formatAgo(answered.timestamp))
+    expect(stamps[1].getAttribute('datetime')).toBe(outcome.timestamp)
+    expect(stamps[1].getAttribute('title')).toBe(outcome.timestamp)
+    expect(stamps[1].textContent).toBe(formatAgo(outcome.timestamp))
   })
 
   it('lists the simulations, each opening its editor', async () => {
@@ -67,5 +84,15 @@ describe('system editor', () => {
     // App's own client already holds the runs read above; Screens reads through a fresh one
     renderAt(`/systems/${system.value.id}/simulations`, <Screens />)
     await waitFor(() => expect(screen.getByText(/an earlier state/)).toBeInTheDocument())
+  })
+
+  it('names each request by what it asks of the agent', async () => {
+    renderAt(`/systems/${system.value.id}/requests`, <App router={false} />)
+    const returned = requests.value[0]
+    const returnedRow = (await screen.findByText(returned.message)).closest('li') as HTMLElement
+    expect(within(returnedRow).getByText('Return with an objection')).toBeInTheDocument()
+    const changed = requests.value[1]
+    const changedRow = (await screen.findByText(changed.message)).closest('li') as HTMLElement
+    expect(within(changedRow).getByText('Ask for a change to')).toBeInTheDocument()
   })
 })

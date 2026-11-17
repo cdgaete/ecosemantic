@@ -22,6 +22,14 @@ export const keys = {
   background: (database: string, ref: string) => ['background', database, ref] as const,
   flow: (database: string, id: string) => ['flow', database, id] as const,
   search: (database: string, kind: string, params: Record<string, string | number | undefined>) => ['search', database, kind, params] as const,
+  summary: (database: string) => ['summary', database] as const,
+  schemes: (database: string) => ['schemes', database] as const,
+  tree: (database: string, scheme: string) => ['tree', database, scheme] as const,
+  underNode: (database: string, scheme: string, params: Record<string, string | number | undefined>) => ['under-node', database, scheme, params] as const,
+  compartments: (database: string) => ['compartments', database] as const,
+  flowsIn: (database: string, compartment: string, params: Record<string, string | number | undefined>) => ['flows-in', database, compartment, params] as const,
+  methodTree: (database: string) => ['method-tree', database] as const,
+  factors: (database: string, id: string, params: Record<string, string | number | undefined>) => ['factors', database, id, params] as const,
   impacts: (id: string) => ['impact', id] as const,
   impact: (id: string, hash: string, body: ImpactArguments) => ['impact', id, hash, body] as const,
   calculations: (id: string) => ['calculations', id] as const,
@@ -40,13 +48,21 @@ export const keys = {
 export const forever = { staleTime: Infinity, gcTime: 30 * 60 * 1000 }
 
 export const useDatabases = () => useQuery({ queryKey: keys.databases, queryFn: api.databases, ...forever })
-export const useVocabulary = (database: string, kind: VocabularyKind) =>
-  useQuery({ queryKey: keys.vocabulary(database, kind), queryFn: () => api.vocabulary(database, kind), ...forever })
+export const useVocabulary = (database: string, kind: VocabularyKind, enabled = true) =>
+  useQuery({ queryKey: keys.vocabulary(database, kind), queryFn: () => api.vocabulary(database, kind), enabled, ...forever })
+export const useCompartments = (database: string, enabled = true) =>
+  useQuery({
+    queryKey: keys.vocabulary(database, 'compartments'),
+    queryFn: () => api.vocabulary(database, 'compartments'),
+    select: (answer) => answer.value.filter((term) => !term.value.includes('/')),
+    enabled,
+    ...forever,
+  })
 export const useSystems = () => useQuery({ queryKey: keys.systems, queryFn: ({ signal }) => api.systems(signal), ...forever })
 export const useSystem = (id: string, enabled = true) => useQuery({ queryKey: keys.system(id), queryFn: ({ signal }) => api.system(id, signal), enabled, ...forever })
 export const useSystemAs = (id: string, variant: string | null) =>
   useQuery({ queryKey: [...keys.system(id), 'variant', variant] as const, queryFn: () => api.systemAs(id, variant!), enabled: variant !== null, ...forever })
-export const useLog = (id: string) => useQuery({ queryKey: keys.log(id), queryFn: ({ signal }) => api.log(id, signal), ...forever })
+export const useLog = (id: string, enabled = true) => useQuery({ queryKey: keys.log(id), queryFn: ({ signal }) => api.log(id, signal), enabled, ...forever })
 export const useParameters = (id: string, hash: string | null) =>
   useQuery({ queryKey: keys.parameters(id, hash), queryFn: () => api.parameters(id, hash ?? undefined), ...forever })
 export const useValidation = (id: string, enabled = true) => useQuery({ queryKey: keys.validation(id), queryFn: ({ signal }) => api.validation(id, undefined, signal), enabled, ...forever })
@@ -55,8 +71,10 @@ export const useAgents = () => useQuery({ queryKey: keys.agents, queryFn: ({ sig
 export const useCalls = (id: string, after: string | null, enabled = true) =>
   useQuery({ queryKey: keys.calls(id, after), queryFn: () => api.activity({ product_system_id: id, after: after ?? undefined }), enabled, ...forever })
 export const useTrail = (id: string, seq: number, enabled = true) => useQuery({ queryKey: keys.trail(id, seq), queryFn: () => api.trail(id, seq), enabled, ...forever })
-export const useOpenTrail = (agent: string, systemId: string) =>
-  useQuery({ queryKey: [...keys.openTrail(agent), systemId], queryFn: ({ signal }) => api.openTrail(agent, systemId, signal), ...forever })
+export function openTrailQuery(agent: string, systemId: string) {
+  return { queryKey: [...keys.openTrail(agent), systemId], queryFn: ({ signal }: { signal: AbortSignal }) => api.openTrail(agent, systemId, signal), ...forever }
+}
+export const useOpenTrail = (agent: string, systemId: string) => useQuery(openTrailQuery(agent, systemId))
 export const useRerun = () => useMutation({ mutationFn: (callId: string) => api.rerun(callId) })
 export const useRequests = (id: string) => useQuery({ queryKey: keys.requests(id), queryFn: () => api.requests(id), ...forever })
 export const useVersion = (id: string, hash: string) => useQuery({ queryKey: keys.version(id, hash), queryFn: () => api.version(id, hash), ...forever })
@@ -70,6 +88,37 @@ export const useSearchElementaryFlows = (database: string, params: { query: stri
   useQuery({ queryKey: keys.search(database, 'elementary-flows', params), queryFn: () => api.searchElementaryFlows(database, params), enabled: params.query.length > 0, ...forever })
 export const useSearchMethods = (database: string, params: { query: string; limit?: number; cursor?: string }) =>
   useQuery({ queryKey: keys.search(database, 'methods', params), queryFn: () => api.searchMethods(database, params), enabled: params.query.length > 0, ...forever })
+export const useSummary = (database: string) =>
+  useQuery({ queryKey: keys.summary(database), queryFn: () => api.summary(database), ...forever })
+export const useSchemes = (database: string) =>
+  useQuery({ queryKey: keys.schemes(database), queryFn: () => api.schemes(database), ...forever })
+export const useTree = (database: string, scheme: string | null) =>
+  useQuery({ queryKey: keys.tree(database, scheme ?? ''), queryFn: () => api.tree(database, scheme!), enabled: Boolean(scheme), ...forever })
+export const useUnderNode = (database: string, scheme: string | null, params: { node: string; query?: string; limit?: number; cursor?: string }) =>
+  useQuery({
+    queryKey: keys.underNode(database, scheme ?? '', params),
+    queryFn: () => api.underNode(database, scheme!, params),
+    enabled: Boolean(scheme) && params.node.length > 0,
+    ...forever,
+  })
+export const useCompartmentList = (database: string) =>
+  useQuery({ queryKey: keys.compartments(database), queryFn: () => api.compartments(database), ...forever })
+export const useFlowsIn = (database: string, compartment: string | null, params: { sub_compartment?: string; query?: string; limit?: number; cursor?: string }) =>
+  useQuery({
+    queryKey: keys.flowsIn(database, compartment ?? '', params),
+    queryFn: () => api.flowsIn(database, compartment!, params),
+    enabled: Boolean(compartment),
+    ...forever,
+  })
+export const useMethodTree = (database: string) =>
+  useQuery({ queryKey: keys.methodTree(database), queryFn: () => api.methodTree(database), ...forever })
+export const useFactors = (database: string, id: string | null, params: { query?: string; limit?: number; cursor?: string }) =>
+  useQuery({
+    queryKey: keys.factors(database, id ?? '', params),
+    queryFn: () => api.factors(database, id!, params),
+    enabled: Boolean(id),
+    ...forever,
+  })
 export const useImpact = (id: string, hash: string, body: ImpactArguments, enabled = true, started: () => boolean = () => false) =>
   useQuery({ queryKey: keys.impact(id, hash, body), queryFn: () => api.impact(id, body, started()), enabled, ...forever })
 export const useCalculations = (id: string, enabled = true) => useQuery({ queryKey: keys.calculations(id), queryFn: () => api.calculations(id), enabled, ...forever })
@@ -104,10 +153,10 @@ export function usePlaceCards(id: string, variant: string | null) {
   })
 }
 
-export function useReleaseCards(id: string) {
+export function useReleaseCards(id: string, variant: string | null) {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: () => api.releaseCards(id),
+    mutationFn: () => api.releaseCards(id, variant),
     onSuccess: () => void client.invalidateQueries({ queryKey: keys.layouts(id) }),
   })
 }

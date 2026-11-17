@@ -17,8 +17,8 @@ from ecosemantic.backends.native.store import NativeStore, install_lock
 from ecosemantic.engine.background import Background
 from ecosemantic.engine.calculation import Calculation
 from ecosemantic.errors import Conflict, Invalid, NotFound, NotSupported
-from ecosemantic.model.entities import DemandItem, Method
-from ecosemantic.model.refs import BackgroundRef
+from ecosemantic.model.entities import Method
+from ecosemantic.model.refs import BackgroundRef, DemandItem
 from ecosemantic.package.background import Import, Unlinked, read_background
 from ecosemantic.package.base_writer import write_base_bundle
 from tests.engine_fixture import NOW, fixture_bundle, fixture_rows, served_build
@@ -83,7 +83,18 @@ def test_the_catalog_holds_the_datasets_exchanges_flows_methods_and_terms(
         " FROM processes WHERE native_id = ?",
         [CODES["steel"]],
     ).fetchone()
-    assert steel == ("steel production", "steel", "GLO", "kilogram", [], None, None)
+    assert steel == (
+        "steel production",
+        "steel",
+        "GLO",
+        "kilogram",
+        [
+            "ISIC rev.4 ecoinvent: 2410:Manufacture of basic iron and steel",
+            "EcoSpold01Categories: metals/production",
+        ],
+        None,
+        None,
+    )
     exchanges = catalog.execute(
         'SELECT position, type, side, "reference", input, flow, supplier, amount, unit, cut_off'
         " FROM exchanges WHERE process = ? ORDER BY position",

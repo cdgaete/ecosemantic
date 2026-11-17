@@ -29,3 +29,7 @@ export function RequestsBadge({ id }: { id: string }) {
     </AppLink>
   )
 }
+
+export function CanvasBadge() {
+  return <span className="shrink-0 rounded-full bg-selected px-1.5 text-xs font-normal text-muted-foreground">on the canvas</span>
+}

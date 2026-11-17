@@ -1,0 +1,46 @@
+{
+  "hint": null,
+  "value": {
+    "has_more": false,
+    "items": [
+      {
+        "location": "GLO",
+        "name": "aluminium production",
+        "ref": {
+          "database": "fixture",
+          "id": "520b60e5-838c-591e-9da7-60958419ac2d_a4bc4402-a6d0-585d-8103-31cc829d3145",
+          "kind": "background"
+        },
+        "reference_product": "aluminium",
+        "relevance": 0.0,
+        "unit": "kilogram"
+      },
+      {
+        "location": "GLO",
+        "name": "copper production",
+        "ref": {
+          "database": "fixture",
+          "id": "51160002-5cad-5229-9b05-7912f64a7e1d_782e8b2a-2745-5636-ba7e-37c6afb6f2f5",
+          "kind": "background"
+        },
+        "reference_product": "copper",
+        "relevance": 0.0,
+        "unit": "kilogram"
+      },
+      {
+        "location": "GLO",
+        "name": "steel production",
+        "ref": {
+          "database": "fixture",
+          "id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c",
+          "kind": "background"
+        },
+        "reference_product": "steel",
+        "relevance": 0.0,
+        "unit": "kilogram"
+      }
+    ],
+    "next_cursor": null
+  },
+  "view_url": null
+}

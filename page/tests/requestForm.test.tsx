@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { renderAt } from './render'
 import { RequestForm } from '@/requests/RequestForm'
 import { useUi } from '@/store/ui'
@@ -39,5 +39,30 @@ describe('request form', () => {
     fireEvent.click(screen.getByText('Post request'))
     await waitFor(() => expect(posted).toHaveBeenCalled())
     expect(posted.mock.calls[0][1]).toEqual({ actor: 'Carlos', kind: 'return', at_hash: 'h1', message: 'the transport distance looks high' })
+  })
+
+  it('names each kind by what it does, and says what the chosen one does', () => {
+    useUi.setState({ person: 'Carlos' })
+    renderAt('/', <RequestForm systemId="s1" atHash="h1" onDone={() => {}} />)
+    const select = screen.getByLabelText('Kind')
+    expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual(['Return with an objection', 'Approve'])
+    expect(screen.getByText('The agent is asked to answer it, and it stays open until it is resolved.')).toBeInTheDocument()
+    fireEvent.change(select, { target: { value: 'approve' } })
+    expect(screen.getByText('Recorded beside the model: never counted, never open.')).toBeInTheDocument()
+    expect(
+      screen.getByText("An open return or change is counted in the answer to the agent's next write and when it reads the product system."),
+    ).toBeInTheDocument()
+  })
+
+  it('offers a change to the entity it was opened from, and says the change stays open', () => {
+    useUi.setState({ person: 'Carlos' })
+    renderAt('/', <RequestForm systemId="s1" atHash="h1" entity="process" entityId="tshirt" onDone={() => {}} />)
+    const select = screen.getByLabelText('Kind')
+    expect(within(select).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'Ask for a change to process',
+      'Return with an objection',
+      'Approve',
+    ])
+    expect(screen.getByText('It stays open until it is resolved.')).toBeInTheDocument()
   })
 })

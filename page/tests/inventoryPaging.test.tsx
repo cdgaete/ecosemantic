@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { App } from '@/App'
 import { api } from '@/api/client'
 import { renderAt } from './render'
@@ -31,6 +31,23 @@ vi.mock('@/api/client', async (importOriginal) => {
 })
 
 const search = `?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`
+
+it('folds the columns the panel cannot hold under the flow name', async () => {
+  renderAt(`/systems/${system.value.id}/results/inventory${search}`, <App router={false} />)
+  const section = (await screen.findByText('Outputs')).closest('section')!
+  const table = await waitFor(() => within(section).getByRole('table'))
+  await waitFor(() => expect(within(table).getByText(inventory.items[0].name)).toBeInTheDocument())
+  for (const name of ['Compartment', 'Sub-compartment', 'Dominant process']) expect(within(table).getByRole('columnheader', { name })).toHaveClass('hidden', '@lg:table-cell')
+  for (const name of ['Name', 'Amount', 'Unit']) expect(within(table).getByRole('columnheader', { name })).not.toHaveClass('hidden')
+  const row = within(table).getAllByRole('row')[1]
+  const cells = within(row).getAllByRole('cell')
+  expect(cells[1]).toHaveClass('hidden', '@lg:table-cell')
+  expect(cells[2]).toHaveClass('hidden', '@lg:table-cell')
+  expect(cells[5]).toHaveClass('hidden', '@lg:table-cell')
+  const item = inventory.items[0]
+  const folded = [...cells[0].children].filter((el) => el.className.includes('@lg:hidden'))
+  expect(folded.map((el) => el.textContent?.trim())).toEqual([`Compartment: ${item.compartment}`, 'Sub-compartment:', `Dominant process: ${item.source?.code}`])
+})
 
 it('pages the inventory forward and back, with its pager rather than the cursor hint', async () => {
   renderAt(`/systems/${system.value.id}/results/inventory${search}`, <App router={false} />)

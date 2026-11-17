@@ -6,8 +6,8 @@ from ecosemantic.backends.native.calculation import NativeCalculation
 from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.errors import Invalid
 from ecosemantic.model.canonical import content_hash
-from ecosemantic.model.entities import DemandItem, Exchange, Method, ProductSystem
-from ecosemantic.model.refs import ForegroundRef
+from ecosemantic.model.entities import Exchange, Method, ProductSystem
+from ecosemantic.model.refs import DemandItem, ForegroundRef
 from ecosemantic.ports.types import LinkedLoop, MonteCarloConfig, System
 from tests.conftest import fixture_system, frame_system, widget_linking
 from tests.engine.test_montecarlo import feeding, lognormal, looped_demand

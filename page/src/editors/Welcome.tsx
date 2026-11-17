@@ -1,19 +1,24 @@
 import { useDatabases, useLog, useSources, useSystem, useSystems } from '@/api/queries'
 import type { SystemCard } from '@/api/types'
 import { formatAgo } from '@/lib/format'
+import { distinguishingId, sharedNames } from '@/lib/names'
 import { paths, useGo } from '@/lib/paths'
 import { AppLink } from '@/lib/router'
-import { ValidationBadge } from '@/window/Badges'
+import { useUi } from '@/store/ui'
+import { CanvasBadge, ValidationBadge } from '@/window/Badges'
 import { DataTable, type Column } from '@/window/DataTable'
 import { Icon } from '@/window/Icon'
 import { SourceList } from './databases/SourceList'
 
-function Name({ card }: { card: SystemCard }) {
+function Name({ card, shared, current }: { card: SystemCard; shared: Set<string>; current: boolean }) {
+  const id = distinguishingId(card, shared)
   return (
     <span className="block min-w-0">
-      <AppLink to={paths.system(card.id)} className="flex items-center gap-2 font-medium hover:underline">
+      <AppLink to={paths.system(card.id)} aria-current={current ? 'true' : undefined} className="flex items-center gap-2 font-medium hover:underline">
         <Icon name="system" />
         <span className="break-words">{card.name}</span>
+        {id ? <span className="shrink-0 text-xs font-normal text-muted-foreground">{id}</span> : null}
+        {current ? <CanvasBadge /> : null}
       </AppLink>
       {card.description ? (
         <span className="line-clamp-2 text-xs text-muted-foreground" title={card.description}>
@@ -53,28 +58,32 @@ function OpenRequests({ id }: { id: string }) {
   ) : null
 }
 
-const COLUMNS: Column<SystemCard>[] = [
-  { key: 'name', header: 'Name', render: (card) => <Name card={card} /> },
-  { key: 'database', header: 'Database', render: (card) => card.database },
-  { key: 'processes', header: 'Processes', align: 'right', render: (card) => <ProcessCount id={card.id} /> },
-  { key: 'change', header: 'Last change', render: (card) => <LastChange id={card.id} /> },
-  { key: 'validation', header: 'Validation', render: (card) => <ValidationBadge id={card.id} /> },
-  { key: 'requests', header: 'Requests', render: (card) => <OpenRequests id={card.id} /> },
-]
+function columns(shared: Set<string>, canvasSystemId: string | null): Column<SystemCard>[] {
+  return [
+    { key: 'name', header: 'Name', width: 'rest', render: (card) => <Name card={card} shared={shared} current={card.id === canvasSystemId} /> },
+    { key: 'database', header: 'Database', width: 'content', render: (card) => card.database },
+    { key: 'processes', header: 'Processes', align: 'right', width: 'content', render: (card) => <ProcessCount id={card.id} /> },
+    { key: 'change', header: 'Last change', width: 'content', render: (card) => <LastChange id={card.id} /> },
+    { key: 'validation', header: 'Validation', width: 'content', render: (card) => <ValidationBadge id={card.id} /> },
+    { key: 'requests', header: 'Requests', width: 'content', render: (card) => <OpenRequests id={card.id} /> },
+  ]
+}
 
 export function Welcome() {
   const systems = useSystems()
   const databases = useDatabases()
   const sources = useSources()
+  const canvasSystemId = useUi((s) => s.canvasSystemId)
   const go = useGo()
   const cards = systems.data?.value ?? []
+  const shared = sharedNames(cards)
   const installed = databases.data?.value ?? []
   const database = installed[0]?.name ?? null
   return (
     <div className="p-4 text-sm">
       <h1 className="mb-2 text-base font-semibold">Product systems</h1>
       {systems.error ? <p className="text-destructive">{systems.error.message}</p> : null}
-      {cards.length > 0 ? <DataTable columns={COLUMNS} rows={cards} rowKey={(card) => card.id} /> : null}
+      {cards.length > 0 ? <DataTable columns={columns(shared, canvasSystemId)} rows={cards} rowKey={(card) => card.id} /> : null}
       {systems.data && cards.length === 0 && databases.data && installed.length === 0 ? (
         <div className="flex max-w-md flex-col gap-2">
           <p className="text-muted-foreground">No background database is installed. Install one to model on:</p>

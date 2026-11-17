@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useUi } from '@/store/ui'
-import { toggleNavigation } from './navigation'
+import { dismissSheet, sheetShown, toggleInspector } from './inspector'
+import { closeNavigation, toggleNavigation } from './navigation'
 
 export interface Shortcut {
   id: string
@@ -20,21 +21,21 @@ function canvas(command: CanvasCommand): () => void {
   return () => runCanvas(command)
 }
 
+function dismiss(): void {
+  const state = useUi.getState()
+  if (state.navOpen) closeNavigation()
+  else if (sheetShown(state)) dismissSheet()
+  else if (state.toolsOpen) state.setToolsOpen(false)
+}
+
 export const SHORTCUTS: Shortcut[] = [
   { id: 'palette', keys: 'Ctrl+K', label: 'Go to anything, or run a command', run: () => useUi.getState().setPaletteOpen(true) },
   { id: 'navigation', keys: 'Ctrl+B', label: 'Show or hide the navigation', run: toggleNavigation },
-  {
-    id: 'panel',
-    keys: 'Ctrl+Alt+B',
-    label: 'Collapse or show the panel',
-    run: () => {
-      const state = useUi.getState()
-      state.setPanelMode(state.panelMode === 'collapsed' ? 'beside' : 'collapsed')
-    },
-  },
+  { id: 'inspector', keys: 'Ctrl+Alt+B', label: 'Show or hide the inspector', run: toggleInspector },
   { id: 'fit', keys: '1', label: 'Fit the graph to the canvas', run: canvas('fit') },
   { id: 'focus', keys: 'F', label: 'Centre the reference process', run: canvas('focus') },
   { id: 'reorganise', keys: 'R', label: 'Reorganise the graph', run: canvas('reorganise') },
+  { id: 'dismiss', keys: 'Escape', label: 'Close the navigation, the sheet, or the canvas tools', run: dismiss },
 ]
 
 export function keysOf(id: string): string {
@@ -61,7 +62,7 @@ function typing(target: EventTarget | null): boolean {
 export function useShortcuts(): void {
   useEffect(() => {
     const listen = (event: KeyboardEvent) => {
-      if (typing(event.target)) return
+      if (event.defaultPrevented || typing(event.target)) return
       const found = SHORTCUTS.find((shortcut) => pressed(event, shortcut.keys))
       if (!found) return
       event.preventDefault()

@@ -1,0 +1,34 @@
+{
+  "hint": null,
+  "value": {
+    "has_more": false,
+    "items": [
+      {
+        "compartment": "air",
+        "factor": 1.0,
+        "flow": {
+          "database": "fixture-biosphere",
+          "id": "7033761e-a295-5042-bedc-164a1623396b",
+          "kind": "elementary_flow"
+        },
+        "name": "Carbon dioxide, fossil",
+        "sub_compartment": null,
+        "unit": "kilogram"
+      },
+      {
+        "compartment": "air",
+        "factor": 28.0,
+        "flow": {
+          "database": "fixture-biosphere",
+          "id": "0c722450-3926-581f-8be4-c0360f458cde",
+          "kind": "elementary_flow"
+        },
+        "name": "Methane, fossil",
+        "sub_compartment": null,
+        "unit": "kilogram"
+      }
+    ],
+    "next_cursor": null
+  },
+  "view_url": null
+}

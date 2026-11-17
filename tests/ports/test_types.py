@@ -15,8 +15,8 @@ from ecosemantic.errors import (
     NotSupported,
     Unavailable,
 )
-from ecosemantic.model.entities import Actor, DemandItem, Method, ProductSystem, method_by_id
-from ecosemantic.model.refs import ElementaryFlowRef, ForegroundRef
+from ecosemantic.model.entities import Actor, Method, ProductSystem, method_by_id
+from ecosemantic.model.refs import DemandItem, ElementaryFlowRef, ForegroundRef
 from ecosemantic.ports.resolver import FlowInfo
 from ecosemantic.ports.types import (
     FLOW_TYPES,
@@ -25,6 +25,7 @@ from ecosemantic.ports.types import (
     Compartment,
     DatabaseSource,
     ElementaryFlow,
+    Factor,
     Histogram,
     Install,
     InstallDraft,
@@ -43,8 +44,10 @@ from ecosemantic.ports.types import (
     RunPatch,
     RunStatus,
     SourceName,
+    SubCompartment,
     System,
     TreeNode,
+    factor_page,
     flow_side,
     fraction_of,
     is_open,
@@ -249,8 +252,49 @@ def test_a_run_answers_its_cancellation_only_while_it_is_open() -> None:
 def test_compartments_are_tallied_in_name_order_and_an_unplaced_flow_is_not_counted() -> None:
     placed = [("water", "ocean"), ("air", None), ("air", "urban"), ("", None), ("air", "urban")]
     assert Compartment.tally(placed) == [
-        Compartment(name="air", flow_count=3, sub_compartments=["urban"]),
-        Compartment(name="water", flow_count=1, sub_compartments=["ocean"]),
+        Compartment(
+            name="air",
+            flow_count=3,
+            sub_compartments=[SubCompartment(name="urban", flow_count=2)],
+        ),
+        Compartment(
+            name="water",
+            flow_count=1,
+            sub_compartments=[SubCompartment(name="ocean", flow_count=1)],
+        ),
+    ]
+
+
+def _factor(name: str, compartment: str, sub_compartment: str | None) -> Factor:
+    return Factor(
+        flow=ElementaryFlowRef(database="bio", id="0"),
+        name=name,
+        compartment=compartment,
+        sub_compartment=sub_compartment,
+        unit="kilogram",
+        factor=1.0,
+    )
+
+
+def test_factors_are_ordered_by_name_compartment_and_sub_compartment() -> None:
+    factors = [
+        _factor("Benzene", "air", "urban air close to ground"),
+        _factor("Benzene", "air", None),
+        _factor("Ammonia", "water", None),
+        _factor("Benzene", "air", "indoor"),
+    ]
+    first = factor_page(factors, None, 2, None)
+    assert [(f.name, f.compartment, f.sub_compartment) for f in first.items] == [
+        ("Ammonia", "water", None),
+        ("Benzene", "air", None),
+    ]
+    assert first.has_more and first.next_cursor == "2"
+    rest = factor_page(factors, None, 2, first.next_cursor)
+    assert [f.sub_compartment for f in rest.items] == ["indoor", "urban air close to ground"]
+    assert not rest.has_more
+    # every word must sit in one of the factor's own fields, case-folded
+    assert [f.sub_compartment for f in factor_page(factors, "AIR indoor", 10, None).items] == [
+        "indoor"
     ]
 
 
@@ -397,16 +441,22 @@ def test_a_patch_replaces_only_the_fields_it_names_a_none_included() -> None:
     assert out.status == "running" and out.pid is None and out.config == run.config
 
 
-def test_a_flat_list_shows_what_reaches_the_cutoff_up_to_its_length_and_counts_the_rest() -> None:
-    fractions = [0.75, 0.2, -0.03, 0.02, 0.004, -0.002]
-    shown, cut = listed(fractions, top_n=2, cutoff=0.01)
+def test_a_flat_list_shows_what_reaches_the_cutoff_up_to_its_length_and_signs_the_rest() -> None:
+    scores = [0.75, 0.2, -0.03, 0.02, 0.004, -0.002]
+    total = sum(scores)
+    shown, cut = listed(scores, total, top_n=2, cutoff=0.01)
     assert (shown, cut.cutoff, cut.below, cut.unlisted) == (2, 0.01, 2, 2)
-    assert cut.share == pytest.approx(0.006)
-    assert cut.unlisted_share == pytest.approx(0.05)
-    shown, cut = listed(fractions, top_n=10, cutoff=0.01)
+    assert cut.share == pytest.approx(0.006 / total)
+    assert cut.unlisted_share == pytest.approx(0.05 / total)
+    assert (cut.below_score, cut.unlisted_score) == (pytest.approx(0.002), pytest.approx(-0.01))
+    assert sum(scores[:shown]) + cut.below_score + cut.unlisted_score == pytest.approx(total)
+    shown, cut = listed(scores, total, top_n=10, cutoff=0.01)
     assert (shown, cut.below, cut.unlisted, cut.unlisted_share) == (4, 2, 0, 0.0)
-    shown, cut = listed(fractions, top_n=10, cutoff=0.0)
+    assert (cut.below_score, cut.unlisted_score) == (pytest.approx(0.002), 0)
+    assert sum(scores[:shown]) + cut.below_score + cut.unlisted_score == pytest.approx(total)
+    shown, cut = listed(scores, total, top_n=10, cutoff=0.0)
     assert (shown, cut.below, cut.share, cut.unlisted) == (6, 0, 0.0, 0)
+    assert (cut.below_score, cut.unlisted_score) == (0, 0)
 
 
 def _sampled(samples: list[float] | None) -> MonteCarloResult:

@@ -24,6 +24,7 @@ from ecosemantic.package.base_writer import (
 )
 from ecosemantic.package.compile import compile_background
 from tests.fixture_data import (
+    CLASSIFICATIONS,
     CODES,
     FIXTURE_DATABASE,
     FIXTURE_DB,
@@ -86,6 +87,7 @@ def fixture_rows() -> BaseRows:
             location="GLO",
             comment=None,
             url=None,
+            classifications=CLASSIFICATIONS.get(key, ()),
             exchanges=(
                 BaseExchange(kind="production", input=CODES[key], amount=1.0, uncertainty=None),
                 *(

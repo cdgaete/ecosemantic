@@ -66,6 +66,30 @@ CODES: dict[str, str] = {
     key: f"{uuid.uuid5(NS, 'process:' + key)}_{uuid.uuid5(NS, 'product:' + key)}"
     for key in PROCESSES
 }
+CLASSIFICATIONS: dict[str, tuple[tuple[str, str], ...]] = {
+    "elec": (
+        ("ISIC rev.4 ecoinvent", "3510:Electric power generation, transmission and distribution"),
+        ("CPC", "17100: Electrical energy"),
+        ("By-product classification", "allocatable product"),
+    ),
+    "steel": (
+        ("ISIC rev.4 ecoinvent", "2410:Manufacture of basic iron and steel"),
+        ("EcoSpold01Categories", "metals/production"),
+    ),
+    "aluminium": (
+        ("ISIC rev.4 ecoinvent", "2420:Manufacture of basic precious and other non-ferrous metals"),
+        ("EcoSpold01Categories", "metals/production"),
+    ),
+    "copper": (
+        ("ISIC rev.4 ecoinvent", "24:Manufacture of basic metals"),
+        ("EcoSpold01Categories", "metals/extraction"),
+    ),
+    "lorry": (
+        ("CPC", "65111: Road transport services of freight"),
+        ("EcoSpold01Categories", "transport systems/road"),
+        ("By-product classification", "allocatable product"),
+    ),
+}
 METHODS: tuple[tuple[tuple[str, ...], str, dict[str, float]], ...] = (
     (GWP, "kg CO2-Eq", {"co2": 1.0, "ch4": 28.0}),
     (WATER, "m3", {"water_in": 1.0}),

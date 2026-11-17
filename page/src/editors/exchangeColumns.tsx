@@ -2,24 +2,32 @@ import type { ReactNode } from 'react'
 import type { FlowSide } from '@/api/useFlowSides'
 import { formatAmount } from '@/lib/format'
 import { AppLink } from '@/lib/router'
-import type { Column } from '@/window/DataTable'
+import { NUMERIC, type Column } from '@/window/DataTable'
 import { Icon, type IconName } from '@/window/Icon'
 
-export function flowColumn<T>(name: (row: T) => string, icon: (row: T) => IconName): Column<T> {
+export function flowColumn<T>(name: (row: T) => string, icon: (row: T) => IconName, to?: (row: T) => string | null): Column<T> {
   return {
     key: 'flow',
     header: 'Flow',
-    render: (row) => (
-      <span className="flex items-center gap-1">
-        <Icon name={icon(row)} />
-        {name(row)}
-      </span>
-    ),
+    render: (row) => {
+      const label = (
+        <span className="flex min-w-0 items-center gap-1 break-words">
+          <Icon name={icon(row)} />
+          {name(row)}
+        </span>
+      )
+      const href = to?.(row) ?? null
+      return href === null ? label : (
+        <AppLink to={href} className="text-accent">
+          {label}
+        </AppLink>
+      )
+    },
   }
 }
 
 export function amountColumn<T>(amount: (row: T) => number): Column<T> {
-  return { key: 'amount', header: 'Amount', align: 'right', render: (row) => formatAmount(amount(row)) }
+  return { key: 'amount', header: 'Amount', align: 'right', render: (row) => <span className={NUMERIC}>{formatAmount(amount(row))}</span> }
 }
 
 export function unitColumn<T>(unit: (row: T) => string): Column<T> {

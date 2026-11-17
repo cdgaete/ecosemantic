@@ -17,8 +17,14 @@ from ecosemantic.engine.foreground import Foreground
 from ecosemantic.engine.montecarlo import MonteCarlo, Refactorised, Serial
 from ecosemantic.engine.paths import PathNode
 from ecosemantic.errors import Invalid, OtherBuild
-from ecosemantic.model.entities import DemandItem, Method
-from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef, ForegroundRef, LinkedProcessRef
+from ecosemantic.model.entities import Method
+from ecosemantic.model.refs import (
+    BackgroundRef,
+    DemandItem,
+    ElementaryFlowRef,
+    ForegroundRef,
+    LinkedProcessRef,
+)
 from ecosemantic.model.validation import credit_loops, off_build
 from ecosemantic.ports.calculation import CUTOFF, MAX_LEVEL, MAX_NODES, TOP_N
 from ecosemantic.ports.types import (
@@ -180,9 +186,8 @@ class NativeCalculation:
             ranked = [(float(background[i]), False, int(i)) for i in np.flatnonzero(background)]
             ranked += [(float(own[j]), True, int(j)) for j in np.flatnonzero(own)]
             ranked.sort(key=lambda entry: -abs(entry[0]))
-            shown, cut = listed(
-                [fraction_of(value, total) for value, _, _ in ranked], top_n, cutoff
-            )
+            values = [value for value, _, _ in ranked]
+            shown, cut = listed(values, total=total, top_n=top_n, cutoff=cutoff)
             top = ranked[:shown]
             labels = calculation.background.coords["activity"].labels
             named = self._activities(
@@ -229,9 +234,8 @@ class NativeCalculation:
             scores = calculation.by_flow(solution, method).data
             total = float(scores.sum())
             every = sorted(np.flatnonzero(scores), key=lambda row: -abs(scores[row]))
-            shown, cut = listed(
-                [fraction_of(float(scores[row]), total) for row in every], top_n, cutoff
-            )
+            values = [float(scores[row]) for row in every]
+            shown, cut = listed(values, total=total, top_n=top_n, cutoff=cutoff)
             ranked = every[:shown]
             labels = calculation.background.coords["flow"].labels
             flows = self._flows(system.database, (str(labels[row]) for row in ranked))

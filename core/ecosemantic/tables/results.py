@@ -10,8 +10,8 @@ import yaml
 from pydantic import BaseModel, Field
 
 from ecosemantic.compute.results import ContributionResult, ImpactResult, InventoryResult
-from ecosemantic.model.entities import DemandItem, Method, method_by_id
-from ecosemantic.model.refs import slug
+from ecosemantic.model.entities import Method, method_by_id
+from ecosemantic.model.refs import DemandItem, slug
 from ecosemantic.ports.types import (
     InventoryRow,
     MonteCarloResult,

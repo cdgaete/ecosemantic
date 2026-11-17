@@ -95,6 +95,34 @@ describe('parameters page', () => {
     expect(within(section).queryByText('behind the base: rebase_scenario')).toBeNull()
   })
 
+  it('holds a right-aligned value on one line rather than break a number in two', async () => {
+    served.value = parameters
+    served.validation = validation
+    renderAt('/', <ParametersPage view={view} />)
+    const section = (await screen.findByText('Input parameters')).closest('section')!
+    const row = (await within(section).findByText('frame_mass')).closest('tr')!
+    const cell = row.querySelector('td[data-label="Value"]')!
+    expect(cell).toHaveClass('whitespace-nowrap', 'tabular-nums')
+    expect(cell.className).not.toContain('break-words')
+  })
+
+  it('folds the description the panel cannot hold under the parameter, and keeps the value in its column', async () => {
+    served.value = parameters
+    served.validation = validation
+    renderAt('/', <ParametersPage view={view} />)
+    for (const title of ['Input parameters', 'Dependent parameters']) {
+      const section = (await screen.findByText(title)).closest('section')!
+      const table = within(section).getByRole('table')
+      expect(within(table).getByRole('columnheader', { name: 'Description' })).toHaveClass('hidden', '@lg:table-cell')
+      expect(within(table).getByRole('columnheader', { name: 'Name' })).not.toHaveClass('hidden')
+      expect(within(table).getByRole('columnheader', { name: 'Value' })).not.toHaveClass('hidden')
+    }
+    const input = (await screen.findByText('Input parameters')).closest('section')!
+    const row = (await within(input).findByText('frame_mass')).closest('tr')!
+    const folded = [...row.querySelectorAll('td')[0].children].filter((el) => el.className.includes('@lg:hidden'))
+    expect(folded.map((el) => el.textContent?.trim())).toEqual(['Description: frame per widget'])
+  })
+
   it('shows each derived parameter with the value it evaluates to', async () => {
     const answer = parameters as Answer<ParameterSpace>
     const derived = answer.value.parameters.find((p) => p.formula !== null)!

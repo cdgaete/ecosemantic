@@ -1136,6 +1136,31 @@ def test_compute_scores_a_case_against_the_base(
     assert scores["half"] == pytest.approx(3.658)
 
 
+def test_compute_scores_a_case_whose_name_holds_a_comma(
+    fixture_system_stored: ProductSystem,
+    bundle_dir: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    system = fixture_system_stored.model_copy(deep=True)
+    system.process("widget").exchanges[2].formula = "elec_kwh"
+    system.parameters = [Parameter(name="elec_kwh", value=1.0)]
+    system.cases = [
+        Case(name="a, b", values={"elec_kwh": 0.5}),
+        Case(name="c", values={"elec_kwh": 0.25}),
+    ]
+    folder = write_folder(tmp_path, system)
+    argv = ["compute", "--data-dir", str(bundle_dir), "--folder", str(folder), "--json"]
+    assert main([*argv, "--method", GWP_ID, "--variants", "a, b", "--variants", "c"]) == 0
+    run = Path(json.loads(capsys.readouterr().out)["folder"])
+    with (run / "scores.csv").open(encoding="utf-8") as table:
+        scores = {row["variant"]: float(row["score"]) for row in csv.DictReader(table)}
+    # electricity 1 kWh at 1.0 kg CO2-Eq, halved by the first case and quartered by the second
+    assert scores[""] == pytest.approx(4.158)
+    assert scores["a, b"] == pytest.approx(3.658)
+    assert scores["c"] == pytest.approx(3.408)
+
+
 def test_compute_names_every_refused_cell_in_the_error_it_prints(
     fixture_system_stored: ProductSystem,
     bundle_dir: Path,

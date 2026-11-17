@@ -1,7 +1,10 @@
 {
   "hint": null,
   "value": {
-    "classifications": [],
+    "classifications": [
+      "ISIC rev.4 ecoinvent: 2410:Manufacture of basic iron and steel",
+      "EcoSpold01Categories: metals/production"
+    ],
     "comment": null,
     "exchanges": [
       {

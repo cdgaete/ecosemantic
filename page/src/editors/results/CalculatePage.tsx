@@ -37,9 +37,11 @@ export function CalculatePage() {
   const [query, setQuery] = useState('')
   const [methodId, setMethodId] = useState('')
   const hits = useSearchMethods(database, { query, limit: 15 })
-  const [variants, setVariants] = useState<string[]>([])
+  const [chosen, setChosen] = useState<string[] | null>(null)
   const [amount, setAmount] = useState(1)
   const [kind, setKind] = useState<'result' | 'simulation'>(() => (new URLSearchParams(location.search).get('kind') === 'simulation' ? 'simulation' : 'result'))
+  const canvasSystemId = useUi((s) => s.canvasSystemId)
+  const canvasVariant = useUi((s) => s.canvasVariant)
   const start = useStartRun(id)
   const client = useQueryClient()
   const defaults = useMonteCarloDefaults()
@@ -52,6 +54,8 @@ export function CalculatePage() {
   useEditorTab({ id: `calculate:${id}`, kind: 'results', title: `Calculation of: ${system?.name ?? ''}`, path: paths.results(id, 'setup', '') })
   if (!system) return <p className="p-4 text-muted-foreground">{read.error?.message ?? 'Loading…'}</p>
   const names = [...system.scenarios.map((s) => s.name), ...system.cases.map((c) => c.name)]
+  const shown = canvasSystemId === id && canvasVariant !== null && names.includes(canvasVariant) ? canvasVariant : null
+  const variants = chosen ?? (shown === null ? [] : [shown])
   const ready = (mode === 'family' ? family !== '' : methodId !== '') && (kind === 'result' || mcParams !== null)
   const rootCode = system.reference_process
   const run = () => {
@@ -134,12 +138,17 @@ export function CalculatePage() {
                       names.length === 0 ? (
                         <span className="text-muted-foreground">No scenario or case.</span>
                       ) : (
-                        <span className="flex flex-wrap gap-3">
-                          {names.map((name) => (
-                            <label key={name} className="flex items-center gap-1">
-                              <input type="checkbox" checked={variants.includes(name)} onChange={(e) => setVariants(e.target.checked ? [...variants, name] : variants.filter((v) => v !== name))} /> {name}
-                            </label>
-                          ))}
+                        <span className="flex flex-col gap-1">
+                          {shown !== null && variants.includes(shown) ? (
+                            <span>The canvas shows {system.cases.some((c) => c.name === shown) ? 'case' : 'scenario'} {shown}; it is ticked below.</span>
+                          ) : null}
+                          <span className="flex flex-wrap gap-3">
+                            {names.map((name) => (
+                              <label key={name} className="flex items-center gap-1">
+                                <input type="checkbox" checked={variants.includes(name)} onChange={(e) => setChosen(e.target.checked ? [...variants, name] : variants.filter((v) => v !== name))} /> {name}
+                              </label>
+                            ))}
+                          </span>
                         </span>
                       ),
                   },

@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import { Screens } from '@/App'
 import { api } from '@/api/client'
-import type { Call, Value } from '@/api/types'
+import type { Call, DemandItem, Value } from '@/api/types'
 import agentSystem from './fixtures/agent_system.json'
 import calculations from './fixtures/calculations.json'
 import databases from './fixtures/databases.json'
@@ -39,6 +39,20 @@ it('lists the calculations on record, each opening its result by its call', asyn
   expect(open.getAttribute('href')).toBe(`/systems/${id}/results/impact?call=${recorded.id}`)
   expect(screen.getAllByText(recorded.agent).length).toBeGreaterThan(0)
   expect(within(open.closest('li')!).getByText('base values')).toBeInTheDocument()
+})
+
+it('names the amount a calculation scored, read from its summary', async () => {
+  const demand: DemandItem[] = [{ ref: { kind: 'foreground', code: 'bottle' }, amount: 10 }]
+  vi.mocked(api.calculations).mockResolvedValue(answer([{ ...recorded, summary: { ...recorded.summary!, demand } }]))
+  renderAt(`/systems/${id}/results`, <Screens />)
+  expect(await screen.findByText(/10 kilogram of bottle/)).toBeInTheDocument()
+})
+
+it('shows no target for a record whose summary carries no demand', async () => {
+  vi.mocked(api.calculations).mockResolvedValue(answer([{ ...recorded, summary: { ...recorded.summary!, demand: null } }]))
+  renderAt(`/systems/${id}/results`, <Screens />)
+  const open = await screen.findByRole('link', { name: 'Open' })
+  expect(within(open.closest('li')!).queryByText(/of bottle/)).not.toBeInTheDocument()
 })
 
 it('marks a calculation made on an earlier version', async () => {

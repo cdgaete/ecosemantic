@@ -206,6 +206,24 @@ def record(client: TestClient, system_id: str, unfinished_id: str) -> dict[str, 
         "search_elementary_flows": client.get(
             f"/api/databases/{FIXTURE_DB}/elementary-flows", params={"query": "carbon"}
         ).json(),
+        "explorer_summary": client.get(f"/api/databases/{FIXTURE_DB}/summary").json(),
+        "explorer_schemes": client.get(f"/api/databases/{FIXTURE_DB}/classifications").json(),
+        "explorer_tree": client.get(
+            f"/api/databases/{FIXTURE_DB}/classifications/ISIC%20rev.4%20ecoinvent"
+        ).json(),
+        "explorer_processes": client.get(
+            f"/api/databases/{FIXTURE_DB}/classifications/ISIC%20rev.4%20ecoinvent/processes",
+            params={"node": "24"},
+        ).json(),
+        "explorer_compartments": client.get(f"/api/databases/{FIXTURE_DB}/compartments").json(),
+        "explorer_flows": client.get(
+            f"/api/databases/{FIXTURE_DB}/compartments/air/flows",
+            params={"sub_compartment": "urban air close to ground"},
+        ).json(),
+        "explorer_methods": client.get(f"/api/databases/{FIXTURE_DB}/impact-methods").json(),
+        "explorer_factors": client.get(
+            f"/api/databases/{FIXTURE_DB}/impact-methods/{GWP_ID}/factors"
+        ).json(),
         "elementary_flow": client.get(
             f"/api/databases/{FIXTURE_BIO}/elementary-flows/{FLOW_IDS['water_in']}"
         ).json(),

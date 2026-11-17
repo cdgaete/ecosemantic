@@ -9,6 +9,7 @@ import systems from './fixtures/systems.json'
 import validation from './fixtures/validation.json'
 import { renderAt } from './render'
 import { firstMethodOf } from './method'
+import { formatAmount } from '@/lib/format'
 vi.mock('@/api/client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/api/client')>()
   return {
@@ -53,6 +54,26 @@ it('shows the path tree with a row per node and the total result unit', async ()
   for (const header of ['Contribution', 'Process', 'Total result', 'Unit']) expect(within(table).getByText(header)).toBeInTheDocument()
   await waitFor(() => expect(within(table).getByText(byPath.value.root.name)).toBeInTheDocument())
   for (const child of byPath.value.root.children.filter((c) => c.kind === 'process')) expect(within(table).getByText(new RegExp(child.name))).toBeInTheDocument()
+})
+
+it('folds the total result and the unit under the process name below the panel width', async () => {
+  renderAt(url, <App router={false} />)
+  const table = await waitFor(() => screen.getByRole('table'))
+  await waitFor(() => expect(within(table).getByText(byPath.value.root.name)).toBeInTheDocument())
+  expect(table.closest('.overflow-x-auto')).toBeNull()
+  const [head, root] = within(table).getAllByRole('row')
+  const heads = within(head).getAllByRole('columnheader')
+  expect(heads[2]).toHaveClass('hidden', '@lg:table-cell')
+  expect(heads[3]).toHaveClass('hidden', '@lg:table-cell')
+  expect(heads[1]).not.toHaveClass('hidden')
+  const cells = within(root).getAllByRole('cell')
+  expect(cells[1].className).not.toContain('whitespace-nowrap')
+  expect(cells[2]).toHaveClass('hidden', '@lg:table-cell')
+  expect(cells[3]).toHaveClass('hidden', '@lg:table-cell')
+  const folded = [...cells[1].children].find((el) => el.className.includes('@lg:hidden'))
+  expect(folded).toBeDefined()
+  expect(folded).toHaveTextContent(formatAmount(byPath.value.root.score))
+  expect(folded).toHaveTextContent(byPath.value.total.unit)
 })
 
 it('draws the Sankey vertically with a node table beside it', async () => {

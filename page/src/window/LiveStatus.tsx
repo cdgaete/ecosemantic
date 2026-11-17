@@ -7,7 +7,7 @@ import { useUi } from '@/store/ui'
 const SAID: Record<Connection, string> = { open: 'Live', connecting: 'Connecting…', retrying: 'Reconnecting…', closed: 'Disconnected' }
 const DOT: Record<Connection, string> = { open: 'bg-success', connecting: 'bg-warning', retrying: 'bg-warning', closed: 'bg-destructive' }
 
-export function LiveStatus() {
+export function LiveStatus({ short = false }: { short?: boolean }) {
   const connection = useLive((s) => s.connection)
   const systemId = useUi((s) => s.canvasSystemId)
   const latest = useLive((s) => (systemId === null ? undefined : s.latest[systemId]))
@@ -17,16 +17,17 @@ export function LiveStatus() {
     const timer = window.setInterval(watchWaiting, 1000)
     return () => window.clearInterval(timer)
   }, [])
+  const slot = blocked ? `Waiting on a connection slot: this browser holds ${streams} event stream${streams === 1 ? '' : 's'}` : null
   return (
     <span className="flex items-center gap-2">
       <span className={cn('inline-block size-2 rounded-full', DOT[connection])} />
-      {SAID[connection]}
-      {latest ? (
+      {short ? <span title={slot ?? undefined}>{SAID[connection]}</span> : SAID[connection]}
+      {short || latest === undefined ? null : (
         <span title={latest.timestamp}>
           {' '}· entry #{latest.seq} {formatAgo(latest.timestamp)}
         </span>
-      ) : null}
-      {blocked ? <span className="text-warning">{`Waiting on a connection slot: this browser holds ${streams} event stream${streams === 1 ? '' : 's'}`}</span> : null}
+      )}
+      {short || slot === null ? null : <span className="text-warning">{slot}</span>}
       {connection === 'closed' ? (
         <button type="button" className="text-accent underline" onClick={reconnect}>
           Reconnect

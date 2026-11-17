@@ -1,0 +1,26 @@
+{
+  "hint": null,
+  "value": [
+    {
+      "processes": 4,
+      "scheme": "ISIC rev.4 ecoinvent",
+      "values": 4
+    },
+    {
+      "processes": 2,
+      "scheme": "CPC",
+      "values": 2
+    },
+    {
+      "processes": 4,
+      "scheme": "EcoSpold01Categories",
+      "values": 3
+    },
+    {
+      "processes": 2,
+      "scheme": "By-product classification",
+      "values": 1
+    }
+  ],
+  "view_url": null
+}

@@ -20,13 +20,13 @@ describe('icon button', () => {
 
   it('says its label and the keys of its shortcut when it takes the focus', async () => {
     show(
-      <IconButton label="Collapse panel" shortcut="panel" onClick={() => undefined}>
+      <IconButton label="Close the inspector" shortcut="inspector" onClick={() => undefined}>
         <svg />
       </IconButton>,
     )
-    fireEvent.focus(screen.getByRole('button', { name: 'Collapse panel' }))
+    fireEvent.focus(screen.getByRole('button', { name: 'Close the inspector' }))
     const tip = await screen.findByRole('tooltip')
-    expect(tip).toHaveTextContent('Collapse panel')
+    expect(tip).toHaveTextContent('Close the inspector')
     expect(tip).toHaveTextContent('Ctrl+Alt+B')
   })
 
