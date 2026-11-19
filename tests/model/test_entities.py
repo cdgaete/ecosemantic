@@ -74,6 +74,58 @@ def test_a_range_of_zero_width_is_refused_for_a_uniform_and_a_triangular() -> No
     Uncertainty(type="triangular", params={"minimum": 1.0, "loc": 1.0, "maximum": 2.0})
 
 
+def test_a_lognormal_and_a_normal_take_bounds() -> None:
+    lognormal = Uncertainty(
+        type="lognormal", params={"loc": 0.0, "scale": 0.2, "minimum": 0.5, "maximum": 2.0}
+    )
+    assert lognormal.bounds() == (0.5, 2.0)
+    normal = Uncertainty(type="normal", params={"loc": 1.0, "scale": 0.5, "maximum": 3.0})
+    assert normal.bounds() == (None, 3.0)
+    assert Uncertainty(type="normal", params={"loc": 1.0, "scale": 0.5}).bounds() == (None, None)
+    with pytest.raises(ValidationError, match="minimum must be less than maximum"):
+        Uncertainty(
+            type="normal",
+            params={"loc": 1.0, "scale": 0.5, "minimum": 2.0, "maximum": 1.0},
+        )
+
+
+def test_bounds_that_leave_the_centre_outside_are_refused() -> None:
+    with pytest.raises(
+        ValidationError, match="the distribution's centre 1.0 lies outside its bounds 2.0 to 3.0"
+    ):
+        Uncertainty(
+            type="normal",
+            params={"loc": 1.0, "scale": 0.5, "minimum": 2.0, "maximum": 3.0},
+        )
+    with pytest.raises(
+        ValidationError, match="the distribution's centre 2.0 lies outside its bounds 0.5 to 1.5"
+    ):
+        Uncertainty(
+            type="lognormal",
+            params={"loc": math.log(2.0), "scale": 0.2, "minimum": 0.5, "maximum": 1.5},
+        )
+    with pytest.raises(ValidationError, match="the distribution's centre 1.0 lies outside its"):
+        Uncertainty(type="normal", params={"loc": 1.0, "scale": 0.5, "minimum": 2.0})
+
+
+def test_bounds_move_with_the_distribution_when_it_is_anchored() -> None:
+    lognormal = Uncertainty(
+        type="lognormal", params={"loc": 0.0, "scale": 0.2, "minimum": 0.5, "maximum": 2.0}
+    )
+    assert lognormal.anchored(3.0).params == {
+        "loc": pytest.approx(math.log(3.0)),
+        "scale": 0.2,
+        "minimum": 1.5,
+        "maximum": 6.0,
+    }
+    flipped = lognormal.anchored(-3.0)
+    assert flipped.params["minimum"] == -6.0 and flipped.params["maximum"] == -1.5
+    assert flipped.params["negative"] is True
+    normal = Uncertainty(type="normal", params={"loc": 2.0, "scale": 0.5, "minimum": 1.0})
+    assert normal.anchored(4.0).params == {"loc": 4.0, "scale": 1.0, "minimum": 2.0}
+    assert normal.anchored(-4.0).params == {"loc": -4.0, "scale": 1.0, "maximum": -2.0}
+
+
 def test_uncertainty_scaled_follows_the_amount() -> None:
     lognormal = Uncertainty(type="lognormal", params={"loc": 0.0, "scale": 0.2}).scaled(0.001)
     assert lognormal.params == {"loc": pytest.approx(math.log(0.001)), "scale": 0.2}
@@ -207,6 +259,26 @@ def test_parameter_takes_exactly_one_of_value_or_formula() -> None:
         Parameter(name="d", value=1.0, formula="a")
     with pytest.raises(ValidationError):
         Parameter(name="Bad", value=1.0)
+
+
+def test_a_literal_parameter_takes_a_distribution() -> None:
+    spread = Uncertainty(
+        type="lognormal",
+        params={"loc": math.log(120.0), "scale": 0.2, "minimum": 80.0, "maximum": 200.0},
+    )
+    parameter = Parameter(name="transport_km", value=120.0, unit="km", uncertainty=spread)
+    assert parameter.uncertainty is spread
+    assert Parameter(name="transport_km", value=120.0).uncertainty is None
+
+
+def test_a_formula_parameter_takes_none() -> None:
+    with pytest.raises(ValidationError, match="a formula parameter takes no distribution"):
+        Parameter(
+            name="distance",
+            formula="mass * 2",
+            uncertainty=Uncertainty(type="normal", params={"loc": 2.0, "scale": 0.5}),
+        )
+    assert Parameter(name="distance", formula="mass * 2").uncertainty is None
 
 
 def test_exchange_override_takes_exactly_one_action() -> None:

@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { formatAmount } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { IconButton } from '@/window/IconButton'
@@ -17,6 +17,15 @@ function holds(node: TreeNode, term: string): boolean {
   if (node.label.toLocaleLowerCase().includes(term)) return true
   if (node.note !== null && node.note.toLocaleLowerCase().includes(term)) return true
   return node.children.some((child) => holds(child, term))
+}
+
+function pathTo(nodes: TreeNode[], id: string): TreeNode[] | null {
+  for (const node of nodes) {
+    if (node.id === id) return [node]
+    const below = pathTo(node.children, id)
+    if (below !== null) return [node, ...below]
+  }
+  return null
 }
 
 function Branch({
@@ -39,6 +48,11 @@ function Branch({
   const kept = term === '' ? node.children : node.children.filter((child) => holds(child, term))
   const branching = kept.length > 0
   const shown = term !== '' || (expanded[node.id] ?? false)
+  const marked = open === node.id
+  const row = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (marked) row.current?.scrollIntoView({ block: 'nearest' })
+  }, [marked])
   return (
     <li className="min-w-0">
       <div className="flex min-w-0 items-center" style={{ paddingLeft: depth * 12 }}>
@@ -54,11 +68,12 @@ function Branch({
           <span className="size-7 shrink-0" />
         )}
         <button
+          ref={row}
           type="button"
-          aria-current={open === node.id ? 'true' : undefined}
+          aria-current={marked ? 'true' : undefined}
           className={cn(
             'flex min-w-0 flex-1 items-baseline gap-1.5 rounded-md px-1.5 py-1 text-left text-xs hover:bg-foreground/8',
-            open === node.id && 'bg-selected text-foreground',
+            marked && 'bg-selected text-foreground',
           )}
           onClick={() => onOpen(node)}
         >
@@ -97,6 +112,25 @@ export function Tree({
 }) {
   const [filter, setFilter] = useState('')
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const trail = open === '' ? null : pathTo(nodes, open)
+  const opening = trail === null ? '' : trail.map((node) => node.id).join('\u0000')
+  const opened = useRef('')
+  useEffect(() => {
+    if (trail === null) {
+      opened.current = ''
+      return
+    }
+    if (opening === opened.current) return
+    opened.current = opening
+    const branch = trail.filter((node) => node.children.length > 0)
+    setExpanded((state) => {
+      const hidden = branch.filter((node) => !(state[node.id] ?? false))
+      if (hidden.length === 0) return state
+      const next = { ...state }
+      for (const node of hidden) next[node.id] = true
+      return next
+    })
+  }, [trail, opening])
   const term = filter.trim().toLocaleLowerCase()
   const shown = nodes.filter((node) => holds(node, term))
   const toggle = (id: string) => setExpanded((state) => ({ ...state, [id]: !(state[id] ?? false) }))

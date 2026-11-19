@@ -12,11 +12,21 @@ from ecosemantic.errors import NotFound
 from ecosemantic.model.entities import Method
 from ecosemantic.model.refs import BackgroundRef, DemandItem, ElementaryFlowRef
 from ecosemantic.package.background import read_background
+from ecosemantic.package.canonical import UNSTATED, UNSTATED_NAME
 from tests.engine_fixture import fixture_bundle, served_build
 from tests.fixture_data import CODES, FIXTURE_BIO, FIXTURE_DB, FLOW_IDS, LOOP_DB
 from tests.openlca_fixture import FLOW_IDS as OPENLCA_FLOWS
+from tests.openlca_fixture import METHOD as OLCA_METHOD
+from tests.openlca_fixture import (
+    NORMALISATION,
+    NORMALISATION_SET,
+    WEIGHTS,
+    WEIGHTS_SET,
+    WEIGHTS_UNIT,
+    WIDGET_CLIMATE,
+    build_package,
+)
 from tests.openlca_fixture import PROCESSES as OPENLCA_PROCESSES
-from tests.openlca_fixture import WIDGET_CLIMATE, build_package
 
 STEEL = BackgroundRef(database=FIXTURE_DB, id=CODES["steel"])
 
@@ -132,10 +142,10 @@ def olca_installed(directory: Path, **flags: bool) -> tuple[Path, NativeStore]:
     return bundle, installed(directory, bundle)
 
 
-async def test_a_process_without_a_location_has_none(tmp_path: Path) -> None:
+async def test_a_process_without_a_location_is_at_the_reserved_code(tmp_path: Path) -> None:
     bundle, store = olca_installed(tmp_path, no_location=True)
     imported = read_background(bundle, OLCA, foreground=frozenset())
-    assert imported.datasets[(OLCA, STEEL_CODE)]["location"] is None
+    assert imported.datasets[(OLCA, STEEL_CODE)]["location"] == UNSTATED
     rows = (
         store.catalog(OLCA)
         .execute("SELECT location FROM processes WHERE native_id = ?", [STEEL_CODE])
@@ -143,15 +153,24 @@ async def test_a_process_without_a_location_has_none(tmp_path: Path) -> None:
     )
     read = await NativeInventory(store).get_process(BackgroundRef(database=OLCA, id=STEEL_CODE))
     store.close()
-    assert rows == [(None,)]
-    assert read.location is None
+    assert rows == [(UNSTATED,)]
+    assert read.location == UNSTATED
 
 
-async def test_list_locations_lists_the_codes_there_are(tmp_path: Path) -> None:
+async def test_list_locations_names_the_codes_there_are(tmp_path: Path) -> None:
+    _, store = olca_installed(tmp_path)
+    locations = await NativeInventory(store).list_locations(OLCA)
+    store.close()
+    assert [(found.code, found.name) for found in locations] == [("GLO", "Global")]
+
+
+async def test_list_locations_names_the_reserved_code_when_a_process_names_none(
+    tmp_path: Path,
+) -> None:
     _, store = olca_installed(tmp_path, no_location=True)
     locations = await NativeInventory(store).list_locations(OLCA)
     store.close()
-    assert locations == ["GLO"]
+    assert [(found.code, found.name) for found in locations] == [(UNSTATED, UNSTATED_NAME)]
 
 
 async def test_a_category_is_carried_as_a_classification(tmp_path: Path) -> None:
@@ -177,8 +196,10 @@ async def test_an_exchange_names_its_flow_and_its_supplier_apart(tmp_path: Path)
     rows = {e.flow: e for e in read.exchanges}
     steel = rows["steel, low-alloyed"]
     assert (steel.supplier, steel.side, steel.reference) == ("steel production", "input", False)
+    assert steel.supplier_location == "GLO"
     assert (steel.amount, steel.unit) == (0.5, "kilogram")
     assert rows["Carbon dioxide, fossil"].supplier is None
+    assert rows["Carbon dioxide, fossil"].supplier_location is None
 
 
 async def test_the_reference_output_is_listed_with_its_own_amount(tmp_path: Path) -> None:
@@ -207,6 +228,29 @@ async def test_a_treated_waste_is_the_reference_row_of_its_dataset(tmp_path: Pat
     reference = read.exchanges[0]
     assert (reference.flow, reference.side, reference.reference) == ("steel scrap", "input", True)
     assert reference.amount == pytest.approx(1.0)
+
+
+async def test_a_family_answers_its_weighting_sets_as_the_bundle_states_them(
+    tmp_path: Path,
+) -> None:
+    _, store = olca_installed(tmp_path, weighting_sets=True)
+    inventory = NativeInventory(store)
+    sets = await inventory.weighting_sets(OLCA, OLCA_METHOD)
+    ids = {(m.impact_category, m.indicator): m.id for m in await inventory.list_methods(OLCA)}
+    store.close()
+    assert [(s.impact_method, s.name, s.unit) for s in sets] == [
+        (OLCA_METHOD, WEIGHTS_SET, WEIGHTS_UNIT),
+        (OLCA_METHOD, NORMALISATION_SET, None),
+        (OLCA_METHOD, None, None),
+    ]
+    weighted, normalised, unnamed = sets
+    assert [(f.method_id, f.normalisation, f.weighting) for f in weighted.factors] == [
+        (ids[(category, category)], None, WEIGHTS[category]) for category in WEIGHTS
+    ]
+    assert [(f.method_id, f.normalisation, f.weighting) for f in normalised.factors] == [
+        (ids[(category, category)], NORMALISATION[category], None) for category in NORMALISATION
+    ]
+    assert unnamed.factors == []
 
 
 async def test_treatments_names_the_processes_whose_production_is_negative(tmp_path: Path) -> None:
@@ -241,6 +285,7 @@ async def test_a_cut_off_reaches_the_port_without_an_input(tmp_path: Path) -> No
     cut_off = next(e for e in read.exchanges if e.cut_off is not None)
     assert (cut_off.amount, cut_off.unit) == (1.0, "kilogram")
     assert cut_off.input is None and cut_off.supplier is None and cut_off.reference is False
+    assert cut_off.supplier_location is None
 
 
 def score(directory: Path, key: tuple[str, ...]) -> float:

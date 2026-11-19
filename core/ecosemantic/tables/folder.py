@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import csv
+import unicodedata
 from pathlib import Path
+from typing import get_args
 
 import yaml
 from pydantic import ValidationError
@@ -11,10 +13,14 @@ from pydantic import ValidationError
 from ecosemantic.compute.parameters import case_matrix
 from ecosemantic.errors import Invalid, field_error
 from ecosemantic.model.canonical import content_hash
-from ecosemantic.model.entities import ProductSystem
+from ecosemantic.model.entities import (
+    ProductSystem,
+    Uncertainty,
+    UncertaintyType,
+)
 from ecosemantic.model.refs import slug
 
-FORMAT = 1
+FORMAT = 2
 MODEL_FILE = "model.yaml"
 INPUTS_DIR = "inputs"
 SCHEMA_FILE = "schema.yaml"
@@ -23,12 +29,21 @@ DEPENDENT_PARAMETERS = "dependent_parameters.csv"
 CASES = "cases.csv"
 PARAMETER_COLUMN = "parameter"
 
-_LITERAL_SCHEMA: dict[str, dict[str, object]] = {
+_PARAMETER_SCHEMA: dict[str, dict[str, object]] = {
     "name": {"type": "string", "key": True},
     "value": {"type": "number"},
     "unit": {"type": "string"},
     "description": {"type": "string"},
 }
+_DISTRIBUTION_SCHEMA: dict[str, dict[str, object]] = {
+    "distribution": {"type": "string", "values": list(get_args(UncertaintyType))},
+    "loc": {"type": "number"},
+    "scale": {"type": "number"},
+    "minimum": {"type": "number"},
+    "maximum": {"type": "number"},
+    "negative": {"type": "boolean"},
+}
+_LITERAL_SCHEMA = {**_PARAMETER_SCHEMA, **_DISTRIBUTION_SCHEMA}
 _FORMULA_SCHEMA: dict[str, dict[str, object]] = {
     "name": {"type": "string", "key": True},
     "formula": {"type": "string"},
@@ -36,12 +51,21 @@ _FORMULA_SCHEMA: dict[str, dict[str, object]] = {
     "description": {"type": "string"},
 }
 LITERAL_COLUMNS = list(_LITERAL_SCHEMA)
+DISTRIBUTION_COLUMNS = list(_DISTRIBUTION_SCHEMA)
 FORMULA_COLUMNS = list(_FORMULA_SCHEMA)
 
 
 def folder_name(system: ProductSystem) -> str:
-    """The directory one product system takes, so two systems sharing a name stay apart."""
-    return f"{slug(system.name, '-')}-{str(system.id)[:8]}"
+    """The directory one product system takes: its name folded to ASCII letters and digits, then
+    the head of its id; the head alone where the name has neither, so two systems stay apart."""
+    head = str(system.id)[:8]
+    folded = "".join(
+        character
+        for character in unicodedata.normalize("NFKD", system.name)
+        if not unicodedata.combining(character)
+    )
+    name = slug(folded, "-")
+    return f"{name}-{head}" if name else head
 
 
 def write_csv(path: Path, fields: list[str], rows: list[dict[str, str]]) -> None:
@@ -57,6 +81,21 @@ def number(value: float | None) -> str:
     return "" if value is None else repr(value)
 
 
+def _distribution_cells(uncertainty: Uncertainty | None) -> dict[str, str]:
+    """A parameter's distribution as cells, blank where it states none and for every cell its
+    type does not take."""
+    cells = dict.fromkeys(DISTRIBUTION_COLUMNS, "")
+    if uncertainty is None:
+        return cells
+    cells["distribution"] = uncertainty.type
+    for column in ("loc", "scale", "minimum", "maximum"):
+        if column in uncertainty.params:
+            cells[column] = number(float(uncertainty.params[column]))
+    if uncertainty.params.get("negative", False):
+        cells["negative"] = "true"
+    return cells
+
+
 def _schema(system: ProductSystem) -> dict[str, object]:
     return {
         "format": FORMAT,
@@ -67,7 +106,11 @@ def _schema(system: ProductSystem) -> dict[str, object]:
         },
         "files": {
             INPUT_PARAMETERS: {
-                "description": "Literal parameters. The name is the key; edit the value.",
+                "description": (
+                    "Literal parameters. The name is the key; edit the value. The distribution "
+                    "column names a type or is blank, and each other column holds the "
+                    "stats_arrays parameter of that name, blank where the type takes it not."
+                ),
                 "columns": _LITERAL_SCHEMA,
             },
             DEPENDENT_PARAMETERS: {
@@ -106,6 +149,7 @@ def write_folder(root: Path, system: ProductSystem) -> Path:
                 "value": number(p.value),
                 "unit": p.unit,
                 "description": p.description,
+                **_distribution_cells(p.uncertainty),
             }
             for p in system.parameters
             if p.formula is None

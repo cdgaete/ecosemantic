@@ -20,7 +20,7 @@ export function StatisticsPage({ view }: { view: SystemView }) {
   const action = view.version ? undefined : <RequestAction systemId={id} entity="product_system" entityId={system.id} />
   return (
     <>
-      <EditorHeader icon="system" page="Statistics" entity={system.name} />
+      <EditorHeader icon="system" page="Statistics" entity={system.name} state={view.state} />
       <Section title="General statistics" sectionKey={`system:${id}:statistics`} actions={action}>
         <FieldGrid
           rows={[

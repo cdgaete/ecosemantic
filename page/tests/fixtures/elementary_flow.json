@@ -1,8 +1,9 @@
 {
   "hint": null,
   "value": {
+    "cas_as_published": null,
     "cas_number": null,
-    "compartment": "Resource",
+    "compartment": "natural resource",
     "flow_type": "natural resource",
     "name": "Water, river",
     "ref": {

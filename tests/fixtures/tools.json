@@ -408,7 +408,7 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "The characterised impact of a stored product system. Name one method_id from search_methods, or one impact_method to score all of its categories. Add variants to compare scenarios or cases against the base under one seed: each variant answers its point scores and its deltas, its score less the base's, method by method. A monte_carlo block adds uncertainty and takes at most 200 draws; start_monte_carlo runs up to 1000 outside the call. Under that block a pair is the base's and the variant's draws at one position, over the first draws of each up to the shorter run, since each run's own stop rule ends it, and paired_deltas holds each difference's median, interval and percentage. samples adds every category's draws to the base's answer and to each variant's; without it each category carries its summary and a histogram of twenty bins. methods names every method scored once, and each score, each variant's score and each uncertainty category names one of them by method_id.",
+    "description": "The characterised impact of a stored product system. Name one method_id from search_methods, or one impact_method to score all of its categories. Add variants to compare scenarios or cases against the base under one seed: each variant answers its point scores and its deltas, its score less the base's, method by method, and total_deltas holds how far each total of its weighting sets moved from the base's. A monte_carlo block adds uncertainty and takes at most 200 draws; start_monte_carlo runs up to 1000 outside the call. Under that block a pair is the base's and the variant's draws at one position, over the first draws of each up to the shorter run, since each run's own stop rule ends it, and paired_deltas holds each difference's median, interval and percentage. samples adds every category's draws to the base's answer and to each variant's; without it each category carries its summary and a histogram of twenty bins. methods names every method scored once, and each score, each variant's score and each uncertainty category names one of them by method_id.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -529,7 +529,7 @@
                 },
                 "n_min": {
                   "default": 30,
-                  "description": "The fewest draws an adaptive run takes. It bounds the run with `n_max` and applies only when `n` is unset.",
+                  "description": "The fewest draws an adaptive run takes, at least 6, the fewest draws a median's interval needs. It bounds the run with `n_max` and applies only when `n` is unset.",
                   "maximum": 200,
                   "minimum": 1,
                   "type": "integer"
@@ -603,7 +603,7 @@
           "default": null
         },
         "value": {
-          "description": "The characterised score of a product system over the database build `database` names, for\nthe `demand` it scored: each item's reference and amount, with the one the calculation\nresolved to when the caller named none. It carries variants and uncertainty, the processes of\neach loop holding a credit, whose delivery no check decides, the links the score was taken\nbehind, and each exchange sending a positive amount to a treatment, which runs it backwards\nand scores its emissions as credits. `methods` lists every method scored once, in the order\n`scores`, each variant's `scores` and each Monte Carlo category follow, and a score names its\nmethod by `method_id`.",
+          "description": "The characterised score of a product system over the database build `database` names, for\nthe `demand` it scored: each item's reference and amount, with the one the calculation\nresolved to when the caller named none. It carries variants and uncertainty, the processes of\neach loop holding a credit, whose delivery no check decides, the links the score was taken\nbehind, and each exchange sending a positive amount to a treatment, which runs it backwards\nand scores its emissions as credits. `methods` lists every method scored once, in the order\n`scores`, each variant's `scores` and each Monte Carlo category follow, and a score names its\nmethod by `method_id`. `totals` holds one total per weighting set of the family the methods\nbelong to, each resting on the method's value choices.",
           "properties": {
             "credit_loops": {
               "items": {
@@ -615,7 +615,7 @@
               "type": "array"
             },
             "database": {
-              "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one.",
+              "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one. `revision`\nis EcoSemantic's revision of the publisher's release, and none for a release installed as its\npublisher built it.",
               "properties": {
                 "elementary_flows": {
                   "type": "string"
@@ -633,6 +633,17 @@
                 },
                 "name": {
                   "type": "string"
+                },
+                "revision": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 },
                 "scheme": {
                   "enum": [
@@ -835,6 +846,87 @@
               },
               "type": "array"
             },
+            "totals": {
+              "items": {
+                "description": "One weighting set's total: the set that gives it, named as the bundle names it and none where\nthe bundle names none, its place among the family's sets counted from 0, the unit it answers\nin, and the value, none where it gives no total. `categories` names the methods whose scores\ntake part and `normalised_by_zero` those the set weights and normalises by 0, which take none.\n`reason` says why a set gives no total, and `value_choices` marks what the weights rest on.",
+                "properties": {
+                  "categories": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "impact_method": {
+                    "type": "string"
+                  },
+                  "normalised_by_zero": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "position": {
+                    "type": "integer"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "unit": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "value_choices": {
+                    "default": "A weighted total rests on value choices: its weights state how much the method's authors judge each category to matter, not a measurement.",
+                    "type": "string"
+                  },
+                  "weighting_set": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "impact_method",
+                  "weighting_set",
+                  "position",
+                  "unit",
+                  "value",
+                  "categories",
+                  "normalised_by_zero",
+                  "reason"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
             "treatments_run_backwards": {
               "items": {
                 "type": "string"
@@ -844,7 +936,7 @@
             "uncertainty": {
               "anyOf": [
                 {
-                  "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median, at the ceiling `n_max`, at a\nstated count, or cancelled.\n`gating_method` is the id of the method of the category whose median's relative standard\nerror is the largest, or the first whose is undefined. `normals_at_amount` counts the\nbackground normal distributions sampled at their amount because their standard deviation\nexceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order; `without_samples` answers the same result with each\ncategory's histogram in place of its draws.",
+                  "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median it can measure, at the ceiling\n`n_max`, at a stated count, or cancelled.\n`gating_method` is the id of the method of the category that held the run longest, the one\nwhose median's relative standard error was above the target at the latest check that found\none; a run of a stated count names none, and so does one no category ever held.\n`constant` names the categories met as constant, every draw equal, and\n`indistinguishable_from_zero` those left out of the stop rule, their median's 95 % interval\nholding 0, both in method order and each judged at the run's end. `drawn` states how many\nparameters, foreground exchanges and background rows the calculation reaches, how many of\nthem carry a distribution, how many of those the run drew and how many it held at their\namount: a wide background normal, whose standard deviation exceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order; `without_samples` answers the same result with each\ncategory's and each total's histogram in place of its draws. `totals` holds one total per\nweighting set of the run's method family, each draw's weighted sum in short; no total takes\npart in the stop rule.",
                   "properties": {
                     "categories": {
                       "items": {
@@ -973,6 +1065,12 @@
                       },
                       "type": "array"
                     },
+                    "constant": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
                     "credit_loops": {
                       "items": {
                         "items": {
@@ -983,7 +1081,7 @@
                       "type": "array"
                     },
                     "database": {
-                      "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one.",
+                      "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one. `revision`\nis EcoSemantic's revision of the publisher's release, and none for a release installed as its\npublisher built it.",
                       "properties": {
                         "elementary_flows": {
                           "type": "string"
@@ -1001,6 +1099,17 @@
                         },
                         "name": {
                           "type": "string"
+                        },
+                        "revision": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
                         },
                         "scheme": {
                           "enum": [
@@ -1022,6 +1131,89 @@
                         "scheme",
                         "version",
                         "system_model"
+                      ],
+                      "type": "object"
+                    },
+                    "drawn": {
+                      "description": "What a calculation reached and what of it carried a distribution: the literal parameters\nof the systems it reaches, the foreground's exchanges and the background's rows.",
+                      "properties": {
+                        "background": {
+                          "description": "How many of one kind a calculation reaches, how many of them carry a distribution, how many\nof those the run drew, and how many it held at their amount.",
+                          "properties": {
+                            "carried": {
+                              "type": "integer"
+                            },
+                            "drawn": {
+                              "type": "integer"
+                            },
+                            "held": {
+                              "default": 0,
+                              "type": "integer"
+                            },
+                            "there": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "there",
+                            "carried",
+                            "drawn"
+                          ],
+                          "type": "object"
+                        },
+                        "foreground": {
+                          "description": "How many of one kind a calculation reaches, how many of them carry a distribution, how many\nof those the run drew, and how many it held at their amount.",
+                          "properties": {
+                            "carried": {
+                              "type": "integer"
+                            },
+                            "drawn": {
+                              "type": "integer"
+                            },
+                            "held": {
+                              "default": 0,
+                              "type": "integer"
+                            },
+                            "there": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "there",
+                            "carried",
+                            "drawn"
+                          ],
+                          "type": "object"
+                        },
+                        "parameters": {
+                          "description": "How many of one kind a calculation reaches, how many of them carry a distribution, how many\nof those the run drew, and how many it held at their amount.",
+                          "properties": {
+                            "carried": {
+                              "type": "integer"
+                            },
+                            "drawn": {
+                              "type": "integer"
+                            },
+                            "held": {
+                              "default": 0,
+                              "type": "integer"
+                            },
+                            "there": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "there",
+                            "carried",
+                            "drawn"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "parameters",
+                        "foreground",
+                        "background"
                       ],
                       "type": "object"
                     },
@@ -1074,7 +1266,20 @@
                       "type": "array"
                     },
                     "gating_method": {
-                      "type": "string"
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "indistinguishable_from_zero": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
                     },
                     "linked_credit_loops": {
                       "items": {
@@ -1106,9 +1311,6 @@
                     "n": {
                       "type": "integer"
                     },
-                    "normals_at_amount": {
-                      "type": "integer"
-                    },
                     "scope": {
                       "enum": [
                         "full",
@@ -1124,6 +1326,195 @@
                         "cancelled"
                       ],
                       "type": "string"
+                    },
+                    "totals": {
+                      "items": {
+                        "description": "One weighting set's total over a run's draws: the set's identity as `Total` carries it, each\ndraw's weighted sum in short and either the draws themselves or their histogram, and the reason\na set gives no total.",
+                        "properties": {
+                          "categories": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "histogram": {
+                            "anyOf": [
+                              {
+                                "description": "Draws counted in bins of equal width from the smallest to the largest. `low` and `high`\nare those two draws, and `counts` holds the twenty bins, so a draw falls in bin\n`min(19, floor((draw - low) / width))` with `width = (high - low) / 20`.",
+                                "properties": {
+                                  "counts": {
+                                    "items": {
+                                      "type": "integer"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "high": {
+                                    "type": "number"
+                                  },
+                                  "low": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "low",
+                                  "high",
+                                  "counts"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "impact_method": {
+                            "type": "string"
+                          },
+                          "normalised_by_zero": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "position": {
+                            "type": "integer"
+                          },
+                          "reason": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "samples": {
+                            "anyOf": [
+                              {
+                                "items": {
+                                  "type": "number"
+                                },
+                                "type": "array"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "summary": {
+                            "anyOf": [
+                              {
+                                "description": "One category's samples in short. `median_ci95` is the median's 95 % interval, two of the\nsamples that bound it whatever the distribution, which narrows as samples grow, and `rel_se`\nits half-width over 1.96, relative to the median: the stop rule judges it. Both are None below\nsix samples, and `rel_se` for a median of zero. `percentiles` are the 2.5th and 97.5th\npercentiles of the samples, the spread of the result itself. `mean` is reported and judged by\nnothing: a loop close to using as much of its products as it makes gives draws whose mean\nneed not exist.",
+                                "properties": {
+                                  "mean": {
+                                    "type": "number"
+                                  },
+                                  "median": {
+                                    "type": "number"
+                                  },
+                                  "median_ci95": {
+                                    "anyOf": [
+                                      {
+                                        "maxItems": 2,
+                                        "minItems": 2,
+                                        "prefixItems": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "number"
+                                          }
+                                        ],
+                                        "type": "array"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "n": {
+                                    "type": "integer"
+                                  },
+                                  "percentiles": {
+                                    "maxItems": 2,
+                                    "minItems": 2,
+                                    "prefixItems": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "number"
+                                      }
+                                    ],
+                                    "type": "array"
+                                  },
+                                  "rel_se": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "n",
+                                  "mean",
+                                  "median",
+                                  "median_ci95",
+                                  "percentiles",
+                                  "rel_se"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "unit": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "value_choices": {
+                            "default": "A weighted total rests on value choices: its weights state how much the method's authors judge each category to matter, not a measurement.",
+                            "type": "string"
+                          },
+                          "weighting_set": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "impact_method",
+                          "weighting_set",
+                          "position",
+                          "unit",
+                          "categories",
+                          "normalised_by_zero",
+                          "summary",
+                          "reason"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
                     }
                   },
                   "required": [
@@ -1131,8 +1522,10 @@
                     "n",
                     "stopped",
                     "gating_method",
+                    "constant",
+                    "indistinguishable_from_zero",
                     "scope",
-                    "normals_at_amount",
+                    "drawn",
                     "credit_loops",
                     "dropped_draws",
                     "dropped_loops",
@@ -1149,7 +1542,7 @@
             },
             "variants": {
               "items": {
-                "description": "One variant's scores and its difference from the base, method by method, with the\nprocesses of each loop in the variant that holds a credit, whose delivery no check decides,\nand each exchange of the variant sending a positive amount to a treatment, which runs it\nbackwards. `scores` are the point values and `deltas` each one less the base's, with or\nwithout a Monte Carlo block. A pair is the base's and the variant's draws at one position,\nover the first draws of each up to the shorter run, since each run's own stop rule ends it;\n`paired_deltas` hold each pair's difference with its interval and percentage, and\n`uncertainty` the variant's own samples at the base's seed, which can outnumber the\npairs.",
+                "description": "One variant's scores and its difference from the base, method by method, with the\nprocesses of each loop in the variant that holds a credit, whose delivery no check decides,\nand each exchange of the variant sending a positive amount to a treatment, which runs it\nbackwards. `scores` are the point values and `deltas` each one less the base's, with or\nwithout a Monte Carlo block; `total_deltas` holds, in the order of `totals`, each total less\nthe base's total of the same set, and none where either gives none. A pair is the base's and\nthe variant's draws at one position, over the first draws of each up to the shorter run,\nsince each run's own stop rule ends it; `paired_deltas` hold each pair's difference with its\ninterval and percentage, and `uncertainty` the variant's own samples at the base's seed,\nwhich can outnumber the pairs.",
                 "properties": {
                   "credit_loops": {
                     "items": {
@@ -1274,6 +1667,100 @@
                     },
                     "type": "array"
                   },
+                  "total_deltas": {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  "totals": {
+                    "items": {
+                      "description": "One weighting set's total: the set that gives it, named as the bundle names it and none where\nthe bundle names none, its place among the family's sets counted from 0, the unit it answers\nin, and the value, none where it gives no total. `categories` names the methods whose scores\ntake part and `normalised_by_zero` those the set weights and normalises by 0, which take none.\n`reason` says why a set gives no total, and `value_choices` marks what the weights rest on.",
+                      "properties": {
+                        "categories": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "impact_method": {
+                          "type": "string"
+                        },
+                        "normalised_by_zero": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "position": {
+                          "type": "integer"
+                        },
+                        "reason": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "unit": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "value": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "value_choices": {
+                          "default": "A weighted total rests on value choices: its weights state how much the method's authors judge each category to matter, not a measurement.",
+                          "type": "string"
+                        },
+                        "weighting_set": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "impact_method",
+                        "weighting_set",
+                        "position",
+                        "unit",
+                        "value",
+                        "categories",
+                        "normalised_by_zero",
+                        "reason"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
                   "treatments_run_backwards": {
                     "items": {
                       "type": "string"
@@ -1283,7 +1770,7 @@
                   "uncertainty": {
                     "anyOf": [
                       {
-                        "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median, at the ceiling `n_max`, at a\nstated count, or cancelled.\n`gating_method` is the id of the method of the category whose median's relative standard\nerror is the largest, or the first whose is undefined. `normals_at_amount` counts the\nbackground normal distributions sampled at their amount because their standard deviation\nexceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order; `without_samples` answers the same result with each\ncategory's histogram in place of its draws.",
+                        "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median it can measure, at the ceiling\n`n_max`, at a stated count, or cancelled.\n`gating_method` is the id of the method of the category that held the run longest, the one\nwhose median's relative standard error was above the target at the latest check that found\none; a run of a stated count names none, and so does one no category ever held.\n`constant` names the categories met as constant, every draw equal, and\n`indistinguishable_from_zero` those left out of the stop rule, their median's 95 % interval\nholding 0, both in method order and each judged at the run's end. `drawn` states how many\nparameters, foreground exchanges and background rows the calculation reaches, how many of\nthem carry a distribution, how many of those the run drew and how many it held at their\namount: a wide background normal, whose standard deviation exceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order; `without_samples` answers the same result with each\ncategory's and each total's histogram in place of its draws. `totals` holds one total per\nweighting set of the run's method family, each draw's weighted sum in short; no total takes\npart in the stop rule.",
                         "properties": {
                           "categories": {
                             "items": {
@@ -1412,6 +1899,12 @@
                             },
                             "type": "array"
                           },
+                          "constant": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
                           "credit_loops": {
                             "items": {
                               "items": {
@@ -1422,7 +1915,7 @@
                             "type": "array"
                           },
                           "database": {
-                            "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one.",
+                            "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one. `revision`\nis EcoSemantic's revision of the publisher's release, and none for a release installed as its\npublisher built it.",
                             "properties": {
                               "elementary_flows": {
                                 "type": "string"
@@ -1440,6 +1933,17 @@
                               },
                               "name": {
                                 "type": "string"
+                              },
+                              "revision": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "default": null
                               },
                               "scheme": {
                                 "enum": [
@@ -1461,6 +1965,89 @@
                               "scheme",
                               "version",
                               "system_model"
+                            ],
+                            "type": "object"
+                          },
+                          "drawn": {
+                            "description": "What a calculation reached and what of it carried a distribution: the literal parameters\nof the systems it reaches, the foreground's exchanges and the background's rows.",
+                            "properties": {
+                              "background": {
+                                "description": "How many of one kind a calculation reaches, how many of them carry a distribution, how many\nof those the run drew, and how many it held at their amount.",
+                                "properties": {
+                                  "carried": {
+                                    "type": "integer"
+                                  },
+                                  "drawn": {
+                                    "type": "integer"
+                                  },
+                                  "held": {
+                                    "default": 0,
+                                    "type": "integer"
+                                  },
+                                  "there": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "there",
+                                  "carried",
+                                  "drawn"
+                                ],
+                                "type": "object"
+                              },
+                              "foreground": {
+                                "description": "How many of one kind a calculation reaches, how many of them carry a distribution, how many\nof those the run drew, and how many it held at their amount.",
+                                "properties": {
+                                  "carried": {
+                                    "type": "integer"
+                                  },
+                                  "drawn": {
+                                    "type": "integer"
+                                  },
+                                  "held": {
+                                    "default": 0,
+                                    "type": "integer"
+                                  },
+                                  "there": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "there",
+                                  "carried",
+                                  "drawn"
+                                ],
+                                "type": "object"
+                              },
+                              "parameters": {
+                                "description": "How many of one kind a calculation reaches, how many of them carry a distribution, how many\nof those the run drew, and how many it held at their amount.",
+                                "properties": {
+                                  "carried": {
+                                    "type": "integer"
+                                  },
+                                  "drawn": {
+                                    "type": "integer"
+                                  },
+                                  "held": {
+                                    "default": 0,
+                                    "type": "integer"
+                                  },
+                                  "there": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": [
+                                  "there",
+                                  "carried",
+                                  "drawn"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "parameters",
+                              "foreground",
+                              "background"
                             ],
                             "type": "object"
                           },
@@ -1513,7 +2100,20 @@
                             "type": "array"
                           },
                           "gating_method": {
-                            "type": "string"
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "indistinguishable_from_zero": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
                           },
                           "linked_credit_loops": {
                             "items": {
@@ -1545,9 +2145,6 @@
                           "n": {
                             "type": "integer"
                           },
-                          "normals_at_amount": {
-                            "type": "integer"
-                          },
                           "scope": {
                             "enum": [
                               "full",
@@ -1563,6 +2160,195 @@
                               "cancelled"
                             ],
                             "type": "string"
+                          },
+                          "totals": {
+                            "items": {
+                              "description": "One weighting set's total over a run's draws: the set's identity as `Total` carries it, each\ndraw's weighted sum in short and either the draws themselves or their histogram, and the reason\na set gives no total.",
+                              "properties": {
+                                "categories": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                },
+                                "histogram": {
+                                  "anyOf": [
+                                    {
+                                      "description": "Draws counted in bins of equal width from the smallest to the largest. `low` and `high`\nare those two draws, and `counts` holds the twenty bins, so a draw falls in bin\n`min(19, floor((draw - low) / width))` with `width = (high - low) / 20`.",
+                                      "properties": {
+                                        "counts": {
+                                          "items": {
+                                            "type": "integer"
+                                          },
+                                          "type": "array"
+                                        },
+                                        "high": {
+                                          "type": "number"
+                                        },
+                                        "low": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "low",
+                                        "high",
+                                        "counts"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "default": null
+                                },
+                                "impact_method": {
+                                  "type": "string"
+                                },
+                                "normalised_by_zero": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                },
+                                "position": {
+                                  "type": "integer"
+                                },
+                                "reason": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "samples": {
+                                  "anyOf": [
+                                    {
+                                      "items": {
+                                        "type": "number"
+                                      },
+                                      "type": "array"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "default": null
+                                },
+                                "summary": {
+                                  "anyOf": [
+                                    {
+                                      "description": "One category's samples in short. `median_ci95` is the median's 95 % interval, two of the\nsamples that bound it whatever the distribution, which narrows as samples grow, and `rel_se`\nits half-width over 1.96, relative to the median: the stop rule judges it. Both are None below\nsix samples, and `rel_se` for a median of zero. `percentiles` are the 2.5th and 97.5th\npercentiles of the samples, the spread of the result itself. `mean` is reported and judged by\nnothing: a loop close to using as much of its products as it makes gives draws whose mean\nneed not exist.",
+                                      "properties": {
+                                        "mean": {
+                                          "type": "number"
+                                        },
+                                        "median": {
+                                          "type": "number"
+                                        },
+                                        "median_ci95": {
+                                          "anyOf": [
+                                            {
+                                              "maxItems": 2,
+                                              "minItems": 2,
+                                              "prefixItems": [
+                                                {
+                                                  "type": "number"
+                                                },
+                                                {
+                                                  "type": "number"
+                                                }
+                                              ],
+                                              "type": "array"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "n": {
+                                          "type": "integer"
+                                        },
+                                        "percentiles": {
+                                          "maxItems": 2,
+                                          "minItems": 2,
+                                          "prefixItems": [
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "number"
+                                            }
+                                          ],
+                                          "type": "array"
+                                        },
+                                        "rel_se": {
+                                          "anyOf": [
+                                            {
+                                              "type": "number"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "n",
+                                        "mean",
+                                        "median",
+                                        "median_ci95",
+                                        "percentiles",
+                                        "rel_se"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "unit": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "value_choices": {
+                                  "default": "A weighted total rests on value choices: its weights state how much the method's authors judge each category to matter, not a measurement.",
+                                  "type": "string"
+                                },
+                                "weighting_set": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "impact_method",
+                                "weighting_set",
+                                "position",
+                                "unit",
+                                "categories",
+                                "normalised_by_zero",
+                                "summary",
+                                "reason"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
                           }
                         },
                         "required": [
@@ -1570,8 +2356,10 @@
                           "n",
                           "stopped",
                           "gating_method",
+                          "constant",
+                          "indistinguishable_from_zero",
                           "scope",
-                          "normals_at_amount",
+                          "drawn",
                           "credit_loops",
                           "dropped_draws",
                           "dropped_loops",
@@ -1591,6 +2379,7 @@
                   "name",
                   "scores",
                   "deltas",
+                  "total_deltas",
                   "credit_loops"
                 ],
                 "type": "object"
@@ -1634,7 +2423,7 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "The life cycle inventory: every elementary flow the demand draws or emits, with the foreground process that dominates each row. Rows are ordered by compartment then name and paged; filter by compartment or by words in the flow name. contribution_analysis by='flow' ranks them by characterised score.",
+    "description": "The life cycle inventory: every elementary flow the demand draws or emits, with the foreground process that dominates each row. side='input' or side='output' names one side of the process; without one each row carries its side and inputs come first. Rows are ordered by compartment then name, or by order='amount' by falling magnitude, and paged; filter by compartment or by words in the flow name. contribution_analysis by='flow' ranks them by characterised score.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -1732,12 +2521,35 @@
           "minimum": 1,
           "type": "integer"
         },
+        "order": {
+          "default": "compartment",
+          "enum": [
+            "compartment",
+            "amount"
+          ],
+          "type": "string"
+        },
         "product_system_id": {
           "type": "string"
         },
         "query": {
           "anyOf": [
             {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "side": {
+          "anyOf": [
+            {
+              "enum": [
+                "input",
+                "output"
+              ],
               "type": "string"
             },
             {
@@ -1766,7 +2578,7 @@
           "type": "array"
         },
         "database": {
-          "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one.",
+          "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one. `revision`\nis EcoSemantic's revision of the publisher's release, and none for a release installed as its\npublisher built it.",
           "properties": {
             "elementary_flows": {
               "type": "string"
@@ -1784,6 +2596,17 @@
             },
             "name": {
               "type": "string"
+            },
+            "revision": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             },
             "scheme": {
               "enum": [
@@ -1835,6 +2658,15 @@
                 "type": "number"
               },
               "compartment": {
+                "enum": [
+                  "air",
+                  "water",
+                  "soil",
+                  "immaterial",
+                  "natural resource",
+                  "economic",
+                  "inventory indicator"
+                ],
                 "type": "string"
               },
               "flow": {
@@ -2411,7 +3243,7 @@
               "type": "boolean"
             },
             "config": {
-              "description": "What a Monte Carlo samples. `full` samples every exchange that carries a distribution, the\nproduct system's own and the background database's; `biosphere_only` samples only elementary\nexchanges and holds the technosphere fixed. A product system exchange's distribution is\ncentred on the amount its formula, parameters and case resolve, keeping its relative spread,\nso an exchange a case sets to zero samples zero. A background normal distribution whose\nstandard deviation exceeds its amount is sampled at its amount; the result counts them in\n`normals_at_amount`. `n` fixes the count; otherwise sampling stops between `n_min` and\n`n_max` once the relative standard error of every category's median is under\n`rel_se_target`, which takes six samples at least.",
+              "description": "What a Monte Carlo samples. `full` samples every exchange that carries a distribution, the\nproduct system's own and the background database's; `biosphere_only` samples only elementary\nexchanges and holds the technosphere fixed. A product system exchange's distribution is\ncentred on the amount its formula, parameters and case resolve, keeping its relative spread,\nso an exchange a case sets to zero samples zero. A background normal distribution whose\nstandard deviation exceeds its amount is sampled at its amount; the result counts them in\n`drawn.background.held`. `n` fixes the count; otherwise sampling stops between `n_min` and\n`n_max`, which takes an `n_min` of at least 6, once every category it can measure has a\nmedian whose relative standard error is under `rel_se_target` and none is left to measure.",
               "properties": {
                 "n": {
                   "anyOf": [
@@ -2436,7 +3268,7 @@
                 },
                 "n_min": {
                   "default": 30,
-                  "description": "The fewest draws an adaptive run takes. It bounds the run with `n_max` and applies only when `n` is unset.",
+                  "description": "The fewest draws an adaptive run takes, at least 6, the fewest draws a median's interval needs. It bounds the run with `n_max` and applies only when `n` is unset.",
                   "maximum": 1000,
                   "minimum": 1,
                   "type": "integer"
@@ -2632,7 +3464,7 @@
               "type": "string"
             },
             "progress": {
-              "description": "How far a sampling run has got: the draws taken and the largest relative standard error\nof a category's median, None while any is undefined. The total is unknown until the stop\nrule stops.",
+              "description": "How far a sampling run has got: the draws taken and the largest relative standard error\namong the categories it can measure, None while it can measure none. The total is unknown\nuntil the stop rule stops.",
               "properties": {
                 "iterations": {
                   "default": 0,
@@ -2655,7 +3487,7 @@
             "result": {
               "anyOf": [
                 {
-                  "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median, at the ceiling `n_max`, at a\nstated count, or cancelled.\n`gating_method` is the id of the method of the category whose median's relative standard\nerror is the largest, or the first whose is undefined. `normals_at_amount` counts the\nbackground normal distributions sampled at their amount because their standard deviation\nexceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order; `without_samples` answers the same result with each\ncategory's histogram in place of its draws.",
+                  "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median it can measure, at the ceiling\n`n_max`, at a stated count, or cancelled.\n`gating_method` is the id of the method of the category that held the run longest, the one\nwhose median's relative standard error was above the target at the latest check that found\none; a run of a stated count names none, and so does one no category ever held.\n`constant` names the categories met as constant, every draw equal, and\n`indistinguishable_from_zero` those left out of the stop rule, their median's 95 % interval\nholding 0, both in method order and each judged at the run's end. `drawn` states how many\nparameters, foreground exchanges and background rows the calculation reaches, how many of\nthem carry a distribution, how many of those the run drew and how many it held at their\namount: a wide background normal, whose standard deviation exceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order; `without_samples` answers the same result with each\ncategory's and each total's histogram in place of its draws. `totals` holds one total per\nweighting set of the run's method family, each draw's weighted sum in short; no total takes\npart in the stop rule.",
                   "properties": {
                     "categories": {
                       "items": {
@@ -2784,6 +3616,12 @@
                       },
                       "type": "array"
                     },
+                    "constant": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
                     "credit_loops": {
                       "items": {
                         "items": {
@@ -2794,7 +3632,7 @@
                       "type": "array"
                     },
                     "database": {
-                      "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one.",
+                      "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one. `revision`\nis EcoSemantic's revision of the publisher's release, and none for a release installed as its\npublisher built it.",
                       "properties": {
                         "elementary_flows": {
                           "type": "string"
@@ -2812,6 +3650,17 @@
                         },
                         "name": {
                           "type": "string"
+                        },
+                        "revision": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
                         },
                         "scheme": {
                           "enum": [
@@ -2833,6 +3682,89 @@
                         "scheme",
                         "version",
                         "system_model"
+                      ],
+                      "type": "object"
+                    },
+                    "drawn": {
+                      "description": "What a calculation reached and what of it carried a distribution: the literal parameters\nof the systems it reaches, the foreground's exchanges and the background's rows.",
+                      "properties": {
+                        "background": {
+                          "description": "How many of one kind a calculation reaches, how many of them carry a distribution, how many\nof those the run drew, and how many it held at their amount.",
+                          "properties": {
+                            "carried": {
+                              "type": "integer"
+                            },
+                            "drawn": {
+                              "type": "integer"
+                            },
+                            "held": {
+                              "default": 0,
+                              "type": "integer"
+                            },
+                            "there": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "there",
+                            "carried",
+                            "drawn"
+                          ],
+                          "type": "object"
+                        },
+                        "foreground": {
+                          "description": "How many of one kind a calculation reaches, how many of them carry a distribution, how many\nof those the run drew, and how many it held at their amount.",
+                          "properties": {
+                            "carried": {
+                              "type": "integer"
+                            },
+                            "drawn": {
+                              "type": "integer"
+                            },
+                            "held": {
+                              "default": 0,
+                              "type": "integer"
+                            },
+                            "there": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "there",
+                            "carried",
+                            "drawn"
+                          ],
+                          "type": "object"
+                        },
+                        "parameters": {
+                          "description": "How many of one kind a calculation reaches, how many of them carry a distribution, how many\nof those the run drew, and how many it held at their amount.",
+                          "properties": {
+                            "carried": {
+                              "type": "integer"
+                            },
+                            "drawn": {
+                              "type": "integer"
+                            },
+                            "held": {
+                              "default": 0,
+                              "type": "integer"
+                            },
+                            "there": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "there",
+                            "carried",
+                            "drawn"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "parameters",
+                        "foreground",
+                        "background"
                       ],
                       "type": "object"
                     },
@@ -2885,7 +3817,20 @@
                       "type": "array"
                     },
                     "gating_method": {
-                      "type": "string"
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "indistinguishable_from_zero": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
                     },
                     "linked_credit_loops": {
                       "items": {
@@ -2917,9 +3862,6 @@
                     "n": {
                       "type": "integer"
                     },
-                    "normals_at_amount": {
-                      "type": "integer"
-                    },
                     "scope": {
                       "enum": [
                         "full",
@@ -2935,6 +3877,195 @@
                         "cancelled"
                       ],
                       "type": "string"
+                    },
+                    "totals": {
+                      "items": {
+                        "description": "One weighting set's total over a run's draws: the set's identity as `Total` carries it, each\ndraw's weighted sum in short and either the draws themselves or their histogram, and the reason\na set gives no total.",
+                        "properties": {
+                          "categories": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "histogram": {
+                            "anyOf": [
+                              {
+                                "description": "Draws counted in bins of equal width from the smallest to the largest. `low` and `high`\nare those two draws, and `counts` holds the twenty bins, so a draw falls in bin\n`min(19, floor((draw - low) / width))` with `width = (high - low) / 20`.",
+                                "properties": {
+                                  "counts": {
+                                    "items": {
+                                      "type": "integer"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "high": {
+                                    "type": "number"
+                                  },
+                                  "low": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "low",
+                                  "high",
+                                  "counts"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "impact_method": {
+                            "type": "string"
+                          },
+                          "normalised_by_zero": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "position": {
+                            "type": "integer"
+                          },
+                          "reason": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "samples": {
+                            "anyOf": [
+                              {
+                                "items": {
+                                  "type": "number"
+                                },
+                                "type": "array"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "summary": {
+                            "anyOf": [
+                              {
+                                "description": "One category's samples in short. `median_ci95` is the median's 95 % interval, two of the\nsamples that bound it whatever the distribution, which narrows as samples grow, and `rel_se`\nits half-width over 1.96, relative to the median: the stop rule judges it. Both are None below\nsix samples, and `rel_se` for a median of zero. `percentiles` are the 2.5th and 97.5th\npercentiles of the samples, the spread of the result itself. `mean` is reported and judged by\nnothing: a loop close to using as much of its products as it makes gives draws whose mean\nneed not exist.",
+                                "properties": {
+                                  "mean": {
+                                    "type": "number"
+                                  },
+                                  "median": {
+                                    "type": "number"
+                                  },
+                                  "median_ci95": {
+                                    "anyOf": [
+                                      {
+                                        "maxItems": 2,
+                                        "minItems": 2,
+                                        "prefixItems": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "number"
+                                          }
+                                        ],
+                                        "type": "array"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "n": {
+                                    "type": "integer"
+                                  },
+                                  "percentiles": {
+                                    "maxItems": 2,
+                                    "minItems": 2,
+                                    "prefixItems": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "number"
+                                      }
+                                    ],
+                                    "type": "array"
+                                  },
+                                  "rel_se": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "n",
+                                  "mean",
+                                  "median",
+                                  "median_ci95",
+                                  "percentiles",
+                                  "rel_se"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "unit": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "value_choices": {
+                            "default": "A weighted total rests on value choices: its weights state how much the method's authors judge each category to matter, not a measurement.",
+                            "type": "string"
+                          },
+                          "weighting_set": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "impact_method",
+                          "weighting_set",
+                          "position",
+                          "unit",
+                          "categories",
+                          "normalised_by_zero",
+                          "summary",
+                          "reason"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
                     }
                   },
                   "required": [
@@ -2942,8 +4073,10 @@
                     "n",
                     "stopped",
                     "gating_method",
+                    "constant",
+                    "indistinguishable_from_zero",
                     "scope",
-                    "normals_at_amount",
+                    "drawn",
                     "credit_loops",
                     "dropped_draws",
                     "dropped_loops",
@@ -2986,6 +4119,81 @@
                 "type": "string"
               },
               "type": "array"
+            },
+            "weighting_sets": {
+              "items": {
+                "description": "One normalisation and weighting set of an impact method's family: its name, none where the\nbundle names none, the unit of the weighted score it answers in, and one factor per category it\ncharacterises.",
+                "properties": {
+                  "factors": {
+                    "items": {
+                      "description": "One category of a weighting set: the impact method it characterises as its id, the\nnormalisation the set gives it and its weight, each as the bundle states it and none when it\nstates none.",
+                      "properties": {
+                        "method_id": {
+                          "type": "string"
+                        },
+                        "normalisation": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "weighting": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "method_id",
+                        "normalisation",
+                        "weighting"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "impact_method": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "unit": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "impact_method",
+                  "name",
+                  "unit",
+                  "factors"
+                ],
+                "type": "object"
+              },
+              "type": "array"
             }
           },
           "required": [
@@ -3024,7 +4232,7 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "Decompose one impact. by='process' partitions the total over the processes that emit it, each appearing once. by='path' nests it under the demanded process along the supply chain that caused it, with elementary flows itemised at each node. by='flow' partitions it over the substances emitted or drawn, ranked by characterised score. Same total every way. by='path' stops at max_level (default 3) and max_nodes (default 50) and folds a branch below cutoff (default 0.001) of the total into a remainder; by='process' and by='flow' answer the top_n (default 10) largest parts that reach cutoff, and cut says what the list leaves out: below, the parts under the cut-off, and unlisted, the parts that reach it past top_n, each counted, with share and unlisted_share the total of their magnitudes and below_score and unlisted_score the signed total of their scores, so the rows listed plus these two make the total. method names the method once and total names it by method_id. Example: {\"product_system_id\": \"\u2026\", \"by\": \"path\", \"method_id\": \"m_\u2026\", \"max_level\": 4}.",
+    "description": "Decompose one impact. by='process' partitions the total over the processes that emit it, each appearing once. by='path' nests it under the demanded process along the supply chain that caused it, with elementary flows itemised at each node. by='flow' partitions it over the substances emitted or drawn, ranked by characterised score. Same total every way. by='path' stops at max_level (default 3) and max_nodes (default 50) and folds a branch below cutoff (default 0.001) of the total into a remainder; by='process' and by='flow' answer the top_n (default 10) largest parts that reach cutoff, and cut says what the list leaves out: below, the parts under the cut-off, and unlisted, the parts that reach it past top_n, each counted, with share and unlisted_share the total of their magnitudes and below_score and unlisted_score the signed total of their scores, so the rows listed plus these two make the total. Every fraction and share is none where the total is 0, which nothing is a share of. method names the method once and total names it by method_id. Example: {\"product_system_id\": \"\u2026\", \"by\": \"path\", \"method_id\": \"m_\u2026\", \"max_level\": 4}.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -3288,7 +4496,7 @@
           "type": "object"
         },
         "Cut": {
-          "description": "What a flat contribution list leaves out: the share of the total the cut-off was set at,\nhow many parts fell under it and their share, and how many parts reach it past the list's\nlength and their share. A share sums the magnitudes of its parts, as the cut-off compares\nthem; `below_score` and `unlisted_score` sum their scores as they are signed, so the listed\nscores plus both make the total.",
+          "description": "What a flat contribution list leaves out: the share of the total the cut-off was set at,\nhow many parts fell under it and their share, and how many parts reach it past the list's\nlength and their share. A share sums the magnitudes of its parts, as the cut-off compares\nthem; `below_score` and `unlisted_score` sum their scores as they are signed, so the listed\nscores plus both make the total. Over a total of 0 a part is no share of it, so the cut-off\nsets aside nothing and both shares are None.",
           "properties": {
             "below": {
               "type": "integer"
@@ -3300,7 +4508,14 @@
               "type": "number"
             },
             "share": {
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "unlisted": {
               "type": "integer"
@@ -3309,7 +4524,14 @@
               "type": "number"
             },
             "unlisted_share": {
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
@@ -3324,7 +4546,7 @@
           "type": "object"
         },
         "Database": {
-          "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one.",
+          "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one. `revision`\nis EcoSemantic's revision of the publisher's release, and none for a release installed as its\npublisher built it.",
           "properties": {
             "elementary_flows": {
               "type": "string"
@@ -3342,6 +4564,17 @@
             },
             "name": {
               "type": "string"
+            },
+            "revision": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             },
             "scheme": {
               "enum": [
@@ -3393,13 +4626,29 @@
               "type": "number"
             },
             "compartment": {
+              "enum": [
+                "air",
+                "water",
+                "soil",
+                "immaterial",
+                "natural resource",
+                "economic",
+                "inventory indicator"
+              ],
               "type": "string"
             },
             "flow": {
               "$ref": "#/$defs/ElementaryFlowRef"
             },
             "fraction": {
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "name": {
               "type": "string"
@@ -3458,7 +4707,14 @@
         "Hotspot": {
           "properties": {
             "fraction": {
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "location": {
               "anyOf": [
@@ -3626,7 +4882,14 @@
               "type": "array"
             },
             "fraction": {
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "kind": {
               "default": "process",
@@ -3728,7 +4991,7 @@
       "open_world_hint": false,
       "read_only_hint": false
     },
-    "description": "An exchange on the process with this code: production (no input), product (a background process by the ref a search hit carries, or a foreground process by code) or elementary (a flow by the ref a search hit carries). Give amount or formula; a formula names parameters set_parameters has already written. Unit and name default to the provider's and must match its unit. A product input may instead link another product system, {\"kind\": \"system\", \"product_system_id\": ...}: one unit of its reference process, pinned to its current state unless at_hash names another, under its base values unless case names one of its cases. A link that closes a cycle, or that reaches one system under two cases, is refused. input and uncertainty are JSON objects, never strings holding JSON: {\"kind\": \"foreground\", \"code\": \"mine\"}, {\"kind\": \"background\", \"database\": ..., \"id\": ...}, {\"type\": \"lognormal\", \"params\": {\"loc\": ..., \"scale\": ...}}.",
+    "description": "An exchange on the process with this code: production (no input), product (a background process by the ref a search hit carries, or a foreground process by code) or elementary (a flow by the ref a search hit carries). Give an amount, a formula, or both as get_product_system answers them, the amount then being the one the formula evaluates to; a formula names parameters set_parameters has already written. Unit and name default to the provider's and must match its unit. A product input may instead link another product system, {\"kind\": \"system\", \"product_system_id\": ...}: one unit of its reference process, pinned to its current state unless at_hash names another, under its base values unless case names one of its cases. A link that closes a cycle, or that reaches one system under two cases, is refused. An uncertainty is centred on the amount the exchange resolves to within a relative 1e-9, and is refused on an exchange whose formula reads an uncertain parameter: an amount takes one spread. input and uncertainty are JSON objects, never strings holding JSON: {\"kind\": \"foreground\", \"code\": \"mine\"}, {\"kind\": \"background\", \"database\": ..., \"id\": ...}, {\"type\": \"lognormal\", \"params\": {\"loc\": ..., \"scale\": ...}}.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -3911,7 +5174,7 @@
         "uncertainty": {
           "anyOf": [
             {
-              "description": "A distribution on an exchange amount, in stats_arrays field names.",
+              "description": "A distribution on an exchange amount or a literal parameter's value, in stats_arrays field\nnames.",
               "properties": {
                 "params": {
                   "additionalProperties": {
@@ -4362,7 +5625,7 @@
             "uncertainty": {
               "anyOf": [
                 {
-                  "description": "A distribution on an exchange amount, in stats_arrays field names.",
+                  "description": "A distribution on an exchange amount or a literal parameter's value, in stats_arrays field\nnames.",
                   "properties": {
                     "params": {
                       "additionalProperties": {
@@ -4913,7 +6176,7 @@
                   "uncertainty": {
                     "anyOf": [
                       {
-                        "description": "A distribution on an exchange amount, in stats_arrays field names.",
+                        "description": "A distribution on an exchange amount or a literal parameter's value, in stats_arrays field\nnames.",
                         "properties": {
                           "params": {
                             "additionalProperties": {
@@ -5346,7 +6609,7 @@
       "open_world_hint": false,
       "read_only_hint": false
     },
-    "description": "A named what-if over the product system: exchange overrides (exchange_id with one of amount, multiplier or input) and parameter overrides (name, value). It is applied once to prove it and pinned to the base hash, the content hash without the cases and the database build: a case written or deleted moves no scenario, and base_hash is never the system's hash. Any later edit leaves the scenario behind until rebase_scenario moves it. An input swap applies to a product exchange and names a background dataset or a foreground process, never a linked system. A scenario is immutable; delete and create to change it. calculate_impact takes it as a variant. Example: {\"product_system_id\": \"\u2026\", \"name\": \"half power\", \"overrides\": [{\"kind\": \"exchange\", \"exchange_id\": \"\u2026\", \"multiplier\": 0.5}]}.",
+    "description": "A named what-if over the product system: exchange overrides (exchange_id with one of amount, multiplier or input) and parameter overrides (name, value). It is applied once to prove it and pinned to the base hash, the content hash without the cases and the database build: a case written or deleted moves no scenario, and base_hash is never the system's hash. Any later edit leaves the scenario behind until rebase_scenario moves it. An input swap applies to a product exchange and names a background dataset or a foreground process, never a linked system, and the exchange takes the supplier's name: the one the override gives, or the supplier's reference product. A background supplier in another unit than the exchange is refused. A scenario is immutable; delete and create to change it. calculate_impact takes it as a variant. Example: {\"product_system_id\": \"\u2026\", \"name\": \"half power\", \"overrides\": [{\"kind\": \"exchange\", \"exchange_id\": \"\u2026\", \"multiplier\": 0.5}]}.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -5443,6 +6706,17 @@
                       {
                         "minimum": 0,
                         "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "name": {
+                    "anyOf": [
+                      {
+                        "type": "string"
                       },
                       {
                         "type": "null"
@@ -5833,6 +7107,17 @@
                           {
                             "minimum": 0,
                             "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null
+                      },
+                      "name": {
+                        "anyOf": [
+                          {
+                            "type": "string"
                           },
                           {
                             "type": "null"
@@ -7133,6 +8418,16 @@
                           }
                         ]
                       },
+                      "supplier_location": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "type": {
                         "enum": [
                           "production",
@@ -7152,6 +8447,7 @@
                       "reference",
                       "flow",
                       "supplier",
+                      "supplier_location",
                       "amount",
                       "unit",
                       "cut_off"
@@ -7286,6 +8582,17 @@
         },
         "value": {
           "properties": {
+            "cas_as_published": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
             "cas_number": {
               "anyOf": [
                 {
@@ -7298,6 +8605,15 @@
               "default": null
             },
             "compartment": {
+              "enum": [
+                "air",
+                "water",
+                "soil",
+                "immaterial",
+                "natural resource",
+                "economic",
+                "inventory indicator"
+              ],
               "type": "string"
             },
             "flow_type": {
@@ -7871,6 +9187,46 @@
                   "name": {
                     "type": "string"
                   },
+                  "uncertainty": {
+                    "anyOf": [
+                      {
+                        "description": "A distribution on an exchange amount or a literal parameter's value, in stats_arrays field\nnames.",
+                        "properties": {
+                          "params": {
+                            "additionalProperties": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                }
+                              ]
+                            },
+                            "type": "object"
+                          },
+                          "type": {
+                            "enum": [
+                              "lognormal",
+                              "normal",
+                              "uniform",
+                              "triangular"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "params"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
                   "unit": {
                     "default": "",
                     "type": "string"
@@ -8008,7 +9364,7 @@
               "type": "array"
             },
             "database": {
-              "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one.",
+              "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one. `revision`\nis EcoSemantic's revision of the publisher's release, and none for a release installed as its\npublisher built it.",
               "properties": {
                 "elementary_flows": {
                   "type": "string"
@@ -8026,6 +9382,17 @@
                 },
                 "name": {
                   "type": "string"
+                },
+                "revision": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 },
                 "scheme": {
                   "enum": [
@@ -8097,6 +9464,46 @@
                   },
                   "name": {
                     "type": "string"
+                  },
+                  "uncertainty": {
+                    "anyOf": [
+                      {
+                        "description": "A distribution on an exchange amount or a literal parameter's value, in stats_arrays field\nnames.",
+                        "properties": {
+                          "params": {
+                            "additionalProperties": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                }
+                              ]
+                            },
+                            "type": "object"
+                          },
+                          "type": {
+                            "enum": [
+                              "lognormal",
+                              "normal",
+                              "uniform",
+                              "triangular"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "params"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
                   },
                   "unit": {
                     "default": "",
@@ -8305,7 +9712,7 @@
                         "uncertainty": {
                           "anyOf": [
                             {
-                              "description": "A distribution on an exchange amount, in stats_arrays field names.",
+                              "description": "A distribution on an exchange amount or a literal parameter's value, in stats_arrays field\nnames.",
                               "properties": {
                                 "params": {
                                   "additionalProperties": {
@@ -8510,6 +9917,17 @@
                                 {
                                   "minimum": 0,
                                   "type": "number"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null
+                            },
+                            "name": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
                                 },
                                 {
                                   "type": "null"
@@ -8874,7 +10292,7 @@
               "type": "boolean"
             },
             "config": {
-              "description": "What a Monte Carlo samples. `full` samples every exchange that carries a distribution, the\nproduct system's own and the background database's; `biosphere_only` samples only elementary\nexchanges and holds the technosphere fixed. A product system exchange's distribution is\ncentred on the amount its formula, parameters and case resolve, keeping its relative spread,\nso an exchange a case sets to zero samples zero. A background normal distribution whose\nstandard deviation exceeds its amount is sampled at its amount; the result counts them in\n`normals_at_amount`. `n` fixes the count; otherwise sampling stops between `n_min` and\n`n_max` once the relative standard error of every category's median is under\n`rel_se_target`, which takes six samples at least.",
+              "description": "What a Monte Carlo samples. `full` samples every exchange that carries a distribution, the\nproduct system's own and the background database's; `biosphere_only` samples only elementary\nexchanges and holds the technosphere fixed. A product system exchange's distribution is\ncentred on the amount its formula, parameters and case resolve, keeping its relative spread,\nso an exchange a case sets to zero samples zero. A background normal distribution whose\nstandard deviation exceeds its amount is sampled at its amount; the result counts them in\n`drawn.background.held`. `n` fixes the count; otherwise sampling stops between `n_min` and\n`n_max`, which takes an `n_min` of at least 6, once every category it can measure has a\nmedian whose relative standard error is under `rel_se_target` and none is left to measure.",
               "properties": {
                 "n": {
                   "anyOf": [
@@ -8899,7 +10317,7 @@
                 },
                 "n_min": {
                   "default": 30,
-                  "description": "The fewest draws an adaptive run takes. It bounds the run with `n_max` and applies only when `n` is unset.",
+                  "description": "The fewest draws an adaptive run takes, at least 6, the fewest draws a median's interval needs. It bounds the run with `n_max` and applies only when `n` is unset.",
                   "maximum": 1000,
                   "minimum": 1,
                   "type": "integer"
@@ -9095,7 +10513,7 @@
               "type": "string"
             },
             "progress": {
-              "description": "How far a sampling run has got: the draws taken and the largest relative standard error\nof a category's median, None while any is undefined. The total is unknown until the stop\nrule stops.",
+              "description": "How far a sampling run has got: the draws taken and the largest relative standard error\namong the categories it can measure, None while it can measure none. The total is unknown\nuntil the stop rule stops.",
               "properties": {
                 "iterations": {
                   "default": 0,
@@ -9118,7 +10536,7 @@
             "result": {
               "anyOf": [
                 {
-                  "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median, at the ceiling `n_max`, at a\nstated count, or cancelled.\n`gating_method` is the id of the method of the category whose median's relative standard\nerror is the largest, or the first whose is undefined. `normals_at_amount` counts the\nbackground normal distributions sampled at their amount because their standard deviation\nexceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order; `without_samples` answers the same result with each\ncategory's histogram in place of its draws.",
+                  "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median it can measure, at the ceiling\n`n_max`, at a stated count, or cancelled.\n`gating_method` is the id of the method of the category that held the run longest, the one\nwhose median's relative standard error was above the target at the latest check that found\none; a run of a stated count names none, and so does one no category ever held.\n`constant` names the categories met as constant, every draw equal, and\n`indistinguishable_from_zero` those left out of the stop rule, their median's 95 % interval\nholding 0, both in method order and each judged at the run's end. `drawn` states how many\nparameters, foreground exchanges and background rows the calculation reaches, how many of\nthem carry a distribution, how many of those the run drew and how many it held at their\namount: a wide background normal, whose standard deviation exceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order; `without_samples` answers the same result with each\ncategory's and each total's histogram in place of its draws. `totals` holds one total per\nweighting set of the run's method family, each draw's weighted sum in short; no total takes\npart in the stop rule.",
                   "properties": {
                     "categories": {
                       "items": {
@@ -9247,6 +10665,12 @@
                       },
                       "type": "array"
                     },
+                    "constant": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
                     "credit_loops": {
                       "items": {
                         "items": {
@@ -9257,7 +10681,7 @@
                       "type": "array"
                     },
                     "database": {
-                      "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one.",
+                      "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one. `revision`\nis EcoSemantic's revision of the publisher's release, and none for a release installed as its\npublisher built it.",
                       "properties": {
                         "elementary_flows": {
                           "type": "string"
@@ -9275,6 +10699,17 @@
                         },
                         "name": {
                           "type": "string"
+                        },
+                        "revision": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
                         },
                         "scheme": {
                           "enum": [
@@ -9296,6 +10731,89 @@
                         "scheme",
                         "version",
                         "system_model"
+                      ],
+                      "type": "object"
+                    },
+                    "drawn": {
+                      "description": "What a calculation reached and what of it carried a distribution: the literal parameters\nof the systems it reaches, the foreground's exchanges and the background's rows.",
+                      "properties": {
+                        "background": {
+                          "description": "How many of one kind a calculation reaches, how many of them carry a distribution, how many\nof those the run drew, and how many it held at their amount.",
+                          "properties": {
+                            "carried": {
+                              "type": "integer"
+                            },
+                            "drawn": {
+                              "type": "integer"
+                            },
+                            "held": {
+                              "default": 0,
+                              "type": "integer"
+                            },
+                            "there": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "there",
+                            "carried",
+                            "drawn"
+                          ],
+                          "type": "object"
+                        },
+                        "foreground": {
+                          "description": "How many of one kind a calculation reaches, how many of them carry a distribution, how many\nof those the run drew, and how many it held at their amount.",
+                          "properties": {
+                            "carried": {
+                              "type": "integer"
+                            },
+                            "drawn": {
+                              "type": "integer"
+                            },
+                            "held": {
+                              "default": 0,
+                              "type": "integer"
+                            },
+                            "there": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "there",
+                            "carried",
+                            "drawn"
+                          ],
+                          "type": "object"
+                        },
+                        "parameters": {
+                          "description": "How many of one kind a calculation reaches, how many of them carry a distribution, how many\nof those the run drew, and how many it held at their amount.",
+                          "properties": {
+                            "carried": {
+                              "type": "integer"
+                            },
+                            "drawn": {
+                              "type": "integer"
+                            },
+                            "held": {
+                              "default": 0,
+                              "type": "integer"
+                            },
+                            "there": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "there",
+                            "carried",
+                            "drawn"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "parameters",
+                        "foreground",
+                        "background"
                       ],
                       "type": "object"
                     },
@@ -9348,7 +10866,20 @@
                       "type": "array"
                     },
                     "gating_method": {
-                      "type": "string"
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "indistinguishable_from_zero": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
                     },
                     "linked_credit_loops": {
                       "items": {
@@ -9380,9 +10911,6 @@
                     "n": {
                       "type": "integer"
                     },
-                    "normals_at_amount": {
-                      "type": "integer"
-                    },
                     "scope": {
                       "enum": [
                         "full",
@@ -9398,6 +10926,195 @@
                         "cancelled"
                       ],
                       "type": "string"
+                    },
+                    "totals": {
+                      "items": {
+                        "description": "One weighting set's total over a run's draws: the set's identity as `Total` carries it, each\ndraw's weighted sum in short and either the draws themselves or their histogram, and the reason\na set gives no total.",
+                        "properties": {
+                          "categories": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "histogram": {
+                            "anyOf": [
+                              {
+                                "description": "Draws counted in bins of equal width from the smallest to the largest. `low` and `high`\nare those two draws, and `counts` holds the twenty bins, so a draw falls in bin\n`min(19, floor((draw - low) / width))` with `width = (high - low) / 20`.",
+                                "properties": {
+                                  "counts": {
+                                    "items": {
+                                      "type": "integer"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "high": {
+                                    "type": "number"
+                                  },
+                                  "low": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "low",
+                                  "high",
+                                  "counts"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "impact_method": {
+                            "type": "string"
+                          },
+                          "normalised_by_zero": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "position": {
+                            "type": "integer"
+                          },
+                          "reason": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "samples": {
+                            "anyOf": [
+                              {
+                                "items": {
+                                  "type": "number"
+                                },
+                                "type": "array"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "summary": {
+                            "anyOf": [
+                              {
+                                "description": "One category's samples in short. `median_ci95` is the median's 95 % interval, two of the\nsamples that bound it whatever the distribution, which narrows as samples grow, and `rel_se`\nits half-width over 1.96, relative to the median: the stop rule judges it. Both are None below\nsix samples, and `rel_se` for a median of zero. `percentiles` are the 2.5th and 97.5th\npercentiles of the samples, the spread of the result itself. `mean` is reported and judged by\nnothing: a loop close to using as much of its products as it makes gives draws whose mean\nneed not exist.",
+                                "properties": {
+                                  "mean": {
+                                    "type": "number"
+                                  },
+                                  "median": {
+                                    "type": "number"
+                                  },
+                                  "median_ci95": {
+                                    "anyOf": [
+                                      {
+                                        "maxItems": 2,
+                                        "minItems": 2,
+                                        "prefixItems": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "number"
+                                          }
+                                        ],
+                                        "type": "array"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "n": {
+                                    "type": "integer"
+                                  },
+                                  "percentiles": {
+                                    "maxItems": 2,
+                                    "minItems": 2,
+                                    "prefixItems": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "number"
+                                      }
+                                    ],
+                                    "type": "array"
+                                  },
+                                  "rel_se": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "n",
+                                  "mean",
+                                  "median",
+                                  "median_ci95",
+                                  "percentiles",
+                                  "rel_se"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "unit": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "value_choices": {
+                            "default": "A weighted total rests on value choices: its weights state how much the method's authors judge each category to matter, not a measurement.",
+                            "type": "string"
+                          },
+                          "weighting_set": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "impact_method",
+                          "weighting_set",
+                          "position",
+                          "unit",
+                          "categories",
+                          "normalised_by_zero",
+                          "summary",
+                          "reason"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
                     }
                   },
                   "required": [
@@ -9405,8 +11122,10 @@
                     "n",
                     "stopped",
                     "gating_method",
+                    "constant",
+                    "indistinguishable_from_zero",
                     "scope",
-                    "normals_at_amount",
+                    "drawn",
                     "credit_loops",
                     "dropped_draws",
                     "dropped_loops",
@@ -9447,6 +11166,81 @@
             "treatments_run_backwards": {
               "items": {
                 "type": "string"
+              },
+              "type": "array"
+            },
+            "weighting_sets": {
+              "items": {
+                "description": "One normalisation and weighting set of an impact method's family: its name, none where the\nbundle names none, the unit of the weighted score it answers in, and one factor per category it\ncharacterises.",
+                "properties": {
+                  "factors": {
+                    "items": {
+                      "description": "One category of a weighting set: the impact method it characterises as its id, the\nnormalisation the set gives it and its weight, each as the bundle states it and none when it\nstates none.",
+                      "properties": {
+                        "method_id": {
+                          "type": "string"
+                        },
+                        "normalisation": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "weighting": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "method_id",
+                        "normalisation",
+                        "weighting"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "impact_method": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "unit": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "impact_method",
+                  "name",
+                  "unit",
+                  "factors"
+                ],
+                "type": "object"
               },
               "type": "array"
             }
@@ -10158,7 +11952,7 @@
       "open_world_hint": false,
       "read_only_hint": false
     },
-    "description": "Read the inputs/ of a table folder back as the whole parameter space of the product system its model.yaml names. Refused when the document moved, when model.yaml was edited, and cell by cell when a value cannot be read.",
+    "description": "Read the inputs/ of a table folder back as the whole parameter space of the product system its model.yaml names. Refused when the document moved, when model.yaml was edited, when the folder changes nothing, and cell by cell when a value cannot be read.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -10497,6 +12291,46 @@
                   },
                   "name": {
                     "type": "string"
+                  },
+                  "uncertainty": {
+                    "anyOf": [
+                      {
+                        "description": "A distribution on an exchange amount or a literal parameter's value, in stats_arrays field\nnames.",
+                        "properties": {
+                          "params": {
+                            "additionalProperties": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                }
+                              ]
+                            },
+                            "type": "object"
+                          },
+                          "type": {
+                            "enum": [
+                              "lognormal",
+                              "normal",
+                              "uniform",
+                              "triangular"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "params"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
                   },
                   "unit": {
                     "default": "",
@@ -10985,7 +12819,7 @@
         },
         "value": {
           "items": {
-            "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one.",
+            "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one. `revision`\nis EcoSemantic's revision of the publisher's release, and none for a release installed as its\npublisher built it.",
             "properties": {
               "elementary_flows": {
                 "type": "string"
@@ -11003,6 +12837,17 @@
               },
               "name": {
                 "type": "string"
+              },
+              "revision": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
               },
               "scheme": {
                 "enum": [
@@ -11760,7 +13605,7 @@
         },
         "value": {
           "items": {
-            "description": "One sampling run without what it answered: the key it was computed on, each exchange at\nthat key sending a positive amount to a treatment, which runs it backwards, and where it got\nto. A listing answers runs so.",
+            "description": "One sampling run without what it answered: the key it was computed on, each exchange at\nthat key sending a positive amount to a treatment, which runs it backwards, the weighting sets\nits totals answer, and where it got to. A listing answers runs so.",
             "properties": {
               "at_hash": {
                 "type": "string"
@@ -11770,7 +13615,7 @@
                 "type": "boolean"
               },
               "config": {
-                "description": "What a Monte Carlo samples. `full` samples every exchange that carries a distribution, the\nproduct system's own and the background database's; `biosphere_only` samples only elementary\nexchanges and holds the technosphere fixed. A product system exchange's distribution is\ncentred on the amount its formula, parameters and case resolve, keeping its relative spread,\nso an exchange a case sets to zero samples zero. A background normal distribution whose\nstandard deviation exceeds its amount is sampled at its amount; the result counts them in\n`normals_at_amount`. `n` fixes the count; otherwise sampling stops between `n_min` and\n`n_max` once the relative standard error of every category's median is under\n`rel_se_target`, which takes six samples at least.",
+                "description": "What a Monte Carlo samples. `full` samples every exchange that carries a distribution, the\nproduct system's own and the background database's; `biosphere_only` samples only elementary\nexchanges and holds the technosphere fixed. A product system exchange's distribution is\ncentred on the amount its formula, parameters and case resolve, keeping its relative spread,\nso an exchange a case sets to zero samples zero. A background normal distribution whose\nstandard deviation exceeds its amount is sampled at its amount; the result counts them in\n`drawn.background.held`. `n` fixes the count; otherwise sampling stops between `n_min` and\n`n_max`, which takes an `n_min` of at least 6, once every category it can measure has a\nmedian whose relative standard error is under `rel_se_target` and none is left to measure.",
                 "properties": {
                   "n": {
                     "anyOf": [
@@ -11795,7 +13640,7 @@
                   },
                   "n_min": {
                     "default": 30,
-                    "description": "The fewest draws an adaptive run takes. It bounds the run with `n_max` and applies only when `n` is unset.",
+                    "description": "The fewest draws an adaptive run takes, at least 6, the fewest draws a median's interval needs. It bounds the run with `n_max` and applies only when `n` is unset.",
                     "maximum": 1000,
                     "minimum": 1,
                     "type": "integer"
@@ -11991,7 +13836,7 @@
                 "type": "string"
               },
               "progress": {
-                "description": "How far a sampling run has got: the draws taken and the largest relative standard error\nof a category's median, None while any is undefined. The total is unknown until the stop\nrule stops.",
+                "description": "How far a sampling run has got: the draws taken and the largest relative standard error\namong the categories it can measure, None while it can measure none. The total is unknown\nuntil the stop rule stops.",
                 "properties": {
                   "iterations": {
                     "default": 0,
@@ -12037,6 +13882,81 @@
               "treatments_run_backwards": {
                 "items": {
                   "type": "string"
+                },
+                "type": "array"
+              },
+              "weighting_sets": {
+                "items": {
+                  "description": "One normalisation and weighting set of an impact method's family: its name, none where the\nbundle names none, the unit of the weighted score it answers in, and one factor per category it\ncharacterises.",
+                  "properties": {
+                    "factors": {
+                      "items": {
+                        "description": "One category of a weighting set: the impact method it characterises as its id, the\nnormalisation the set gives it and its weight, each as the bundle states it and none when it\nstates none.",
+                        "properties": {
+                          "method_id": {
+                            "type": "string"
+                          },
+                          "normalisation": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "weighting": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "method_id",
+                          "normalisation",
+                          "weighting"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "impact_method": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "unit": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "impact_method",
+                    "name",
+                    "unit",
+                    "factors"
+                  ],
+                  "type": "object"
                 },
                 "type": "array"
               }
@@ -13309,6 +15229,17 @@
                           }
                         ],
                         "default": null
+                      },
+                      "name": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null
                       }
                     },
                     "required": [
@@ -13738,6 +15669,17 @@
         "items": {
           "items": {
             "properties": {
+              "cas_as_published": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
               "cas_number": {
                 "anyOf": [
                   {
@@ -13749,6 +15691,15 @@
                 ]
               },
               "compartment": {
+                "enum": [
+                  "air",
+                  "water",
+                  "soil",
+                  "immaterial",
+                  "natural resource",
+                  "economic",
+                  "inventory indicator"
+                ],
                 "type": "string"
               },
               "flow_type": {
@@ -13884,6 +15835,7 @@
     },
     "name": "search_methods",
     "output_schema": {
+      "description": "One page of impact methods, with each method family among the hits to the names of its\nweighting sets, in the bundle's order of them, none where the bundle names none.",
       "properties": {
         "has_more": {
           "type": "boolean"
@@ -13962,6 +15914,22 @@
             }
           ],
           "default": null
+        },
+        "weighting_sets": {
+          "additionalProperties": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "type": "object"
         }
       },
       "required": [
@@ -14148,7 +16116,7 @@
       "open_world_hint": false,
       "read_only_hint": false
     },
-    "description": "Write the parameter space in one call: parameters replaced whole by name, one of value or formula each; cases replaced whole by name, each a set of values over literal parameters; and names to delete. A parameter a formula or a case uses cannot be deleted, nor can a case another system's link names. Exchange formulas are re-evaluated after the write.",
+    "description": "Write the parameter space in one call: parameters replaced whole by name, one of value or formula each; cases replaced whole by name, each a set of values over literal parameters; and names to delete. A literal parameter takes an uncertainty of the kinds an exchange takes, centred on its value within a relative 1e-9; a formula parameter takes none, its spread following from what it reads. Refused: a distribution on an exchange whose formula reads an uncertain parameter, a distribution on a parameter an uncertain exchange reads, and a case value the parameter's distribution cannot follow. A parameter a formula or a case uses cannot be deleted, nor can a case another system's link names. Exchange formulas are re-evaluated after the write.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -14237,6 +16205,46 @@
                   },
                   "name": {
                     "type": "string"
+                  },
+                  "uncertainty": {
+                    "anyOf": [
+                      {
+                        "description": "A distribution on an exchange amount or a literal parameter's value, in stats_arrays field\nnames.",
+                        "properties": {
+                          "params": {
+                            "additionalProperties": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                }
+                              ]
+                            },
+                            "type": "object"
+                          },
+                          "type": {
+                            "enum": [
+                              "lognormal",
+                              "normal",
+                              "uniform",
+                              "triangular"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "params"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
                   },
                   "unit": {
                     "default": "",
@@ -14603,6 +16611,46 @@
                   "name": {
                     "type": "string"
                   },
+                  "uncertainty": {
+                    "anyOf": [
+                      {
+                        "description": "A distribution on an exchange amount or a literal parameter's value, in stats_arrays field\nnames.",
+                        "properties": {
+                          "params": {
+                            "additionalProperties": {
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "boolean"
+                                }
+                              ]
+                            },
+                            "type": "object"
+                          },
+                          "type": {
+                            "enum": [
+                              "lognormal",
+                              "normal",
+                              "uniform",
+                              "triangular"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "params"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
                   "unit": {
                     "default": "",
                     "type": "string"
@@ -14764,7 +16812,7 @@
         "monte_carlo": {
           "anyOf": [
             {
-              "description": "What a Monte Carlo samples. `full` samples every exchange that carries a distribution, the\nproduct system's own and the background database's; `biosphere_only` samples only elementary\nexchanges and holds the technosphere fixed. A product system exchange's distribution is\ncentred on the amount its formula, parameters and case resolve, keeping its relative spread,\nso an exchange a case sets to zero samples zero. A background normal distribution whose\nstandard deviation exceeds its amount is sampled at its amount; the result counts them in\n`normals_at_amount`. `n` fixes the count; otherwise sampling stops between `n_min` and\n`n_max` once the relative standard error of every category's median is under\n`rel_se_target`, which takes six samples at least.",
+              "description": "What a Monte Carlo samples. `full` samples every exchange that carries a distribution, the\nproduct system's own and the background database's; `biosphere_only` samples only elementary\nexchanges and holds the technosphere fixed. A product system exchange's distribution is\ncentred on the amount its formula, parameters and case resolve, keeping its relative spread,\nso an exchange a case sets to zero samples zero. A background normal distribution whose\nstandard deviation exceeds its amount is sampled at its amount; the result counts them in\n`drawn.background.held`. `n` fixes the count; otherwise sampling stops between `n_min` and\n`n_max`, which takes an `n_min` of at least 6, once every category it can measure has a\nmedian whose relative standard error is under `rel_se_target` and none is left to measure.",
               "properties": {
                 "n": {
                   "anyOf": [
@@ -14789,7 +16837,7 @@
                 },
                 "n_min": {
                   "default": 30,
-                  "description": "The fewest draws an adaptive run takes. It bounds the run with `n_max` and applies only when `n` is unset.",
+                  "description": "The fewest draws an adaptive run takes, at least 6, the fewest draws a median's interval needs. It bounds the run with `n_max` and applies only when `n` is unset.",
                   "maximum": 1000,
                   "minimum": 1,
                   "type": "integer"
@@ -14855,7 +16903,7 @@
               "type": "boolean"
             },
             "config": {
-              "description": "What a Monte Carlo samples. `full` samples every exchange that carries a distribution, the\nproduct system's own and the background database's; `biosphere_only` samples only elementary\nexchanges and holds the technosphere fixed. A product system exchange's distribution is\ncentred on the amount its formula, parameters and case resolve, keeping its relative spread,\nso an exchange a case sets to zero samples zero. A background normal distribution whose\nstandard deviation exceeds its amount is sampled at its amount; the result counts them in\n`normals_at_amount`. `n` fixes the count; otherwise sampling stops between `n_min` and\n`n_max` once the relative standard error of every category's median is under\n`rel_se_target`, which takes six samples at least.",
+              "description": "What a Monte Carlo samples. `full` samples every exchange that carries a distribution, the\nproduct system's own and the background database's; `biosphere_only` samples only elementary\nexchanges and holds the technosphere fixed. A product system exchange's distribution is\ncentred on the amount its formula, parameters and case resolve, keeping its relative spread,\nso an exchange a case sets to zero samples zero. A background normal distribution whose\nstandard deviation exceeds its amount is sampled at its amount; the result counts them in\n`drawn.background.held`. `n` fixes the count; otherwise sampling stops between `n_min` and\n`n_max`, which takes an `n_min` of at least 6, once every category it can measure has a\nmedian whose relative standard error is under `rel_se_target` and none is left to measure.",
               "properties": {
                 "n": {
                   "anyOf": [
@@ -14880,7 +16928,7 @@
                 },
                 "n_min": {
                   "default": 30,
-                  "description": "The fewest draws an adaptive run takes. It bounds the run with `n_max` and applies only when `n` is unset.",
+                  "description": "The fewest draws an adaptive run takes, at least 6, the fewest draws a median's interval needs. It bounds the run with `n_max` and applies only when `n` is unset.",
                   "maximum": 1000,
                   "minimum": 1,
                   "type": "integer"
@@ -15076,7 +17124,7 @@
               "type": "string"
             },
             "progress": {
-              "description": "How far a sampling run has got: the draws taken and the largest relative standard error\nof a category's median, None while any is undefined. The total is unknown until the stop\nrule stops.",
+              "description": "How far a sampling run has got: the draws taken and the largest relative standard error\namong the categories it can measure, None while it can measure none. The total is unknown\nuntil the stop rule stops.",
               "properties": {
                 "iterations": {
                   "default": 0,
@@ -15099,7 +17147,7 @@
             "result": {
               "anyOf": [
                 {
-                  "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median, at the ceiling `n_max`, at a\nstated count, or cancelled.\n`gating_method` is the id of the method of the category whose median's relative standard\nerror is the largest, or the first whose is undefined. `normals_at_amount` counts the\nbackground normal distributions sampled at their amount because their standard deviation\nexceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order; `without_samples` answers the same result with each\ncategory's histogram in place of its draws.",
+                  "description": "The samples of every category over the database build `database` names, and why sampling\nstopped: at the target relative standard error of every median it can measure, at the ceiling\n`n_max`, at a stated count, or cancelled.\n`gating_method` is the id of the method of the category that held the run longest, the one\nwhose median's relative standard error was above the target at the latest check that found\none; a run of a stated count names none, and so does one no category ever held.\n`constant` names the categories met as constant, every draw equal, and\n`indistinguishable_from_zero` those left out of the stop rule, their median's 95 % interval\nholding 0, both in method order and each judged at the run's end. `drawn` states how many\nparameters, foreground exchanges and background rows the calculation reaches, how many of\nthem carry a distribution, how many of those the run drew and how many it held at their\namount: a wide background normal, whose standard deviation exceeds it.\n`credit_loops` names the processes of each loop holding a credit, whose delivery no check\ndecides. `dropped_draws` are the draws, counted from zero, left out because a loop without a\ncredit, or a process using its own product, delivered nothing in them; `dropped_loops` names\nthose loops, and `dropped_background` the background process each failing background loop\nscaled most negatively, or that used as much of its own product as it made. The linked\nfields name those loops inside linked systems. `n` counts the draws kept, and each\ncategory's samples follow them in order; `without_samples` answers the same result with each\ncategory's and each total's histogram in place of its draws. `totals` holds one total per\nweighting set of the run's method family, each draw's weighted sum in short; no total takes\npart in the stop rule.",
                   "properties": {
                     "categories": {
                       "items": {
@@ -15228,6 +17276,12 @@
                       },
                       "type": "array"
                     },
+                    "constant": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
                     "credit_loops": {
                       "items": {
                         "items": {
@@ -15238,7 +17292,7 @@
                       "type": "array"
                     },
                     "database": {
-                      "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one.",
+                      "description": "A background database a product system pins, as the inventory backend reports it.\n`fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed\ndatabase always carries and a product system carries once it is stamped with one. `revision`\nis EcoSemantic's revision of the publisher's release, and none for a release installed as its\npublisher built it.",
                       "properties": {
                         "elementary_flows": {
                           "type": "string"
@@ -15256,6 +17310,17 @@
                         },
                         "name": {
                           "type": "string"
+                        },
+                        "revision": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
                         },
                         "scheme": {
                           "enum": [
@@ -15277,6 +17342,89 @@
                         "scheme",
                         "version",
                         "system_model"
+                      ],
+                      "type": "object"
+                    },
+                    "drawn": {
+                      "description": "What a calculation reached and what of it carried a distribution: the literal parameters\nof the systems it reaches, the foreground's exchanges and the background's rows.",
+                      "properties": {
+                        "background": {
+                          "description": "How many of one kind a calculation reaches, how many of them carry a distribution, how many\nof those the run drew, and how many it held at their amount.",
+                          "properties": {
+                            "carried": {
+                              "type": "integer"
+                            },
+                            "drawn": {
+                              "type": "integer"
+                            },
+                            "held": {
+                              "default": 0,
+                              "type": "integer"
+                            },
+                            "there": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "there",
+                            "carried",
+                            "drawn"
+                          ],
+                          "type": "object"
+                        },
+                        "foreground": {
+                          "description": "How many of one kind a calculation reaches, how many of them carry a distribution, how many\nof those the run drew, and how many it held at their amount.",
+                          "properties": {
+                            "carried": {
+                              "type": "integer"
+                            },
+                            "drawn": {
+                              "type": "integer"
+                            },
+                            "held": {
+                              "default": 0,
+                              "type": "integer"
+                            },
+                            "there": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "there",
+                            "carried",
+                            "drawn"
+                          ],
+                          "type": "object"
+                        },
+                        "parameters": {
+                          "description": "How many of one kind a calculation reaches, how many of them carry a distribution, how many\nof those the run drew, and how many it held at their amount.",
+                          "properties": {
+                            "carried": {
+                              "type": "integer"
+                            },
+                            "drawn": {
+                              "type": "integer"
+                            },
+                            "held": {
+                              "default": 0,
+                              "type": "integer"
+                            },
+                            "there": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "there",
+                            "carried",
+                            "drawn"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "parameters",
+                        "foreground",
+                        "background"
                       ],
                       "type": "object"
                     },
@@ -15329,7 +17477,20 @@
                       "type": "array"
                     },
                     "gating_method": {
-                      "type": "string"
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "indistinguishable_from_zero": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
                     },
                     "linked_credit_loops": {
                       "items": {
@@ -15361,9 +17522,6 @@
                     "n": {
                       "type": "integer"
                     },
-                    "normals_at_amount": {
-                      "type": "integer"
-                    },
                     "scope": {
                       "enum": [
                         "full",
@@ -15379,6 +17537,195 @@
                         "cancelled"
                       ],
                       "type": "string"
+                    },
+                    "totals": {
+                      "items": {
+                        "description": "One weighting set's total over a run's draws: the set's identity as `Total` carries it, each\ndraw's weighted sum in short and either the draws themselves or their histogram, and the reason\na set gives no total.",
+                        "properties": {
+                          "categories": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "histogram": {
+                            "anyOf": [
+                              {
+                                "description": "Draws counted in bins of equal width from the smallest to the largest. `low` and `high`\nare those two draws, and `counts` holds the twenty bins, so a draw falls in bin\n`min(19, floor((draw - low) / width))` with `width = (high - low) / 20`.",
+                                "properties": {
+                                  "counts": {
+                                    "items": {
+                                      "type": "integer"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "high": {
+                                    "type": "number"
+                                  },
+                                  "low": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "low",
+                                  "high",
+                                  "counts"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "impact_method": {
+                            "type": "string"
+                          },
+                          "normalised_by_zero": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "position": {
+                            "type": "integer"
+                          },
+                          "reason": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "samples": {
+                            "anyOf": [
+                              {
+                                "items": {
+                                  "type": "number"
+                                },
+                                "type": "array"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "summary": {
+                            "anyOf": [
+                              {
+                                "description": "One category's samples in short. `median_ci95` is the median's 95 % interval, two of the\nsamples that bound it whatever the distribution, which narrows as samples grow, and `rel_se`\nits half-width over 1.96, relative to the median: the stop rule judges it. Both are None below\nsix samples, and `rel_se` for a median of zero. `percentiles` are the 2.5th and 97.5th\npercentiles of the samples, the spread of the result itself. `mean` is reported and judged by\nnothing: a loop close to using as much of its products as it makes gives draws whose mean\nneed not exist.",
+                                "properties": {
+                                  "mean": {
+                                    "type": "number"
+                                  },
+                                  "median": {
+                                    "type": "number"
+                                  },
+                                  "median_ci95": {
+                                    "anyOf": [
+                                      {
+                                        "maxItems": 2,
+                                        "minItems": 2,
+                                        "prefixItems": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "number"
+                                          }
+                                        ],
+                                        "type": "array"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "n": {
+                                    "type": "integer"
+                                  },
+                                  "percentiles": {
+                                    "maxItems": 2,
+                                    "minItems": 2,
+                                    "prefixItems": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "number"
+                                      }
+                                    ],
+                                    "type": "array"
+                                  },
+                                  "rel_se": {
+                                    "anyOf": [
+                                      {
+                                        "type": "number"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "n",
+                                  "mean",
+                                  "median",
+                                  "median_ci95",
+                                  "percentiles",
+                                  "rel_se"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "unit": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "value_choices": {
+                            "default": "A weighted total rests on value choices: its weights state how much the method's authors judge each category to matter, not a measurement.",
+                            "type": "string"
+                          },
+                          "weighting_set": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "impact_method",
+                          "weighting_set",
+                          "position",
+                          "unit",
+                          "categories",
+                          "normalised_by_zero",
+                          "summary",
+                          "reason"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
                     }
                   },
                   "required": [
@@ -15386,8 +17733,10 @@
                     "n",
                     "stopped",
                     "gating_method",
+                    "constant",
+                    "indistinguishable_from_zero",
                     "scope",
-                    "normals_at_amount",
+                    "drawn",
                     "credit_loops",
                     "dropped_draws",
                     "dropped_loops",
@@ -15430,6 +17779,81 @@
                 "type": "string"
               },
               "type": "array"
+            },
+            "weighting_sets": {
+              "items": {
+                "description": "One normalisation and weighting set of an impact method's family: its name, none where the\nbundle names none, the unit of the weighted score it answers in, and one factor per category it\ncharacterises.",
+                "properties": {
+                  "factors": {
+                    "items": {
+                      "description": "One category of a weighting set: the impact method it characterises as its id, the\nnormalisation the set gives it and its weight, each as the bundle states it and none when it\nstates none.",
+                      "properties": {
+                        "method_id": {
+                          "type": "string"
+                        },
+                        "normalisation": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "weighting": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "method_id",
+                        "normalisation",
+                        "weighting"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "impact_method": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "unit": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "impact_method",
+                  "name",
+                  "unit",
+                  "factors"
+                ],
+                "type": "object"
+              },
+              "type": "array"
             }
           },
           "required": [
@@ -15468,7 +17892,7 @@
       "open_world_hint": false,
       "read_only_hint": false
     },
-    "description": "Patch an exchange's amount, formula, name, unit, comment or uncertainty. An amount on an exchange with a formula needs 'formula' in clear. Type and input are fixed; delete and create to change them.",
+    "description": "Patch an exchange's amount, formula, name, unit, comment or uncertainty. An amount on an exchange that keeps a formula is the one the formula evaluates to; an amount of its own needs 'formula' in clear. An uncertainty is centred on the amount within a relative 1e-9, and is refused on an exchange whose formula reads an uncertain parameter. An amount or a formula given without an uncertainty moves the exchange's distribution onto the new amount. Type and input are fixed; delete and create to change them.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -15544,7 +17968,7 @@
         "uncertainty": {
           "anyOf": [
             {
-              "description": "A distribution on an exchange amount, in stats_arrays field names.",
+              "description": "A distribution on an exchange amount or a literal parameter's value, in stats_arrays field\nnames.",
               "properties": {
                 "params": {
                   "additionalProperties": {
@@ -15994,7 +18418,7 @@
             "uncertainty": {
               "anyOf": [
                 {
-                  "description": "A distribution on an exchange amount, in stats_arrays field names.",
+                  "description": "A distribution on an exchange amount or a literal parameter's value, in stats_arrays field\nnames.",
                   "properties": {
                     "params": {
                       "additionalProperties": {
@@ -16584,7 +19008,7 @@
                   "uncertainty": {
                     "anyOf": [
                       {
-                        "description": "A distribution on an exchange amount, in stats_arrays field names.",
+                        "description": "A distribution on an exchange amount or a literal parameter's value, in stats_arrays field\nnames.",
                         "properties": {
                           "params": {
                             "additionalProperties": {

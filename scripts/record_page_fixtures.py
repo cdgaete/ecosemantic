@@ -227,7 +227,12 @@ def record(client: TestClient, system_id: str, unfinished_id: str) -> dict[str, 
         "elementary_flow": client.get(
             f"/api/databases/{FIXTURE_BIO}/elementary-flows/{FLOW_IDS['water_in']}"
         ).json(),
+        "elementary_flows": client.post(
+            f"/api/databases/{FIXTURE_DB}/elementary-flows/read",
+            json={"ids": list(FLOW_IDS.values())},
+        ).json(),
         "systems": client.get("/api/product-systems").json(),
+        "home": client.get("/api/home").json(),
         "system": client.get(base).json(),
         "parameters": client.get(f"{base}/parameters").json(),
         "log": client.get(f"{base}/log").json(),

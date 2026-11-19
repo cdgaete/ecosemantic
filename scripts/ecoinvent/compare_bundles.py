@@ -94,7 +94,8 @@ def _bundle_rows(imported: Import, side: str, seconds: float) -> _Dump:
             "location": None,
             "unit": flow["unit"],
             "type": flow["type"],
-            "categories": _categories(flow),
+            "compartment": flow["compartment"],
+            "sub_compartment": flow["sub_compartment"],
         }
     methods: list[dict[str, object]] = [
         {

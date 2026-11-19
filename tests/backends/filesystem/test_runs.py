@@ -27,9 +27,12 @@ from ecosemantic.ports.types import (
     RunPatch,
 )
 from tests.conformance.runs import RunConformance, draft
+from tests.conftest import drawn_counts
 from tests.fixture_data import FIXTURE_DATABASE
 
-METHOD = Method.of(("bafu-2026-v1", "IPCC 2021", "IPCC 2021 GWP 100"), "kg CO2 eq")
+METHOD = Method.of(
+    ("bafu-2026-v1", "IPCC 2021", "IPCC 2021 GWP 100", "IPCC 2021 GWP 100"), "kg CO2 eq"
+)
 SAMPLES = [0.000149, 0.000147, 0.000157]
 
 
@@ -47,9 +50,11 @@ def finished_run(system: uuid.UUID) -> Run:
             database=FIXTURE_DATABASE,
             n=3,
             stopped="fixed",
-            gating_method=METHOD.id,
+            gating_method=None,
+            constant=[],
+            indistinguishable_from_zero=[],
             scope="full",
-            normals_at_amount=0,
+            drawn=drawn_counts(),
             credit_loops=[],
             dropped_draws=[],
             dropped_loops=[],

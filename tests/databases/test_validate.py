@@ -45,7 +45,9 @@ _LANG = "{http://www.w3.org/XML/1998/namespace}lang"
 
 def _built(tmp_path: Path) -> tuple[Release, Path]:
     release = build_release(tmp_path)
-    written = build(release, default_profile(release), tmp_path / "out", NOW)
+    written = build(
+        release, default_profile(release), tmp_path / "out", NOW, revision=1, corrections=()
+    )
     return release, written.bundle
 
 
@@ -163,7 +165,9 @@ def test_validation_names_a_score_that_differs(tmp_path: Path) -> None:
 
 def test_a_cancelling_score_is_a_mismatch(tmp_path: Path) -> None:
     release = build_release(tmp_path, cancelling_factor=True)
-    written = build(release, default_profile(release), tmp_path / "out", NOW)
+    written = build(
+        release, default_profile(release), tmp_path / "out", NOW, revision=1, corrections=()
+    )
     # electricity's +0.5 CO2 and -0.5 Iron contributions cancel; its magnitude is 1.0, so the
     # reference's 1e-9 is above the group's negligible 1e-12 and a whole relative difference
     # against a score of zero
@@ -178,7 +182,9 @@ def test_a_cancelling_score_through_a_sub_tolerance_matrix_corruption_fails(
     tmp_path: Path,
 ) -> None:
     release = build_release(tmp_path, cancelling_factor=True)
-    written = build(release, default_profile(release), tmp_path / "out", NOW)
+    written = build(
+        release, default_profile(release), tmp_path / "out", NOW, revision=1, corrections=()
+    )
     # electricity's Iron input times 1.0000005: the bundle's B differs from the export's by 5e-7,
     # under the 1e-6 tolerance, while the score goes from 0 to 2.5e-7, which is roundoff against
     # the dataset's magnitude of 1.0 and a whole relative difference against a score of zero
@@ -190,7 +196,9 @@ def test_a_cancelling_score_through_a_sub_tolerance_matrix_corruption_fails(
 
 def test_a_score_whose_difference_exceeds_its_magnitude_is_a_mismatch(tmp_path: Path) -> None:
     release = build_release(tmp_path, cancelling_factor=True)
-    written = build(release, default_profile(release), tmp_path / "out", NOW)
+    written = build(
+        release, default_profile(release), tmp_path / "out", NOW, revision=1, corrections=()
+    )
     offset_cumulative(release, ELEC, 1.0)
     result = validate(release, written.bundle, tmp_path / "compiled", tolerance=1e-6)
     assert any("electricity production" in m for m in result.mismatches)
@@ -393,7 +401,9 @@ def test_validation_names_a_matrix_entry_that_differs(tmp_path: Path) -> None:
 
 def test_validation_lists_a_category_no_reference_names(tmp_path: Path) -> None:
     release = build_release(tmp_path, extra_category=True)
-    written = build(release, default_profile(release), tmp_path / "out", NOW)
+    written = build(
+        release, default_profile(release), tmp_path / "out", NOW, revision=1, corrections=()
+    )
     result = validate(release, written.bundle, tmp_path / "compiled", tolerance=1e-6)
     assert result.mismatches == []
     assert result.unreferenced == ["IPCC 2021 > water use > WDP"]
@@ -455,7 +465,9 @@ def _add_argon_exchange(release: Release) -> None:
 def test_validation_names_an_installed_dataset_the_export_does_not_hold(tmp_path: Path) -> None:
     release = build_release(tmp_path)
     _add_widget(release)
-    written = build(release, default_profile(release), tmp_path / "out", NOW)
+    written = build(
+        release, default_profile(release), tmp_path / "out", NOW, revision=1, corrections=()
+    )
     result = validate(release, written.bundle, tmp_path / "compiled", tolerance=1e-6)
     assert any(
         "names no matrix export activity: widget production [GLO] widget" in m
@@ -466,7 +478,9 @@ def test_validation_names_an_installed_dataset_the_export_does_not_hold(tmp_path
 def test_validation_names_an_installed_flow_the_export_does_not_hold(tmp_path: Path) -> None:
     release = build_release(tmp_path)
     _add_argon_exchange(release)
-    written = build(release, default_profile(release), tmp_path / "out", NOW)
+    written = build(
+        release, default_profile(release), tmp_path / "out", NOW, revision=1, corrections=()
+    )
     result = validate(release, written.bundle, tmp_path / "compiled", tolerance=1e-6)
     assert any(
         "names no matrix export flow: Argon (air/unspecified)" in m for m in result.mismatches

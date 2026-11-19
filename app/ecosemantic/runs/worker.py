@@ -17,6 +17,7 @@ from ecosemantic.backends.native.inventory import NativeInventory
 from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.compute.links import linked_documents
 from ecosemantic.compute.parameters import materialize
+from ecosemantic.compute.totals import with_totals
 from ecosemantic.engine.solver import DEFAULT_SOLVER, SOLVERS, SolverName
 from ecosemantic.errors import EcoSemanticError, error_payload, failure_payload
 from ecosemantic.package.resolver import InventoryResolver
@@ -58,12 +59,16 @@ async def _carry(
         stored = await storage.get_version(run.product_system_id, run.at_hash)
         linked = await linked_documents(stored, storage.get_version)
         system = System.of(materialize(stored), linked)
-        result: MonteCarloResult = await NativeCalculation(store).monte_carlo(
-            system,
-            run.demand,
+        result: MonteCarloResult = with_totals(
+            await NativeCalculation(store).monte_carlo(
+                system,
+                run.demand,
+                run.methods,
+                run.config,
+                on_iteration=_reporter(runs, run_id, folder),
+            ),
+            run.weighting_sets,
             run.methods,
-            run.config,
-            on_iteration=_reporter(runs, run_id, folder),
         )
         asked = (await runs.get_run(run_id)).cancel_requested
         await runs.update_run(

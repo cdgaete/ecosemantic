@@ -45,12 +45,18 @@ async def start_monte_carlo(
         methods, _ = await methods_for(
             context.inventory, stored.database.name, method_id, impact_method
         )
+        weightings = (
+            await context.inventory.weighting_sets(stored.database.name, impact_method)
+            if impact_method is not None
+            else []
+        )
         posted = await context.runs.post_run(
             RunDraft(
                 product_system_id=system_id,
                 at_hash=content_hash(stored),
                 demand=demand_of(stored, demand),
                 methods=methods,
+                weighting_sets=weightings,
                 config=monte_carlo or MonteCarloConfig(),
                 treatments_run_backwards=named_backwards(
                     base, linked, await treatments_of(context.inventory, base, linked)

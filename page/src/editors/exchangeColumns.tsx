@@ -47,6 +47,10 @@ export function providerLink(to: string, icon: IconName, label: string): ReactNo
   )
 }
 
+export function namedWithLocation(name: string, location: string | null): string {
+  return location ? `${name} · ${location}` : name
+}
+
 export function elementaryProvider(flow: FlowSide | undefined): string {
   return flow ? `${flow.flow_type} · ${flow.compartment}` : ''
 }

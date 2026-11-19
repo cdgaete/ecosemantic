@@ -30,10 +30,10 @@ K = TypeVar("K")
 @dataclass(frozen=True)
 class Scores:
     """One unit of every dataset's product under every category, keyed by the dataset's code, the
-    method and the category; the unit each dataset's product is declared in; and the seconds
-    compiling, saving, loading and scoring took."""
+    method's family, its category and its indicator; the unit each dataset's product is declared
+    in; and the seconds compiling, saving, loading and scoring took."""
 
-    values: dict[tuple[str, str, str], float]
+    values: dict[tuple[str, str, str, str], float]
     declared: dict[str, str]
     seconds: dict[str, float]
 
@@ -68,7 +68,9 @@ def score_every_dataset(imported: Import, *, name: str, compiled: Path | None = 
     table = np.asarray(calculation.intensities(methods).values()).reshape(len(methods), -1)
     positions = {code: loaded.dataset_at(code, "the import") for code in codes}
     values = {
-        (code, method.tuple[1], method.tuple[2]): float(table[at, positions[code]])
+        (code, method.impact_method, method.impact_category, method.indicator): float(
+            table[at, positions[code]]
+        )
         for at, method in enumerate(methods)
         for code in codes
     }

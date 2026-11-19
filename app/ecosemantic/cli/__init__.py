@@ -729,7 +729,14 @@ def _load(data: Path, systems: Path, bundle: Path, progress: Reporter) -> dict[s
     if manifest.mode == "release":
         imported = read_background(bundle, manifest.name, foreground=frozenset())
         progress(InstallProgress(step="installing"))
-        install(data, imported, bundle, version=manifest.version, system_model=UNIT_PROCESS)
+        install(
+            data,
+            imported,
+            bundle,
+            version=manifest.version,
+            system_model=UNIT_PROCESS,
+            revision=manifest.revision,
+        )
         return {"database": manifest.name, "datasets": len(imported.datasets)}
     imported = read_background(bundle, manifest.base.name, foreground=foreground_processes(bundle))
     base = "kept"
@@ -744,6 +751,7 @@ def _load(data: Path, systems: Path, bundle: Path, progress: Reporter) -> dict[s
                 part,
                 version=manifest.base.version,
                 system_model=UNIT_PROCESS,
+                revision=manifest.revision,
             )
         base = "installed"
     store, storage, resolver = _parts(data, systems)

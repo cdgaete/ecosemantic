@@ -46,30 +46,73 @@ def test_method_carries_its_id() -> None:
             tuple=m.tuple,
             spec=SPEC,
             unit="x",
-            impact_method="",
-            impact_category="",
-            indicator="",
+            impact_method=m.impact_method,
+            impact_category=m.impact_category,
+            indicator=m.indicator,
         )
 
 
-def test_a_method_of_a_key_names_its_parts_and_blanks_the_missing() -> None:
-    m = Method.of(("db", "IPCC", "climate change"), "kg CO2-Eq")
-    assert m.spec == "db > IPCC > climate change" and m.id == method_id(m.spec)
-    assert m.tuple == ("db", "IPCC", "climate change") and m.unit == "kg CO2-Eq"
-    assert (m.impact_method, m.impact_category, m.indicator) == ("IPCC", "climate change", "")
-
-
-def test_a_method_of_an_bundle_key_splits_its_category_from_its_indicator() -> None:
-    # a bundle names a category "category > indicator" (package/base_writer.py)
-    key = ("db", "EF v3.1", "climate change > global warming potential (GWP100)")
-    m = Method.of(key, "kg CO2-Eq")
-    assert m.tuple == key and m.spec == " > ".join(key) and m.id == method_id(m.spec)
-    assert (m.impact_method, m.impact_category, m.indicator) == (
-        "EF v3.1",
-        "climate change",
-        "global warming potential (GWP100)",
+def _method(impact_method: str, impact_category: str, indicator: str) -> Method:
+    key = ("db", impact_method, impact_category, indicator)
+    return Method(
+        id=method_id(" > ".join(key)),
+        tuple=key,
+        spec=" > ".join(key),
+        unit="kg CO2-Eq",
+        impact_method=impact_method,
+        impact_category=impact_category,
+        indicator=indicator,
     )
-    assert m.id == Method.of(("db", "EF v3.1", *key[2].split(" > ")), "kg CO2-Eq").id
+
+
+def test_a_method_names_its_family_category_and_indicator() -> None:
+    m = Method.of(("db", "IPCC", "AR6-100", "AR6-100"), "kg")
+    assert (m.impact_method, m.impact_category, m.indicator) == ("IPCC", "AR6-100", "AR6-100")
+    assert m.spec == "db > IPCC > AR6-100 > AR6-100" and m.id == method_id(m.spec)
+    assert m.tuple == ("db", "IPCC", "AR6-100", "AR6-100") and m.unit == "kg"
+
+
+def test_an_ecoinvent_method_keeps_its_id() -> None:
+    m = Method.of(("ei", "CML", "climate change", "GWP100"), "kg")
+    assert m.id == method_id("ei > CML > climate change > GWP100")
+    assert (m.impact_method, m.impact_category, m.indicator) == (
+        "CML",
+        "climate change",
+        "GWP100",
+    )
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        ("db", "IPCC", "climate change"),
+        ("db", "IPCC", "climate change", "GWP100", "extra"),
+    ],
+)
+def test_a_key_of_other_than_four_parts_is_refused(key: tuple[str, ...]) -> None:
+    with pytest.raises(ValueError) as caught:
+        Method.of(key, "kg")
+    assert repr(key) in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "key",
+    [("db", "", "c", "i"), ("db", "m", "", "i"), ("db", "m", "c", "")],
+)
+def test_a_blank_part_is_refused(key: tuple[str, str, str, str]) -> None:
+    with pytest.raises(ValueError) as caught:
+        Method.of(key, "kg")
+    assert repr(key) in str(caught.value)
+
+
+def test_a_method_with_a_blank_part_is_refused() -> None:
+    for impact_method, impact_category, indicator in (
+        ("", "c", "i"),
+        ("m", "", "i"),
+        ("m", "c", ""),
+    ):
+        with pytest.raises(ValidationError):
+            _method(impact_method, impact_category, indicator)
 
 
 def test_the_nearest_methods_ignore_case_and_punctuation() -> None:

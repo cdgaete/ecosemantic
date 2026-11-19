@@ -194,7 +194,7 @@ def build_server(
             [
                 Counting(ROSTER, meter_provider or NoOpMeterProvider()),
                 Introducing(context.client),
-                Recorder(context.activity, context.storage, context.events, context.agent),
+                Recorder(context),
             ]
             if context is not None
             else []

@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { Screens } from '@/App'
 import { api, ApiError } from '@/api/client'
 import type { Answer, Run } from '@/api/types'
-import { formatAmount, methodById, shortHash } from '@/lib/format'
+import { categoryLabel, formatAmount, methodById, shortHash } from '@/lib/format'
 import databases from './fixtures/databases.json'
 import run from './fixtures/run.json'
 import system from './fixtures/system.json'
@@ -54,16 +54,58 @@ afterEach(() => vi.unstubAllGlobals())
 it('shows the settings, the progress and the results of a finished simulation', async () => {
   open()
   await waitFor(() => expect(screen.getByText(`Monte Carlo Simulation – ${system.value.name}`)).toBeInTheDocument())
-  // the recorded run fixed n at 6 over the full scope
+  // the recorded run fixed n at 6 over the full scope, and a fixed count holds no category
   expect(field('Iterations')).toBe('6, fixed')
   expect(field('Uncertainty in')).toBe('all exchanges')
   expect(field('Status')).toBe('done')
-  // the recorded gating method is ('climate change', 'GWP100')
-  expect(screen.getByText('6 iterations, ran its stated count, gated on climate change · GWP100')).toBeInTheDocument()
+  expect(screen.getByText('6 iterations, ran its stated count')).toBeInTheDocument()
   expect(screen.getByRole('img', { name: /6 samples/ })).toBeInTheDocument()
   // the synthetic background carries two normals wider than their amounts
-  expect(screen.getByText('2 background normal distributions were sampled at their amount, as their standard deviation exceeds it.')).toBeInTheDocument()
+  expect(screen.getByText('2 background normal distributions held at their amount, their standard deviation exceeding it.')).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
+})
+
+it('opens on what it drew, ahead of how the run stopped', async () => {
+  const result = done.value.result!
+  vi.mocked(api.run).mockResolvedValueOnce(
+    answer({
+      result: {
+        ...result,
+        drawn: {
+          parameters: { there: 3, carried: 3, drawn: 3, held: 0 },
+          foreground: { there: 9, carried: 4, drawn: 4, held: 0 },
+          background: { there: 20, carried: 12, drawn: 10, held: 2 },
+        },
+      },
+    }),
+  )
+  open()
+  await waitFor(() => expect(screen.getByText('Drawn: 3 parameters, 4 of 9 foreground exchanges, 10 of 20 background exchanges')).toBeInTheDocument())
+  expect(screen.getByText('2 background normal distributions held at their amount, their standard deviation exceeding it.')).toBeInTheDocument()
+  const drawn = screen.getByText(/^Drawn:/)
+  const stopped = screen.getByText(/^6 iterations/)
+  expect(drawn.compareDocumentPosition(stopped) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})
+
+it('groups a count of a thousand or more as every other number on the page is grouped', async () => {
+  const result = done.value.result!
+  vi.mocked(api.run).mockResolvedValueOnce(
+    answer({
+      result: {
+        ...result,
+        drawn: {
+          parameters: { there: 1234, carried: 1234, drawn: 1234, held: 0 },
+          foreground: { there: 2147, carried: 2147, drawn: 2147, held: 0 },
+          background: { there: 154845, carried: 129184, drawn: 129184, held: 1500 },
+        },
+      },
+    }),
+  )
+  open()
+  await waitFor(() =>
+    expect(screen.getByText('Drawn: 1,234 parameters, 2,147 of 2,147 foreground exchanges, 129,184 of 154,845 background exchanges')).toBeInTheDocument(),
+  )
+  expect(screen.getByText('1,500 background normal distributions held at their amount, their standard deviation exceeding it.')).toBeInTheDocument()
 })
 
 it("names the median as what the stop rule judges and the table leads with", async () => {
@@ -116,7 +158,7 @@ it('asks a running simulation to stop and says so while it stops', async () => {
 it('keeps the results of a cancelled simulation and says it was stopped', async () => {
   vi.mocked(api.run).mockResolvedValueOnce(answer({ status: 'cancelled', cancel_requested: true, result: { ...done.value.result!, stopped: 'cancelled' } }))
   open()
-  await waitFor(() => expect(screen.getByText(/, stopped on request, gated on /)).toBeInTheDocument())
+  await waitFor(() => expect(screen.getByText(/, stopped on request$/)).toBeInTheDocument())
 })
 
 it('shows why a failed simulation has no result', async () => {
@@ -172,16 +214,17 @@ it('lets the category select shrink within the panel rather than widen it past a
   expect(select.className).toContain('flex-1')
 })
 
-it('names one background normal sampled at its amount, and says nothing of none', async () => {
+it('names one background normal held at its amount, and says nothing of none', async () => {
   const result = done.value.result!
-  vi.mocked(api.run).mockResolvedValueOnce(answer({ result: { ...result, normals_at_amount: 1 } }))
+  const held = (count: number) => ({ ...result, drawn: { ...result.drawn, background: { ...result.drawn.background, held: count } } })
+  vi.mocked(api.run).mockResolvedValueOnce(answer({ result: held(1) }))
   const view = open()
-  await waitFor(() => expect(screen.getByText('1 background normal distribution was sampled at its amount, as its standard deviation exceeds it.')).toBeInTheDocument())
+  await waitFor(() => expect(screen.getByText('1 background normal distribution held at its amount, its standard deviation exceeding it.')).toBeInTheDocument())
   view.unmount()
-  vi.mocked(api.run).mockResolvedValueOnce(answer({ result: { ...result, normals_at_amount: 0 } }))
+  vi.mocked(api.run).mockResolvedValueOnce(answer({ result: held(0) }))
   open()
   await waitFor(() => expect(screen.getByText(/^6 iterations/)).toBeInTheDocument())
-  expect(screen.queryByText(/sampled at (its|their) amount/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/held at (its|their) amount/)).not.toBeInTheDocument()
 })
 
 it('names each loop holding a credit beside the results, and says nothing of none', async () => {
@@ -230,12 +273,83 @@ it('names the background process a dropped draw failed on', async () => {
 it('counts a single iteration in the singular', async () => {
   vi.mocked(api.run).mockResolvedValueOnce(answer({ status: 'cancelled', cancel_requested: true, result: { ...done.value.result!, n: 1, stopped: 'cancelled' } }))
   open()
-  await waitFor(() => expect(screen.getByText(/^1 iteration, stopped on request, gated on /)).toBeInTheDocument())
+  await waitFor(() => expect(screen.getByText(/^1 iteration, stopped on request/)).toBeInTheDocument())
 })
 
 it('counts the iterations kept of those taken when it dropped draws', async () => {
   const result = done.value.result!
   vi.mocked(api.run).mockResolvedValueOnce(answer({ result: { ...result, dropped_draws: [1, 3], dropped_loops: [['widget']], dropped_background: [] } }))
   open()
-  await waitFor(() => expect(screen.getByText(/^6 of 8 iterations kept, ran its stated count, gated on /)).toBeInTheDocument())
+  await waitFor(() => expect(screen.getByText(/^6 of 8 iterations kept, ran its stated count$/)).toBeInTheDocument())
+})
+
+it('names the category that held the run longest, and none where no category held it', async () => {
+  const result = done.value.result!
+  const [firstMethod] = done.value.methods
+  const water = { ...firstMethod, id: 'm_water', impact_category: 'water use', indicator: 'm3' }
+  const view = open()
+  await waitFor(() => expect(screen.getByText('6 iterations, ran its stated count')).toBeInTheDocument())
+  expect(screen.queryByText(/held longest by/)).not.toBeInTheDocument()
+  view.unmount()
+  vi.mocked(api.run).mockResolvedValueOnce(answer({ methods: [firstMethod, water], result: { ...result, gating_method: 'm_water' } }))
+  open()
+  await waitFor(() => expect(screen.getByText('6 iterations, ran its stated count, held longest by water use · m3')).toBeInTheDocument())
+})
+
+it("shows each weighting set's total as a row after the categories, with what it rests on", async () => {
+  const result = done.value.result!
+  const [firstMethod] = done.value.methods
+  const notice = 'A weighted total rests on value choices, as this answer words it.'
+  const totals = [
+    {
+      impact_method: firstMethod.impact_method,
+      weighting_set: 'Total (water resources, evaporated)',
+      position: 0,
+      unit: 'UBP',
+      categories: [firstMethod.id],
+      normalised_by_zero: [],
+      summary: { ...result.categories[0].summary, median: 987.65 },
+      samples: null,
+      histogram: null,
+      reason: null,
+      value_choices: notice,
+    },
+    { impact_method: firstMethod.impact_method, weighting_set: null, position: 1, unit: null, categories: [], normalised_by_zero: [], summary: null, samples: null, histogram: null, reason: 'weights no category', value_choices: notice },
+  ]
+  vi.mocked(api.run).mockResolvedValueOnce(answer({ result: { ...result, totals } }))
+  open()
+  await waitFor(() => expect(screen.getByText('Total (water resources, evaporated)')).toBeInTheDocument())
+  const table = screen.getByRole('table')
+  const named = within(table).getByText('Total (water resources, evaporated)').closest('tr')!
+  const unnamed = within(table).getByText('Unnamed set 2').closest('tr')!
+  expect(within(named).getByText(formatAmount(987.65))).toBeInTheDocument()
+  expect(within(unnamed).getByText('weights no category')).toBeInTheDocument()
+  expect(screen.getByText(notice)).toBeInTheDocument()
+  const last = within(table).getByText(categoryLabel(methodById(done.value.methods, result.categories[0].method_id))).closest('tr')!
+  expect(last.compareDocumentPosition(named) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(named.compareDocumentPosition(unnamed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})
+
+it('draws no total row and no value-choice notice where no weighting set gives a total', async () => {
+  open()
+  await waitFor(() => expect(screen.getByText(/^6 iterations/)).toBeInTheDocument())
+  expect(screen.queryByText(/^Unnamed set/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/value choices/)).not.toBeInTheDocument()
+})
+
+it('names the category met as constant and the one left out of the stop rule, and no other line', async () => {
+  const result = done.value.result!
+  const [firstMethod] = done.value.methods
+  const water = { ...firstMethod, id: 'm_water', impact_category: 'water use', indicator: 'm3' }
+  vi.mocked(api.run).mockResolvedValueOnce(
+    answer({
+      methods: [firstMethod, water],
+      result: { ...result, gating_method: null, constant: ['m_water'], indistinguishable_from_zero: [firstMethod.id] },
+    }),
+  )
+  open()
+  await waitFor(() => expect(screen.getByText('Met as constant, every draw equal: water use · m3.')).toBeInTheDocument())
+  expect(screen.getByText('Left out of the stop rule, their median indistinguishable from zero: climate change · GWP100.')).toBeInTheDocument()
+  expect(screen.getByText('6 iterations, ran its stated count')).toBeInTheDocument()
+  expect(screen.queryByText(/held longest by/)).not.toBeInTheDocument()
 })

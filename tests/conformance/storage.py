@@ -13,6 +13,7 @@ from ecosemantic.errors import Conflict, Invalid, NotFound
 from ecosemantic.model.entities import Actor, ProductSystem
 from ecosemantic.model.refs import ForegroundRef, SystemRef
 from ecosemantic.package.log import verify_chain
+from ecosemantic.package.package import unzip_package
 from ecosemantic.ports.storage import no_product_system, no_version
 from ecosemantic.ports.types import Layout, Outcome, RequestDraft, Spot
 
@@ -270,6 +271,19 @@ class PackageConformance:
         assert back.hash == stored.hash
         assert await other_storage.log(product_system.id) == await storage.log(product_system.id)
         assert await other_storage.restore_package(zipped) == "unchanged"
+
+    async def test_a_package_return_that_changes_nothing_writes_no_entry(
+        self, storage, product_system: ProductSystem, tmp_path: Path
+    ) -> None:
+        await storage.put_product_system(product_system, AGENT, "created")
+        stored = await storage.get_product_system(product_system.id)
+        zipped = tmp_path / "p.zip"
+        await storage.export_package(product_system.id, zipped)
+        exported = tmp_path / "exported"
+        unzip_package(zipped, exported)
+        assert await storage.return_package(product_system.id, exported, PERSON) is None
+        assert [entry.seq for entry in await storage.log(product_system.id)] == [1]
+        assert (await storage.get_product_system(product_system.id)).hash == stored.hash
 
     async def test_a_diverged_package_conflicts_naming_both_states(
         self, storage, other_storage, product_system: ProductSystem, tmp_path: Path

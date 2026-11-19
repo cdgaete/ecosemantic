@@ -1,7 +1,9 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 export const NUMERIC = 'whitespace-nowrap tabular-nums'
+
+export const MACHINE = 'whitespace-nowrap'
 
 export type FoldWidth = 'lg' | '2xl' | '3xl'
 
@@ -108,6 +110,36 @@ function useStacked() {
   return { box, stacked }
 }
 
+function Row<T>({
+  columns,
+  stacked,
+  fold,
+  row,
+  className,
+  marked,
+}: {
+  columns: Column<T>[]
+  stacked: boolean
+  fold: { cell: string; line: string }
+  row: T
+  className?: string
+  marked: boolean
+}) {
+  const ref = useRef<HTMLTableRowElement>(null)
+  useEffect(() => {
+    if (marked) ref.current?.scrollIntoView({ block: 'nearest' })
+  }, [marked])
+  return (
+    <tr
+      ref={ref}
+      aria-current={marked ? 'true' : undefined}
+      className={cn(stacked && 'block border-b py-1', className, marked && 'bg-selected')}
+    >
+      <Cells columns={columns} stacked={stacked} fold={fold} value={(c) => c.render(row)} />
+    </tr>
+  )
+}
+
 export function DataTable<T>({
   columns,
   rows,
@@ -115,6 +147,7 @@ export function DataTable<T>({
   rowClassName,
   empty,
   summary,
+  current,
   unfoldAt = 'lg',
 }: {
   columns: Column<T>[]
@@ -123,6 +156,7 @@ export function DataTable<T>({
   rowClassName?: (row: T) => string
   empty?: ReactNode
   summary?: SummaryRow[]
+  current?: string
   unfoldAt?: FoldWidth
 }) {
   const { box, stacked } = useStacked()
@@ -147,11 +181,20 @@ export function DataTable<T>({
               </td>
             </tr>
           ) : null}
-          {rows.map((row) => (
-            <tr key={rowKey(row)} className={cn(stacked && 'block border-b py-1', rowClassName?.(row))}>
-              <Cells columns={columns} stacked={stacked} fold={fold} value={(c) => c.render(row)} />
-            </tr>
-          ))}
+          {rows.map((row) => {
+            const key = rowKey(row)
+            return (
+              <Row
+                key={key}
+                columns={columns}
+                stacked={stacked}
+                fold={fold}
+                row={row}
+                className={rowClassName?.(row)}
+                marked={key === current}
+              />
+            )
+          })}
           {summary?.map((row) => (
             <tr key={`summary:${row.key}`} className={cn(stacked && 'block border-b py-1', row.className)}>
               <Cells columns={columns} stacked={stacked} fold={fold} value={(c) => row.cells[c.key]} />

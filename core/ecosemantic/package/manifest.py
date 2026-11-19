@@ -8,11 +8,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ecosemantic.errors import Invalid, field_error
 
 Mode = Literal["working", "release"]
+Entity = Literal["Flow", "Process", "Location", "ImpactCategory", "ImpactMethod"]
 SCHEMA_VERSION = 1
 MANIFEST = "ecosemantic-database.json"
 CHANGELOG = "changelog.json"
@@ -46,8 +47,23 @@ class DatasetEntry(BaseModel):
     pin: str
 
 
+class Correction(BaseModel):
+    """One fix of one release: the value a top-level text field of a JSON-LD record holds as
+    published and as corrected, and why."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    entity: Entity
+    id: str
+    field: str
+    published: str
+    corrected: str
+    why: str
+
+
 class Manifest(BaseModel):
-    """What a bundle is: its mode, name, version, base, systems and rendered datasets."""
+    """What a bundle is: its mode, name, version, base, systems and rendered datasets, and the
+    revision of the publisher's release it is and the corrections that revision applies."""
 
     mode: Mode
     name: str
@@ -57,6 +73,8 @@ class Manifest(BaseModel):
     base: BaseDatabase
     systems: list[SystemEntry]
     datasets: list[DatasetEntry]
+    revision: int | None = None
+    corrections: list[Correction] = Field(default_factory=list)
 
 
 class Changelog(BaseModel):

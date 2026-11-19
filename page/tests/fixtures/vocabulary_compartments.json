@@ -2,20 +2,20 @@
   "hint": null,
   "value": [
     {
-      "detail": "1 flows",
-      "value": "Resource"
-    },
-    {
-      "detail": null,
-      "value": "Resource/in water"
-    },
-    {
       "detail": "3 flows",
       "value": "air"
     },
     {
       "detail": null,
       "value": "air/urban air close to ground"
+    },
+    {
+      "detail": "1 flows",
+      "value": "natural resource"
+    },
+    {
+      "detail": null,
+      "value": "natural resource/in water"
     }
   ],
   "view_url": null

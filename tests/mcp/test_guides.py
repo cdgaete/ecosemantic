@@ -79,3 +79,22 @@ def test_the_sensitivity_guide_names_the_draws_one_call_takes() -> None:
         encoding="utf-8"
     )
     assert f"Up to {MAX_ITERATIONS} draws" in text
+
+
+def test_the_sensitivity_guide_states_a_parameters_distribution() -> None:
+    text = (resources.files("ecosemantic.mcp") / "guides" / "sensitivity-study.md").read_text(
+        encoding="utf-8"
+    )
+    assert "## A parameter's distribution" in text
+    setting = [step for step in steps("sensitivity-study") if step["tool"] == "set_parameters"]
+    distributed = [
+        parameter
+        for step in setting
+        for parameter in step["arguments"]["parameters"]
+        if "uncertainty" in parameter
+    ]
+    assert [parameter["name"] for parameter in distributed] == ["tray_mass"]
+    # the distribution is centred on the parameter's value
+    assert distributed[0]["uncertainty"]["params"]["loc"] == distributed[0]["value"]
+    assert "takes no distribution" in text
+    assert "moves its distribution onto" in text

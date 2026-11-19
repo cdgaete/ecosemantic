@@ -25,7 +25,7 @@ from ecosemantic.files import read_bytes, replace
 from ecosemantic.model.refs import Database, slug
 
 T = TypeVar("T")
-FORMAT = 5
+FORMAT = 6
 BUNDLES_DIR = "bundles"
 DATABASES_DIR = "databases"
 BUILDS_DIR = "builds"
@@ -33,9 +33,7 @@ POINTER_FILE = "current"
 ENTRY_FILE = "entry.json"
 CATALOG_FILE = "catalog.duckdb"
 BACKGROUND_DIR = "background"
-MIGRATION_LOCK = ".migration.lock"
 INSTALL_LOCK = "install.lock"
-MIGRATED_PREFIX = "migrated-"
 
 
 class Entry(BaseModel):
@@ -120,101 +118,17 @@ def _servable(path: Path) -> bool:
     return path.is_dir() and not path.name.startswith(".")
 
 
-def migrated_name(bundle: str) -> str:
-    """The build id a format-4 database is migrated under: the first 32 characters of the hash of
-    the bundle it was installed from."""
-    return MIGRATED_PREFIX + bundle[:32]
-
-
-def _migrated_build(path: Path) -> Path | None:
-    """The half-moved build of a database directory: its `builds/migrated-*` directory, or None."""
-    builds = path / BUILDS_DIR
-    if not builds.is_dir():
-        return None
-    for build in builds.iterdir():
-        if build.is_dir() and build.name.startswith(MIGRATED_PREFIX):
-            return build
-    return None
-
-
-def _needs_migration(path: Path) -> bool:
-    """Whether a database directory might need migration: no pointer and a root entry or a
-    `migrated-` build; a hint only, the entry is read under the migration lock."""
-    if (path / POINTER_FILE).is_file():
-        return False
-    if (path / ENTRY_FILE).is_file():
-        return True
-    return _migrated_build(path) is not None
-
-
 def _wrong_format(name: str, format_: object) -> Unavailable:
-    """Unavailable naming a database installed in an entry format this store does not read."""
+    """Unavailable naming a database installed in an entry format this store does not read, and
+    the install that writes one it reads."""
     return Unavailable(
         f"{name!r} is installed in entry format {format_}; this store reads format {FORMAT}",
-        hint="install it again from its bundle with `ecosemantic setup openlca --replace`",
+        hint=(
+            "install the database again: `ecosemantic setup <source> --replace` for a source,"
+            " `ecosemantic setup openlca --package <package> --replace` for a package, or"
+            " `install_database` with `replace`"
+        ),
     )
-
-
-def migrate(directory: Path) -> None:
-    """Move every format-4 database under the data directory into its own `migrated-` build
-    directory and point at it, resuming a half-finished move, under one data-directory-wide lock
-    so two stores do not both move; a server that writes entry format 4 at the same time is the
-    one state it cannot repair."""
-    databases = directory / DATABASES_DIR
-    if not databases.is_dir():
-        return
-    if not any(_needs_migration(path) for path in databases.iterdir() if _servable(path)):
-        return
-    with FileLock(directory / MIGRATION_LOCK):
-        for path in sorted(databases.iterdir()):
-            if _servable(path) and _needs_migration(path):
-                _migrate_build(path)
-
-
-def _migrate_build(path: Path) -> None:
-    """Move a format-4 database's files into its `migrated-` build directory, idempotently, and
-    point at it; each move happens only while the file is still at the root, the entry moves last
-    and is rewritten staged, and the pointer write is the commit."""
-    root_entry = path / ENTRY_FILE
-    build = _migrated_build(path)
-    held: dict
-    if build is None:
-        if not root_entry.is_file():
-            return
-        held = json.loads(root_entry.read_text(encoding="utf-8"))
-        if held.get("format") != 4:
-            return
-        build = path / BUILDS_DIR / migrated_name(held["bundle"])
-        build.mkdir(parents=True, exist_ok=True)
-        _move_files(path, build)
-        shutil.move(str(root_entry), str(build / ENTRY_FILE))
-    else:
-        _move_files(path, build)
-        if root_entry.is_file():
-            held = json.loads(root_entry.read_text(encoding="utf-8"))
-            shutil.move(str(root_entry), str(build / ENTRY_FILE))
-        else:
-            held = json.loads((build / ENTRY_FILE).read_text(encoding="utf-8"))
-    held["format"] = FORMAT
-    _write_entry(build / ENTRY_FILE, held)
-    point(path, build.name)
-
-
-def _move_files(path: Path, build: Path) -> None:
-    """Move a format-4 database's background and catalog into its build, each only while still at
-    the root, so a resumed move finds nothing already gone."""
-    if (path / BACKGROUND_DIR).is_dir():
-        shutil.move(str(path / BACKGROUND_DIR), str(build / BACKGROUND_DIR))
-    if (path / CATALOG_FILE).is_file():
-        shutil.move(str(path / CATALOG_FILE), str(build / CATALOG_FILE))
-
-
-def _write_entry(entry_path: Path, held: dict) -> None:
-    """Write an entry staged and replaced within the retry, so a crash cannot leave a truncated
-    entry beside a build the pointer may already name."""
-    staged = entry_path.with_name(f".{entry_path.name}.tmp")
-    staged.write_text(json.dumps(held, indent=1) + "\n", encoding="utf-8")
-    replace(staged, entry_path)
 
 
 class NativeStore:
@@ -238,7 +152,6 @@ class NativeStore:
         """Read the build every database's pointer names, close what a database whose build is
         gone or changed leaves loaded, and remove the builds nothing points at while no install
         writes them."""
-        migrate(self.directory)
         entries: dict[str, Entry] = {}
         builds: dict[str, str] = {}
         databases = self.directory / DATABASES_DIR
@@ -277,8 +190,8 @@ class NativeStore:
             remove_unnamed_builds_if_idle(path)
 
     def _refuse_unserved(self, path: Path) -> None:
-        """Unavailable for a database directory that holds an entry this store cannot migrate:
-        an entry beside its files in a format other than 4, with no pointer."""
+        """Unavailable for a database directory that holds an entry beside its files in a format
+        other than the one this store reads, and no pointer."""
         entry_path = path / ENTRY_FILE
         if not entry_path.is_file():
             return

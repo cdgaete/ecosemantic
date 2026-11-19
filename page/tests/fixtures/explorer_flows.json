@@ -4,6 +4,7 @@
     "has_more": false,
     "items": [
       {
+        "cas_as_published": "n.a.",
         "cas_number": null,
         "compartment": "air",
         "flow_type": "emission",
@@ -17,7 +18,9 @@
         "unit": "kilogram"
       }
     ],
-    "next_cursor": null
+    "next_cursor": null,
+    "previous_cursor": null,
+    "total": 1
   },
   "view_url": null
 }

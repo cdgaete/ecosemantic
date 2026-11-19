@@ -123,10 +123,11 @@ def test_the_probe_command_prints_one_json_document(
 
 
 def test_the_build_command_prints_one_json_document(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     inventory = write_inventory(tmp_path / INVENTORY_NAME)
     method = write_method(tmp_path / METHOD_NAME)
+    monkeypatch.setattr(uslci_cli, "read_profile", lambda version: pinned_profile())
     out = tmp_path / "out"
     assert (
         databases_cli.main(
@@ -153,10 +154,11 @@ def test_the_build_command_prints_one_json_document(
 
 
 def test_the_build_command_leaves_the_import_out(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     inventory = write_inventory(tmp_path / INVENTORY_NAME)
     method = write_method(tmp_path / METHOD_NAME)
+    monkeypatch.setattr(uslci_cli, "read_profile", lambda version: pinned_profile())
     out = tmp_path / "out"
     assert (
         databases_cli.main(
@@ -209,10 +211,11 @@ def test_the_build_command_builds_the_profile_s_downloads(
 
 
 def test_the_build_command_takes_the_bridged_repositories(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     inventory = write_inventory(tmp_path / INVENTORY_NAME)
     method = write_method(tmp_path / METHOD_NAME)
+    monkeypatch.setattr(uslci_cli, "read_profile", lambda version: pinned_profile())
     out = tmp_path / "out"
     assert (
         databases_cli.main(
@@ -239,9 +242,10 @@ def test_the_build_command_takes_the_bridged_repositories(
 
 
 def test_the_build_command_names_the_files_it_needs_together(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     method = write_method(tmp_path / METHOD_NAME)
+    monkeypatch.setattr(uslci_cli, "read_profile", lambda version: pinned_profile())
     assert (
         databases_cli.main(
             [

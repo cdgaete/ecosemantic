@@ -19,6 +19,7 @@ from ecosemantic.model.entities import Actor, Method, ProductSystem, method_by_i
 from ecosemantic.model.refs import DemandItem, ElementaryFlowRef, ForegroundRef
 from ecosemantic.ports.resolver import FlowInfo
 from ecosemantic.ports.types import (
+    ADAPTIVE_N_MIN,
     FLOW_TYPES,
     Account,
     Change,
@@ -52,10 +53,13 @@ from ecosemantic.ports.types import (
     fraction_of,
     is_open,
     listed,
+    page_holding,
     page_start,
     patched,
+    side_of,
     source_credential,
 )
+from tests.conftest import drawn_counts
 from tests.fixture_data import FIXTURE_DATABASE
 
 
@@ -76,6 +80,14 @@ def test_monte_carlo_config_bounds() -> None:
         MonteCarloConfig(n_min=10, n_max=5)
     with pytest.raises(ValidationError):
         MonteCarloConfig(scope="all")
+
+
+def test_an_adaptive_run_refuses_n_min_below_6() -> None:
+    with pytest.raises(ValidationError) as caught:
+        MonteCarloConfig(n_min=5, n_max=40)
+    assert "an adaptive run takes n_min of at least 6" in str(caught.value)
+    assert MonteCarloConfig(n=3, n_min=1).n_min == 1
+    assert ADAPTIVE_N_MIN == 6
 
 
 def test_tree_node_nests() -> None:
@@ -146,6 +158,18 @@ def test_page_at_offset_points_at_the_next_page_only_when_there_is_one() -> None
     assert Page.at_offset([1], False, 4, 2).next_cursor is None
 
 
+def test_a_page_points_back_only_past_its_first_row() -> None:
+    assert Page.at_offset([1], False, 4, 2).previous_cursor == "2"
+    assert Page.at_offset([1], False, 1, 2).previous_cursor == "0"
+    assert Page.at_offset([1], False, 0, 2).previous_cursor is None
+
+
+def test_page_holding_is_the_offset_of_the_items_page() -> None:
+    assert page_holding(5, 2) == 4
+    assert page_holding(0, 25) == 0
+    assert page_holding(None, 25) == 0
+
+
 def test_flow_type_is_the_closed_vocabulary_the_backends_report() -> None:
     assert set(FLOW_TYPES) == {"emission", "natural resource", "inventory indicator", "economic"}
     with pytest.raises(ValidationError):
@@ -169,11 +193,25 @@ def test_flow_side_follows_the_type_and_the_sub_compartment() -> None:
     assert flow_side("economic", "primary production factor") == "input"
 
 
+def test_an_economic_flow_is_an_output() -> None:
+    assert flow_side("economic", "unspecified") == "output"
+    assert flow_side("economic", None) == "output"
+    assert flow_side("economic", "non-FEDEFL") == "output"
+    assert flow_side("economic", "primary production factor") == "input"
+
+
+def test_side_of_answers_none_for_a_pair_the_table_does_not_name() -> None:
+    assert side_of("inventory indicator", "unspecified") is None
+    assert side_of("inventory indicator", None) is None
+    assert side_of("economic", "unspecified") == "output"
+    assert side_of("natural resource", "in water") == "input"
+
+
 def test_flow_side_refuses_a_pair_the_table_does_not_name() -> None:
     with pytest.raises(NotSupported):
-        flow_side("economic", "waste")
-    with pytest.raises(NotSupported):
         flow_side("inventory indicator", None)
+    with pytest.raises(NotSupported):
+        flow_side("inventory indicator", "unspecified")
 
 
 def test_the_carriers_serialise_their_side() -> None:
@@ -204,13 +242,18 @@ def test_the_carriers_serialise_their_side() -> None:
 
 def test_the_carriers_refuse_a_pair_the_table_does_not_name() -> None:
     ref = ElementaryFlowRef(database="bio", id="x")
-    fields = {"name": "x", "compartment": "economic", "sub_compartment": "waste", "unit": "kg"}
+    fields = {
+        "name": "x",
+        "compartment": "inventory indicator",
+        "sub_compartment": None,
+        "unit": "kg",
+    }
     with pytest.raises(NotSupported):
-        ElementaryFlow(ref=ref, flow_type="economic", **fields)
+        ElementaryFlow(ref=ref, flow_type="inventory indicator", **fields)
     with pytest.raises(NotSupported):
-        InventoryRow(flow=ref, flow_type="economic", amount=1.0, **fields)
+        InventoryRow(flow=ref, flow_type="inventory indicator", amount=1.0, **fields)
     with pytest.raises(NotSupported):
-        FlowInfo(flow_type="economic", **fields)
+        FlowInfo(flow_type="inventory indicator", **fields)
 
 
 def test_a_system_of_a_product_system_names_its_database(product_system: ProductSystem) -> None:
@@ -249,8 +292,8 @@ def test_a_run_answers_its_cancellation_only_while_it_is_open() -> None:
         finished.cancellation()
 
 
-def test_compartments_are_tallied_in_name_order_and_an_unplaced_flow_is_not_counted() -> None:
-    placed = [("water", "ocean"), ("air", None), ("air", "urban"), ("", None), ("air", "urban")]
+def test_compartments_are_tallied_in_name_order() -> None:
+    placed = [("water", "ocean"), ("air", None), ("air", "urban"), ("air", "urban")]
     assert Compartment.tally(placed) == [
         Compartment(
             name="air",
@@ -289,19 +332,21 @@ def test_factors_are_ordered_by_name_compartment_and_sub_compartment() -> None:
         ("Benzene", "air", None),
     ]
     assert first.has_more and first.next_cursor == "2"
+    assert first.total == 4
     rest = factor_page(factors, None, 2, first.next_cursor)
     assert [f.sub_compartment for f in rest.items] == ["indoor", "urban air close to ground"]
     assert not rest.has_more
     # every word must sit in one of the factor's own fields, case-folded
-    assert [f.sub_compartment for f in factor_page(factors, "AIR indoor", 10, None).items] == [
-        "indoor"
-    ]
+    indoor = factor_page(factors, "AIR indoor", 10, None)
+    assert [f.sub_compartment for f in indoor.items] == ["indoor"]
+    assert indoor.total == 1
 
 
-def test_a_fraction_is_the_share_of_its_total_and_none_of_a_total_of_zero() -> None:
+def test_a_share_of_a_total_of_0_is_none() -> None:
     assert fraction_of(1.0, 4.0) == 0.25
     assert fraction_of(-1.0, 4.0) == -0.25
-    assert fraction_of(1.0, 0.0) == 0.0
+    assert fraction_of(1.0, 0.0) is None
+    assert fraction_of(0.0, 0.0) is None
 
 
 def install_draft(
@@ -459,8 +504,20 @@ def test_a_flat_list_shows_what_reaches_the_cutoff_up_to_its_length_and_signs_th
     assert (cut.below_score, cut.unlisted_score) == (0, 0)
 
 
+def test_a_total_of_0_lists_its_largest_parts_without_shares() -> None:
+    scores = [28.0, -16.0, -12.0]
+    shown, cut = listed(scores, 0.0, top_n=2, cutoff=0.01)
+    assert (shown, cut.below, cut.unlisted) == (2, 0, 1)
+    assert (cut.share, cut.unlisted_share) == (None, None)
+    assert (cut.below_score, cut.unlisted_score) == (0, -12.0)
+    shown, cut = listed(scores, 0.0, top_n=10, cutoff=0.01)
+    assert (shown, cut.below, cut.unlisted) == (3, 0, 0)
+    assert (cut.share, cut.unlisted_share) == (None, None)
+    assert (cut.below_score, cut.unlisted_score) == (0, 0)
+
+
 def _sampled(samples: list[float] | None) -> MonteCarloResult:
-    method = Method.of(("fixture", "gwp", "climate change"), "kg CO2-Eq")
+    method = Method.of(("fixture", "gwp", "climate change", "climate change"), "kg CO2-Eq")
     summary = MonteCarloSummary(
         n=3, mean=2.0, median=2.0, median_ci95=None, percentiles=(1.0, 3.0), rel_se=None
     )
@@ -468,9 +525,11 @@ def _sampled(samples: list[float] | None) -> MonteCarloResult:
         database=FIXTURE_DATABASE,
         n=3,
         stopped="fixed",
-        gating_method=method.id,
+        gating_method=None,
+        constant=[],
+        indistinguishable_from_zero=[],
         scope="full",
-        normals_at_amount=0,
+        drawn=drawn_counts(),
         credit_loops=[],
         dropped_draws=[],
         dropped_loops=[],
@@ -530,8 +589,8 @@ def test_sampled_answers_the_draws_and_refuses_a_category_that_carries_none() ->
 
 
 def test_a_method_is_the_one_its_id_names_and_an_id_none_carries_is_invalid() -> None:
-    water = Method.of(("fixture", "water", "water scarcity"), "m3")
-    gwp = Method.of(("fixture", "gwp", "climate change"), "kg CO2-Eq")
+    water = Method.of(("fixture", "water", "water scarcity", "water scarcity"), "m3")
+    gwp = Method.of(("fixture", "gwp", "climate change", "climate change"), "kg CO2-Eq")
     assert method_by_id([water, gwp], gwp.id) == gwp
     with pytest.raises(Invalid) as caught:
         method_by_id([water, gwp], "m_ffffffffff")

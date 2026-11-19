@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import independent_scores
@@ -29,6 +30,8 @@ from tests.databases.uslci.install_fixture import (
     unlinked_rows,
 )
 from tests.databases.uslci_fixture import EXPECTED, INVENTORY_NAME, write_inventory
+
+NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _release(
@@ -150,7 +153,9 @@ def test_validate_compares_the_lists_a_profile_names(
     inventory = server.files[(INVENTORY_GROUP, INVENTORY_NAME_ON_SERVER, INVENTORY_COMMIT)]
     method = server.files[(METHOD_GROUP, METHOD_NAME_ON_SERVER, METHOD_COMMIT)]
     work = tmp_path / "work"
-    built = build(inventory, (method,), version=VERSION, out_dir=work)
+    built = build(
+        inventory, (method,), version=VERSION, revision=1, corrections=(), now=NOW, out_dir=work
+    )
     assert (
         independent_scores.main(
             [

@@ -33,5 +33,5 @@ function Body({ target, onDone }: { target: { systemId: string; entity?: Entity;
   if (!read.data) return <p className="text-muted-foreground">Loading…</p>
   const hash = read.data.value.hash
   if (hash === null) return <p className="text-warning">The stored product system carries no hash yet.</p>
-  return <RequestForm systemId={target.systemId} atHash={hash} entity={target.entity} entityId={target.entityId} onDone={onDone} />
+  return <RequestForm systemId={target.systemId} atHash={hash} system={read.data.value} entity={target.entity} entityId={target.entityId} onDone={onDone} />
 }

@@ -32,6 +32,7 @@ from tests.conftest import (
     tshirt_labelled,
 )
 from tests.dict_resolver import DictResolver
+from tests.package.test_jsonld_write import bounded
 
 
 def _sidecar(product_system: ProductSystem, identities: Identities) -> Sidecar:
@@ -334,6 +335,19 @@ def test_a_lognormals_written_parameters_read_back_as_written(
     assert read.uncertainty.params["scale"] == 0.1823
     assert read.uncertainty.params["loc"] == electricity.uncertainty.params["loc"]
     assert content_hash(back) == content_hash(stated)
+
+
+def test_an_exchanges_bounds_read_back_beside_its_lognormal(
+    product_system: ProductSystem, resolver: DictResolver, tmp_path: Path
+) -> None:
+    system = bounded(product_system)
+    sidecar = _sidecar(system, write_jsonld(system, tmp_path, resolver))
+    back = read_jsonld(tmp_path, sidecar)
+    sewing = back.process("tshirt").exchanges[2]
+    assert sewing.name == "sewing electricity"
+    assert sewing.uncertainty == system.process("tshirt").exchanges[2].uncertainty
+    assert sewing.uncertainty.bounds() == (0.2, 0.45)
+    assert back.parameter("waste_rate").uncertainty == system.parameter("waste_rate").uncertainty
 
 
 def test_an_empty_document_round_trips(

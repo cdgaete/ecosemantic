@@ -153,6 +153,7 @@ columns:
 total:
   header: Total [UBP]
   method: Ecological Scarcity 2021
+  weighting_set: Total (water resources, evaporated; for BAFU database)
 unlinked: unlinked-2026-v1.csv
 differences: differences-2026-v1.csv
 tolerance: 0.0001
@@ -161,3 +162,4 @@ validated:
   columns: 46
   differences: 12402
   largest_rel_diff_within_tolerance: 8.327755357860483e-05
+revision: 1

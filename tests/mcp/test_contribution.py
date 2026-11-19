@@ -14,11 +14,14 @@ from ecosemantic.mcp import calculation
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.server import build_server
 from ecosemantic.model.entities import Exchange, Method, Process, ProductSystem, method_id
-from ecosemantic.model.refs import BackgroundRef
+from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef
 from ecosemantic.ports.inventory import InventoryPort
+from ecosemantic.ports.types import InventoryOrder, Side
 from tests.conftest import NS, fixture_system
 from tests.fixture_data import CODES as FIXTURE_CODES
-from tests.fixture_data import FIXTURE_DB, FIXTURE_FINGERPRINT, GWP
+from tests.fixture_data import FIXTURE_BIO, FIXTURE_DB, FIXTURE_FINGERPRINT, GWP
+from tests.fixture_data import FLOW_IDS as FIXTURE_FLOW_IDS
+from tests.fixture_data import FLOWS as FIXTURE_FLOWS
 
 GWP_ID = method_id(" > ".join(GWP))
 
@@ -33,6 +36,56 @@ def server(context: ServerContext) -> FastMCP:
 @pytest.fixture(scope="module")
 async def widget(fixture_system_stored: ProductSystem) -> uuid.UUID:
     return fixture_system_stored.id
+
+
+@pytest.fixture(scope="module")
+async def split_system(context: ServerContext) -> ProductSystem:
+    """A process drawing 0.4 m3 of river water and emitting three flows, whose names and amounts
+    order differently: by name carbon dioxide, methane, particulate matter; by amount methane,
+    carbon dioxide, particulate matter."""
+    base = fixture_system().product_system
+    assert base is not None
+
+    def elementary(n: int, key: str, amount: float) -> Exchange:
+        return Exchange(
+            id=uuid.uuid5(NS, f"exchange:split:{n}"),
+            type="elementary",
+            name=FIXTURE_FLOWS[key][0],
+            amount=amount,
+            unit=FIXTURE_FLOWS[key][2],
+            input=ElementaryFlowRef(database=FIXTURE_BIO, id=FIXTURE_FLOW_IDS[key]),
+        )
+
+    splitter = Process(
+        id=uuid.uuid5(NS, "process:split"),
+        code="split",
+        name="splitting",
+        unit="unit",
+        location="CH",
+        reference_product="split item",
+        exchanges=[
+            Exchange(
+                id=uuid.uuid5(NS, "exchange:split:production"),
+                type="production",
+                name="split item",
+                amount=1.0,
+                unit="unit",
+            ),
+            elementary(1, "water_in", 0.4),
+            elementary(2, "ch4", 0.5),
+            elementary(3, "co2", 0.2),
+            elementary(4, "pm", 0.01),
+        ],
+    )
+    system = ProductSystem(
+        id=uuid.uuid5(NS, "system:split"),
+        name="split_system",
+        database=base.database,
+        processes=[splitter],
+        reference_process="split",
+    )
+    await context.storage.put_product_system(system, context.actor, "created")
+    return system
 
 
 def _sums_to_parent(node: dict[str, object]) -> None:
@@ -251,6 +304,81 @@ async def test_inventory_pages_and_filters(server: FastMCP, widget: uuid.UUID) -
         none = await rows(compartment="water")
         assert none["items"] == [] and "compartment" in none["hint"]
         assert [r["name"] for r in (await rows(query="methane"))["items"]] == ["Methane, fossil"]
+
+
+async def test_the_inventory_pages_each_side_on_its_own(
+    server: FastMCP, split_system: ProductSystem
+) -> None:
+    async def walked(side: Side) -> list[dict[str, object]]:
+        walked_rows: list[dict[str, object]] = []
+        cursor = None
+        async with Client(server) as client:
+            while True:
+                args: dict[str, object] = {
+                    "product_system_id": str(split_system.id),
+                    "side": side,
+                    "limit": 1,
+                }
+                if cursor is not None:
+                    args["cursor"] = cursor
+                page = (await client.call_tool("calculate_inventory", args)).structured_content
+                walked_rows.extend(page["items"])
+                if not page["has_more"]:
+                    return walked_rows
+                cursor = page["next_cursor"]
+
+    assert [r["name"] for r in await walked("input")] == ["Water, river"]
+    outputs = await walked("output")
+    assert [r["side"] for r in outputs] == ["output", "output", "output"]
+    assert [r["name"] for r in outputs] == [
+        "Carbon dioxide, fossil",
+        "Methane, fossil",
+        "Particulate matter",
+    ]
+
+
+async def test_the_inventory_orders_by_falling_amount(
+    server: FastMCP, split_system: ProductSystem
+) -> None:
+    async def ordered(order: InventoryOrder) -> list[str]:
+        async with Client(server) as client:
+            listing = (
+                await client.call_tool(
+                    "calculate_inventory",
+                    {"product_system_id": str(split_system.id), "order": order},
+                )
+            ).structured_content
+        return [r["name"] for r in listing["items"]]
+
+    assert await ordered("amount") == [
+        "Water, river",
+        "Methane, fossil",
+        "Carbon dioxide, fossil",
+        "Particulate matter",
+    ]
+    assert await ordered("compartment") == [
+        "Water, river",
+        "Carbon dioxide, fossil",
+        "Methane, fossil",
+        "Particulate matter",
+    ]
+
+
+async def test_without_a_side_inputs_come_first(
+    server: FastMCP, split_system: ProductSystem
+) -> None:
+    async def sides(order: InventoryOrder) -> list[str]:
+        async with Client(server) as client:
+            listing = (
+                await client.call_tool(
+                    "calculate_inventory",
+                    {"product_system_id": str(split_system.id), "order": order},
+                )
+            ).structured_content
+        return [r["side"] for r in listing["items"]]
+
+    for order in ("compartment", "amount"):
+        assert await sides(order) == ["input", "output", "output", "output"]
 
 
 def test_the_inventory_listing_holds_every_field_of_the_inventory_result_alike() -> None:

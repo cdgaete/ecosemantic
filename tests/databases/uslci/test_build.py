@@ -4,15 +4,20 @@ from __future__ import annotations
 
 import json
 import zipfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from ecosemantic.databases.lists import read_left_out
+from ecosemantic.databases.revision import read_corrections
 from ecosemantic.databases.scores import score_every_dataset
 from ecosemantic.databases.uslci.build import Built, build
+from ecosemantic.databases.uslci.profile import RELEASES
 from ecosemantic.errors import Conflict, Invalid
 from ecosemantic.package.background import Import, read_background
+from ecosemantic.package.canonical import canonical_flow_record
+from ecosemantic.package.manifest import read_manifest
 from tests.databases.uslci_fixture import (
     BRIDGED_CODES,
     BRIDGED_NAME,
@@ -20,6 +25,7 @@ from tests.databases.uslci_fixture import (
     BRIDGES,
     CLIMATE,
     CODES,
+    CORRECTED_FLOW,
     EXPECTED,
     FLOW_NAMES,
     INVENTORY_NAME,
@@ -36,6 +42,9 @@ from tests.databases.uslci_fixture import (
 )
 
 VERSION = "1.2026-09.0"
+
+NOW = datetime(2026, 1, 1, tzinfo=UTC)
+
 WIDGET = PROCESSES["widget"]
 
 
@@ -45,6 +54,9 @@ def built(tmp_path: Path) -> Built:
         write_inventory(tmp_path / INVENTORY_NAME),
         (write_method(tmp_path / METHOD_NAME),),
         version=VERSION,
+        revision=1,
+        corrections=(),
+        now=NOW,
         out_dir=tmp_path / "out",
     )
 
@@ -56,6 +68,9 @@ def merged(tmp_path: Path) -> Built:
         write_inventory(tmp_path / INVENTORY_NAME),
         (write_method(tmp_path / METHOD_NAME),),
         version=VERSION,
+        revision=1,
+        corrections=(),
+        now=NOW,
         out_dir=tmp_path / "out",
         bridged=(write_bridged(tmp_path / BRIDGED_NAME),),
     )
@@ -89,6 +104,39 @@ def test_the_bundle_holds_the_used_and_the_characterised_elementary_flows(built:
     assert built.processes == EXPECTED["processes"]
     assert (built.methods, built.categories) == (EXPECTED["methods"], EXPECTED["categories"])
     assert built.converted == EXPECTED["bundle"]["converted"]
+    assert read_manifest(built.bundle).revision == 1
+
+
+def test_a_flow_no_rule_places_builds_once_the_release_corrects_it(tmp_path: Path) -> None:
+    inventory = write_inventory(tmp_path / INVENTORY_NAME, unplaced_flow=True)
+    method = write_method(tmp_path / METHOD_NAME)
+    corrections = read_corrections(RELEASES / f"corrections-{VERSION}.csv")
+
+    with pytest.raises(Invalid, match="emission/non-FEDEFL"):
+        build(
+            inventory,
+            (method,),
+            version=VERSION,
+            revision=1,
+            corrections=(),
+            now=NOW,
+            out_dir=tmp_path / "refused",
+        )
+
+    assert list((tmp_path / "refused").iterdir()) == []
+    built = build(
+        inventory,
+        (method,),
+        version=VERSION,
+        revision=1,
+        corrections=corrections,
+        now=NOW,
+        out_dir=tmp_path / "out",
+    )
+    assert _record(built.bundle, "flows", CORRECTED_FLOW)["category"] == (
+        "Elementary flows/air/non-FEDEFL"
+    )
+    assert read_manifest(built.bundle).corrections == list(corrections)
 
 
 def test_the_inventory_s_record_wins_where_both_zips_hold_an_id(
@@ -96,7 +144,7 @@ def test_the_inventory_s_record_wins_where_both_zips_hold_an_id(
 ) -> None:
     with zipfile.ZipFile(tmp_path / INVENTORY_NAME) as archive:
         inventory = json.loads(archive.read(f"flows/{_flow_id('co2')}.json"))
-    assert _record(built.bundle, "flows", _flow_id("co2")) == inventory
+    assert _record(built.bundle, "flows", _flow_id("co2")) == canonical_flow_record(inventory)
 
 
 def test_a_bridge_links_to_the_provider_its_description_names(merged: Built) -> None:
@@ -137,6 +185,9 @@ def test_a_description_that_is_no_provider_changes_nothing(
         write_inventory(tmp_path / INVENTORY_NAME, grid_description=description),
         (write_method(tmp_path / METHOD_NAME),),
         version=VERSION,
+        revision=1,
+        corrections=(),
+        now=NOW,
         out_dir=tmp_path / "out",
         bridged=(write_bridged(tmp_path / BRIDGED_NAME),),
     )
@@ -179,7 +230,7 @@ def test_the_merged_bundle_scores_as_computed_by_hand(merged: Built) -> None:
     codes = CODES | BRIDGED_CODES
     for role, expected in EXPECTED["bridged"]["scores"].items():
         for category, score in expected.items():
-            assert scores.values[(codes[role], "IPCC GWP", category)] == pytest.approx(
+            assert scores.values[(codes[role], "IPCC GWP", category, category)] == pytest.approx(
                 score, rel=1e-12
             )
 
@@ -199,7 +250,15 @@ def test_a_factor_in_a_property_its_flow_lacks_stops_the_build(tmp_path: Path) -
     inventory = write_inventory(tmp_path / INVENTORY_NAME)
     method = write_method(tmp_path / METHOD_NAME, stray_property=True)
     with pytest.raises(Invalid) as refused:
-        build(inventory, (method,), version=VERSION, out_dir=tmp_path / "out")
+        build(
+            inventory,
+            (method,),
+            version=VERSION,
+            revision=1,
+            corrections=(),
+            now=NOW,
+            out_dir=tmp_path / "out",
+        )
     message = str(refused.value)
     assert "IPCC GWP" in message
     assert CLIMATE in message
@@ -225,6 +284,9 @@ def test_a_converted_exchange_without_a_distribution_or_a_formula_gains_neither(
         write_inventory(tmp_path / INVENTORY_NAME, bare_conversion=True),
         (write_method(tmp_path / METHOD_NAME),),
         version=VERSION,
+        revision=1,
+        corrections=(),
+        now=NOW,
         out_dir=tmp_path / "out",
     )
     water = _exchange(_record(built.bundle, "processes", WIDGET), 4)
@@ -286,6 +348,9 @@ def test_a_bundle_whose_exchange_names_a_flow_it_lacks_is_refused_by_name(tmp_pa
             inventory,
             (write_method(tmp_path / METHOD_NAME),),
             version=VERSION,
+            revision=1,
+            corrections=(),
+            now=NOW,
             out_dir=tmp_path / "out",
         )
     message = str(refused.value)
@@ -326,6 +391,9 @@ def test_an_exchange_in_a_unit_the_core_lacks_takes_the_release_s_factor(
         write_inventory(tmp_path / INVENTORY_NAME, odd_unit=True),
         (write_method(tmp_path / METHOD_NAME),),
         version=VERSION,
+        revision=1,
+        corrections=(),
+        now=NOW,
         out_dir=tmp_path / "out",
     )
     methane = _exchange(_record(built.bundle, "processes", WIDGET), 6)
@@ -345,4 +413,12 @@ def test_a_product_declared_in_litres_keeps_its_unit(built: Built) -> None:
 def test_an_existing_destination_is_a_conflict(built: Built, tmp_path: Path) -> None:
     inventory = write_inventory(tmp_path / "another-inventory.zip")
     with pytest.raises(Conflict, match="exists"):
-        build(inventory, (), version=VERSION, out_dir=tmp_path / "out")
+        build(
+            inventory,
+            (),
+            version=VERSION,
+            revision=1,
+            corrections=(),
+            now=NOW,
+            out_dir=tmp_path / "out",
+        )

@@ -21,11 +21,14 @@ function canvas(command: CanvasCommand): () => void {
   return () => runCanvas(command)
 }
 
+export const LEAVE_EVENT = 'ecosemantic:leave'
+
 function dismiss(): void {
   const state = useUi.getState()
   if (state.navOpen) closeNavigation()
   else if (sheetShown(state)) dismissSheet()
   else if (state.toolsOpen) state.setToolsOpen(false)
+  else window.dispatchEvent(new Event(LEAVE_EVENT))
 }
 
 export const SHORTCUTS: Shortcut[] = [
@@ -35,7 +38,7 @@ export const SHORTCUTS: Shortcut[] = [
   { id: 'fit', keys: '1', label: 'Fit the graph to the canvas', run: canvas('fit') },
   { id: 'focus', keys: 'F', label: 'Centre the reference process', run: canvas('focus') },
   { id: 'reorganise', keys: 'R', label: 'Reorganise the graph', run: canvas('reorganise') },
-  { id: 'dismiss', keys: 'Escape', label: 'Close the navigation, the sheet, or the canvas tools', run: dismiss },
+  { id: 'dismiss', keys: 'Escape', label: 'Close the navigation, the sheet or the canvas tools, or leave the explorer', run: dismiss },
 ]
 
 export function keysOf(id: string): string {
@@ -55,14 +58,19 @@ function pressed(event: KeyboardEvent, keys: string): boolean {
   )
 }
 
-function typing(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+function fieldOf(target: EventTarget | null): HTMLElement | null {
+  return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) ? target : null
 }
 
 export function useShortcuts(): void {
   useEffect(() => {
     const listen = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || typing(event.target)) return
+      if (event.defaultPrevented) return
+      const field = fieldOf(event.target)
+      if (field !== null) {
+        if (event.key === 'Escape') field.blur()
+        return
+      }
       const found = SHORTCUTS.find((shortcut) => pressed(event, shortcut.keys))
       if (!found) return
       event.preventDefault()

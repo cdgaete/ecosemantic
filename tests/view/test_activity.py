@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
@@ -10,9 +11,12 @@ from mcp.types import Implementation
 from starlette.testclient import TestClient
 
 from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.server import build_server
 from ecosemantic.model.entities import ProductSystem, method_id
+from ecosemantic.ports.types import Call, CallDraft
 from ecosemantic.view.app import build_view
 from tests.fixture_data import FIXTURE_DB, GWP
+from tests.memory_activity import MemoryActivity
 
 GWP_ID = method_id(" > ".join(GWP))
 NOWHERE = Path("/nonexistent-static")
@@ -215,3 +219,22 @@ async def test_the_calculations_of_a_system_are_its_impact_calls_newest_first(
     assert found[1]["summary"]["scores"][0]["unit"]
     missing = client.get(f"/api/product-systems/{uuid.uuid4()}/calculations")
     assert missing.status_code == 404
+
+
+class _DiskFull(MemoryActivity):
+    """An activity whose record cannot write."""
+
+    async def record(self, draft: CallDraft) -> Call:
+        raise OSError("disk full")
+
+
+def test_a_record_that_fails_answers_the_failure(
+    context: ServerContext, fixture_system_stored: ProductSystem
+) -> None:
+    failing = dataclasses.replace(context, activity=_DiskFull())
+    app = build_view(failing, build_server(failing), static=NOWHERE)
+    base = f"/api/product-systems/{fixture_system_stored.id}"
+    with TestClient(app) as page:
+        with pytest.raises(OSError, match="disk full"):
+            page.post(f"{base}/impact?started=true", json={"method_id": GWP_ID})
+        assert page.get(base).status_code == 200

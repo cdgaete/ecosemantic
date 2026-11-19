@@ -3,7 +3,7 @@ import type { LogEntry } from '@/api/types'
 const PALETTE = 7
 const HIGHLIGHT = 'rgb(var(--highlight))'
 
-export const QUIET_AFTER = 5 * 60_000
+export const QUIET_AFTER = 2 * 60_000
 
 export function colourOf(agent: string): string {
   let sum = 0

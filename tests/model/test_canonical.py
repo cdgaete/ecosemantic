@@ -9,7 +9,7 @@ from ecosemantic.model.canonical import (
     content_hash,
     significant,
 )
-from ecosemantic.model.entities import Case, ProductSystem
+from ecosemantic.model.entities import Case, Parameter, ProductSystem, Uncertainty
 
 
 def test_hash_is_sha256_hex(product_system: ProductSystem) -> None:
@@ -49,6 +49,17 @@ def test_parameters_and_cases_change_the_hash(product_system: ProductSystem) -> 
     case = product_system.model_copy(deep=True)
     case.cases[0].values["fabric_mass"] = 0.16
     assert content_hash(case) != before
+
+
+def test_a_parameter_distribution_changes_the_hash(product_system: ProductSystem) -> None:
+    before = content_hash(product_system)
+    spread = product_system.model_copy(deep=True)
+    spread.parameters[4] = Parameter(
+        name="organic_share",
+        value=0.0,
+        uncertainty=Uncertainty(type="normal", params={"loc": 0.0, "scale": 0.1}),
+    )
+    assert content_hash(spread) != before
 
 
 def test_order_is_excluded(product_system: ProductSystem) -> None:

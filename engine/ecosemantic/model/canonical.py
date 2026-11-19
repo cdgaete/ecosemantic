@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from pydantic import JsonValue
 
-from ecosemantic.model.entities import Exchange, ProductSystem, Scenario
+from ecosemantic.model.entities import Exchange, Parameter, ProductSystem, Scenario, Uncertainty
 from ecosemantic.model.refs import ExchangeInput
 
 
@@ -21,14 +21,29 @@ def _number(value: float) -> str:
     return format(Decimal(significant(value)).normalize(), "f")
 
 
+def _distribution(uncertainty: Uncertainty) -> dict[str, JsonValue]:
+    params = {
+        key: (value if isinstance(value, bool) else _number(float(value)))
+        for key, value in sorted(uncertainty.params.items())
+    }
+    return {"type": uncertainty.type, "params": params}
+
+
 def _uncertainty(exchange: Exchange) -> dict[str, JsonValue] | None:
     if exchange.uncertainty is None:
         return None
-    params = {
-        key: (value if isinstance(value, bool) else _number(float(value)))
-        for key, value in sorted(exchange.uncertainty.params.items())
+    return _distribution(exchange.uncertainty)
+
+
+def _parameter(parameter: Parameter) -> dict[str, JsonValue]:
+    named: dict[str, JsonValue] = {
+        "name": parameter.name,
+        "value": None if parameter.value is None else _number(parameter.value),
+        "formula": parameter.formula,
     }
-    return {"type": exchange.uncertainty.type, "params": params}
+    if parameter.uncertainty is not None:
+        named["uncertainty"] = _distribution(parameter.uncertainty)
+    return named
 
 
 def _input(ref: ExchangeInput | None) -> list[str]:
@@ -79,14 +94,7 @@ def canonical(product_system: ProductSystem) -> list[list[dict[str, JsonValue]]]
     the system names, with only the fields that change a result; a system naming no build
     keeps the projection it has without one."""
     parameters: list[dict[str, JsonValue]] = sorted(
-        (
-            {
-                "name": p.name,
-                "value": None if p.value is None else _number(p.value),
-                "formula": p.formula,
-            }
-            for p in product_system.parameters
-        ),
+        (_parameter(p) for p in product_system.parameters),
         key=lambda p: str(p["name"]),
     )
     cases: list[dict[str, JsonValue]] = sorted(

@@ -11,6 +11,16 @@ A sensitivity study asks how a result moves when a choice moves. Put each choice
 5. `calculate_impact` with `variants` scores the base and each named case or scenario, with each variant's delta from the base.
 6. `calculate_impact` with `monte_carlo` adds the uncertainty: the median, its 95 % interval and the 2.5th and 97.5th percentiles, and each variant's delta as the median of paired differences. Up to 200 draws answer inline; `start_monte_carlo` runs more as a background run that `get_run` follows.
 
+## A parameter's distribution
+
+`set_parameters` takes an `uncertainty` on a literal parameter, in the shape an exchange's takes: `{"type": "lognormal", "params": {"loc": 1.5, "scale": 0.1}}`, or a normal, a uniform or a triangular. The distribution is centred on the parameter's value within a relative 1e-9, and a write centred elsewhere is refused naming the centre. A lognormal or a normal takes `minimum` and `maximum`, either of them optional; a draw outside them is drawn again, and a parameter that keeps landing outside refuses the run, naming the parameter.
+
+A formula parameter takes no distribution: its spread follows from what it reads. Neither does an exchange whose formula reads an uncertain parameter — its amount already moves with the parameter, and a distribution on it is a second spread, refused naming both. Put the distribution on the parameter alone, and every exchange whose formula reads it, directly or through a formula parameter, takes the spread.
+
+A case or a scenario that sets the parameter's value moves its distribution onto that value with the same relative spread, and a value of 0 leaves it none. The base and each variant draw the parameter's random numbers alike, so a paired delta holds.
+
+In each draw the literal parameters are drawn, the parameters' formulas are evaluated over them, then the exchanges' formulas, and only then the distributions on the exchanges' own amounts.
+
 ## Worked example: a tray on the fixture database
 
 A tray weighs 1 kg, of aluminium and of polyethylene by a share parameter. A case moves the share; a scenario halves the tray's mass.
@@ -40,7 +50,7 @@ A tray weighs 1 kg, of aluminium and of polyethylene by a share parameter. A cas
 ```
 
 ```json
-{"tool": "set_parameters", "arguments": {"product_system_id": "{system}", "parameters": [{"name": "tray_mass", "value": 1.0, "unit": "kilogram"}, {"name": "plastic_share", "value": 0.0}], "cases": [{"name": "plastic tray", "values": {"plastic_share": 1.0}}]}}
+{"tool": "set_parameters", "arguments": {"product_system_id": "{system}", "parameters": [{"name": "tray_mass", "value": 1.0, "unit": "kilogram", "uncertainty": {"type": "normal", "params": {"loc": 1.0, "scale": 0.05, "minimum": 0.9, "maximum": 1.1}}}, {"name": "plastic_share", "value": 0.0}], "cases": [{"name": "plastic tray", "values": {"plastic_share": 1.0}}]}}
 ```
 
 ```json
@@ -63,4 +73,4 @@ A tray weighs 1 kg, of aluminium and of polyethylene by a share parameter. A cas
 {"tool": "calculate_impact", "arguments": {"product_system_id": "{system}", "method_id": "{method:climate change}", "variants": ["plastic tray"], "monte_carlo": {"n": 50, "seed": 7}}, "expect": {"path": "value.scores.0.value", "equals": 16.5}}
 ```
 
-The aluminium tray scores 16.5 kg CO2-Eq: 15 kWh of electricity and 1.5 kg of carbon dioxide a kilogram of aluminium. The plastic tray's delta is −11.5, polyethylene's 5 against aluminium's 16.5, and the light tray's −8.25, half the mass. Under Monte Carlo the base keeps its 16.5 as the score, with the samples' median and intervals beside it. `{system}` stands for the id `create_product_system` answered, `{hit:…}` for the `ref` of the first hit of the search for that term, and `{method:climate change}` for the id of the first method that search found.
+The aluminium tray scores 16.5 kg CO2-Eq: 15 kWh of electricity and 1.5 kg of carbon dioxide a kilogram of aluminium. The plastic tray's delta is −11.5, polyethylene's 5 against aluminium's 16.5, and the light tray's −8.25, half the mass. Under Monte Carlo the base keeps its 16.5 as the score, with the samples' median and intervals beside it: `tray_mass` is drawn from a normal centred on its kilogram, 0.05 kg wide and bounded 0.9 to 1.1, and one run of 50 draws at seed 7 put the base's median at 16.3 kg CO2-Eq, its 95 % interval at 16.0 to 16.5 and its 2.5th to 97.5th percentiles at 15.1 to 18.0, with the plastic tray's paired delta's median at −11.4 kg CO2-Eq, between −11.5 and −11.1. Each system draws from a stream of its own, so another tray's draws differ. The light tray moves that distribution onto 0.5 kg with the same relative spread. `{system}` stands for the id `create_product_system` answered, `{hit:…}` for the `ref` of the first hit of the search for that term, and `{method:climate change}` for the id of the first method that search found.

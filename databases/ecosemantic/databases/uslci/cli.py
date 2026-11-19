@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+from datetime import UTC, datetime
 from pathlib import Path
 
 from lca_data_interface import CommonsServer
 
 from ecosemantic.databases import command
 from ecosemantic.databases.command import Command
+from ecosemantic.databases.revision import listed_corrections
 from ecosemantic.databases.uslci.build import Built, build
 from ecosemantic.databases.uslci.download import download
 from ecosemantic.databases.uslci.probe import probe
-from ecosemantic.databases.uslci.profile import read_profile, recorded
+from ecosemantic.databases.uslci.profile import RELEASES, read_profile, recorded
 from ecosemantic.databases.uslci.validate import Validation, record, validate
 from ecosemantic.errors import Invalid
 
@@ -36,18 +38,28 @@ def _download(args: argparse.Namespace) -> dict[str, object]:
 
 
 def _build(args: argparse.Namespace) -> Built:
-    """Build a release into one bundle under --out, from its profile's downloads or given files."""
+    """Build a release into one bundle under --out, from its profile's downloads or given files, at
+    the revision and with the corrections the release's profile names."""
     if (args.inventory is None) != (args.method is None) or (
         args.bridged is not None and args.inventory is None
     ):
         raise Invalid("--inventory, --method and --bridged name a release's files together")
+    profile = read_profile(args.version)
     if args.inventory is not None:
         inventory, methods, bridged = args.inventory, tuple(args.method), tuple(args.bridged or ())
     else:
-        profile = read_profile(args.version)
         files = download(profile, CommonsServer(profile.server))
         inventory, methods, bridged = files.inventory, files.methods, files.bridged
-    return build(inventory, methods, version=args.version, out_dir=args.out, bridged=bridged)
+    return build(
+        inventory,
+        methods,
+        version=args.version,
+        out_dir=args.out,
+        revision=profile.revision,
+        corrections=listed_corrections(RELEASES, profile.corrections),
+        now=datetime.now(UTC),
+        bridged=bridged,
+    )
 
 
 def _probe(args: argparse.Namespace) -> dict[str, object]:

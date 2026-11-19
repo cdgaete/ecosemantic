@@ -1,11 +1,13 @@
 import { useEffect } from 'react'
 import { Route, Routes, useLocation, useParams } from 'react-router-dom'
-import { useSystem } from '@/api/queries'
+import { useSystem, useSystemAs } from '@/api/queries'
 import { useSystemStream } from '@/api/stream'
 import { paths, useGo } from '@/lib/paths'
 import { PageTabs } from '@/window/PageTabs'
 import { useUi } from '@/store/ui'
 import { runCanvas } from '@/window/shortcuts'
+import { StateRefused } from '@/window/StateLine'
+import { useCanvasVariant } from '@/window/useCanvasState'
 import { useEditorTab } from '@/window/useEditorTab'
 import { InputsOutputsPage } from './InputsOutputsPage'
 import { ProcessGeneralPage } from './ProcessGeneralPage'
@@ -16,7 +18,10 @@ export function ProcessEditor() {
   const read = useSystem(id)
   const go = useGo()
   useSystemStream(id, go)
-  const process = read.data?.value.processes.find((p) => p.code === code)
+  const state = useCanvasVariant(read.data?.value)
+  const under = useSystemAs(id, state?.name ?? null)
+  const system = state === null ? read.data?.value : under.data?.value
+  const process = system?.processes.find((p) => p.code === code)
   useEditorTab({ id: `process:${id}:${code}`, kind: 'process', title: process?.name ?? code, path: location.pathname })
   const onCanvas = useUi((s) => s.canvasSystemId === id)
   const chooseProcess = useUi((s) => s.chooseProcess)
@@ -28,15 +33,17 @@ export function ProcessEditor() {
   }, [processId, code, onCanvas, chooseProcess])
   if (read.error) return <p className="p-4 text-destructive">{read.error.message}</p>
   if (!read.data) return <p className="p-4 text-muted-foreground">Loading…</p>
-  if (!process) return <p className="p-4 text-destructive">No process {code} in {read.data.value.name}.</p>
+  if (state !== null && under.error) return <StateRefused state={state} message={under.error.message} />
+  if (system === undefined) return <p className="p-4 text-muted-foreground">Loading…</p>
+  if (!process) return <p className="p-4 text-destructive">No process {code} in {system.name}.</p>
   const active = location.pathname.endsWith('/io') ? 'io' : 'general'
   return (
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1 overflow-auto pb-3">
         <Routes>
-          <Route index element={<ProcessGeneralPage systemId={id} process={process} />} />
-          <Route path="general" element={<ProcessGeneralPage systemId={id} process={process} />} />
-          <Route path="io" element={<InputsOutputsPage systemId={id} system={read.data.value} process={process} />} />
+          <Route index element={<ProcessGeneralPage systemId={id} process={process} state={state} />} />
+          <Route path="general" element={<ProcessGeneralPage systemId={id} process={process} state={state} />} />
+          <Route path="io" element={<InputsOutputsPage systemId={id} system={system} process={process} state={state} />} />
         </Routes>
       </div>
       <PageTabs

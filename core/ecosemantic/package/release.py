@@ -126,11 +126,19 @@ class _Writer:
             raise Invalid(f"{process.code} exchange {e.name!r} has an input a release cannot carry")
         return out
 
+    def _location(self, code: str) -> tuple[o.Ref, o.Location]:
+        """The ref to a location code and the record it names: the base database's own record
+        when it holds one under that code, and a record the release states otherwise."""
+        held = self.base.locations.get(code)
+        if held is not None:
+            return _ref(o.RefType.Location, held.id, held.name), held
+        return location_entity(code, code)
+
     def processes(self, rendered: Rendered) -> list[o.Process]:
         system = self.systems[rendered.product_system_id]
         out = []
         for process in rendered.processes:
-            location, entity = location_entity(process.location)
+            location, entity = self._location(process.location)
             self.locations.setdefault(entity.id, entity)
             exchanges = [
                 self._exchange(system, rendered, process, n, e)

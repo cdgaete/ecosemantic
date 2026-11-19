@@ -1,14 +1,12 @@
-"""The routes over the tools: each calls the tool the agent calls, through the in-process client."""
+"""The routes over the tools: each runs the tool the agent calls, in this process."""
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
 from importlib import metadata
 
-from fastmcp import Client, FastMCP
+from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
-from mcp.shared.exceptions import MCPError
-from mcp.types import INVALID_PARAMS, Implementation
 from pydantic import JsonValue, ValidationError
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -18,8 +16,10 @@ from starlette.types import Scope
 from ecosemantic.errors import Invalid
 from ecosemantic.mcp.accounts import Reach
 from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.direct import run_tool
 from ecosemantic.mcp.envelopes import Answer, Listing, as_uuid, envelope_of
-from ecosemantic.mcp.recording import STARTED, VIEW
+from ecosemantic.mcp.parameters import ParameterSpace, space_of
+from ecosemantic.mcp.systems import get_product_system
 from ecosemantic.model.validation import anchors
 from ecosemantic.ports.types import LogEntry, MonteCarloConfig, RequestDraft
 from ecosemantic.view.handling import (
@@ -27,7 +27,6 @@ from ecosemantic.view.handling import (
     answering,
     created,
     envelope_response,
-    error_response,
 )
 
 BRIDGE_EXTENSION = "ecosemantic.bridge"
@@ -48,34 +47,31 @@ def reach(scope: Scope) -> Reach:
 
 
 async def structured(
-    server: FastMCP, name: str, arguments: Mapping[str, JsonValue], started: bool = False
+    server: FastMCP,
+    context: ServerContext,
+    name: str,
+    arguments: Mapping[str, JsonValue],
+    started: bool = False,
 ) -> dict[str, JsonValue]:
-    """A tool's structured content, or ToolRefused carrying its error as the envelope. A call the
-    server refuses as invalid parameters carries the invalid envelope. A call a person started is
-    marked so, and the recorder keeps such a calculation."""
+    """A tool's structured content, run in this process, or ToolRefused carrying its error as the
+    envelope a caller reads. A call a person started is marked so, and the recorder keeps such a
+    calculation."""
     try:
-        async with Client(
-            server,
-            client_info=Implementation(name=VIEW, version=metadata.version("ecosemantic-view")),
-        ) as client:
-            result = await client.call_tool(
-                name, dict(arguments), meta={STARTED: True} if started else None
-            )
-    except MCPError as error:
-        if error.code != INVALID_PARAMS:
-            raise
-        raise ToolRefused(error_response(Invalid(f"{name}: {error.message}"))) from error
+        return await run_tool(server, context, name, arguments, started)
     except ToolError as error:
         raise ToolRefused(envelope_response(envelope_of(error))) from error
-    return result.structured_content
 
 
 async def call_tool(
-    server: FastMCP, name: str, arguments: Mapping[str, JsonValue], started: bool = False
+    server: FastMCP,
+    context: ServerContext,
+    name: str,
+    arguments: Mapping[str, JsonValue],
+    started: bool = False,
 ) -> Response:
     """One tool call rendered as an HTTP response: its structured content, or its error."""
     try:
-        return JSONResponse(await structured(server, name, arguments, started))
+        return JSONResponse(await structured(server, context, name, arguments, started))
     except ToolRefused as refused:
         return refused.response
 
@@ -99,37 +95,38 @@ def arguments(query: Mapping[str, str]) -> dict[str, JsonValue]:
 def routes(server: FastMCP, context: ServerContext) -> list[Route]:
     """Every JSON route under /api, in the order the spec lists them."""
 
-    async def databases(request: Request) -> Response:
-        return await call_tool(server, "list_databases", {})
-
     async def vocabulary(request: Request) -> Response:
         params = request.path_params
         return await call_tool(
-            server, "list_vocabulary", {"database": params["name"], "kind": params["kind"]}
+            server, context, "list_vocabulary", {"database": params["name"], "kind": params["kind"]}
         )
 
     async def processes(request: Request) -> Response:
         args = arguments(request.query_params)
         return await call_tool(
-            server, "search_processes", {"database": request.path_params["name"], **args}
+            server, context, "search_processes", {"database": request.path_params["name"], **args}
         )
 
     async def elementary_flows(request: Request) -> Response:
         args = arguments(request.query_params)
         return await call_tool(
-            server, "search_elementary_flows", {"database": request.path_params["name"], **args}
+            server,
+            context,
+            "search_elementary_flows",
+            {"database": request.path_params["name"], **args},
         )
 
     async def methods(request: Request) -> Response:
         args = arguments(request.query_params)
         return await call_tool(
-            server, "search_methods", {"database": request.path_params["name"], **args}
+            server, context, "search_methods", {"database": request.path_params["name"], **args}
         )
 
     async def process(request: Request) -> Response:
         params = request.path_params
         return await call_tool(
             server,
+            context,
             "get_background_process",
             {"database": params["name"], "process_id": params["ref"], "exchanges": True},
         )
@@ -137,27 +134,41 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
     async def elementary_flow(request: Request) -> Response:
         params = request.path_params
         return await call_tool(
-            server, "get_elementary_flow", {"database": params["name"], "flow_id": params["ref"]}
+            server,
+            context,
+            "get_elementary_flow",
+            {"database": params["name"], "flow_id": params["ref"]},
         )
 
     async def systems(request: Request) -> Response:
-        return await call_tool(server, "list_product_systems", {})
+        return await call_tool(server, context, "list_product_systems", {})
 
     async def system(request: Request) -> Response:
         args = arguments(request.query_params)
         return await call_tool(
             server,
+            context,
             "get_product_system",
             {"product_system_id": request.path_params["id"], "variant": args.get("variant")},
         )
 
+    @answering
     async def parameters(request: Request) -> Response:
-        args = arguments(request.query_params)
-        content_hash = args.pop("hash", None)
-        return await call_tool(
-            server,
-            "get_parameters",
-            {"product_system_id": request.path_params["id"], "content_hash": content_hash},
+        query = request.query_params
+        content_hash = query.get("hash")
+        variant = query.get("variant")
+        if content_hash is not None and variant is not None:
+            raise Invalid("name a hash or a variant, not both")
+        if variant is None:
+            return await call_tool(
+                server,
+                context,
+                "get_parameters",
+                {"product_system_id": request.path_params["id"], "content_hash": content_hash},
+            )
+        read = await get_product_system(context, request.path_params["id"], variant)
+        return JSONResponse(
+            Answer[ParameterSpace](value=space_of(read.value)).model_dump(mode="json")
         )
 
     @answering
@@ -168,6 +179,7 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             page = Listing[LogEntry].model_validate(
                 await structured(
                     server,
+                    context,
                     "get_product_system_log",
                     {"product_system_id": request.path_params["id"], "cursor": cursor},
                 )
@@ -192,6 +204,7 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
         args = arguments(request.query_params)
         return await call_tool(
             server,
+            context,
             "validate_product_system",
             {"product_system_id": request.path_params["id"], **args},
         )
@@ -219,6 +232,7 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             body = await json_object(request)
             return await call_tool(
                 server,
+                context,
                 tool,
                 {"product_system_id": request.path_params["id"], **body, **fixed},
                 started=request.query_params.get(STARTED_PARAMETER) == "true",
@@ -228,21 +242,24 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
 
     async def runs_listed(request: Request) -> Response:
         return await call_tool(
-            server, "list_runs", {"product_system_id": request.path_params["id"]}
+            server, context, "list_runs", {"product_system_id": request.path_params["id"]}
         )
 
     async def run_read(request: Request) -> Response:
         return await call_tool(
-            server, "get_run", {"run_id": request.path_params["run_id"], "samples": True}
+            server, context, "get_run", {"run_id": request.path_params["run_id"], "samples": True}
         )
 
     async def run_cancelled(request: Request) -> Response:
-        return await call_tool(server, "cancel_run", {"run_id": request.path_params["run_id"]})
+        return await call_tool(
+            server, context, "cancel_run", {"run_id": request.path_params["run_id"]}
+        )
 
     async def requests_listed(request: Request) -> Response:
         args = arguments(request.query_params)
         return await call_tool(
             server,
+            context,
             "list_requests",
             {"product_system_id": request.path_params["id"], "open_only": False, **args},
         )
@@ -271,6 +288,7 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
         args = arguments(request.query_params)
         return await call_tool(
             server,
+            context,
             "graph_layout",
             {"product_system_id": request.path_params["id"], "variant": args.get("variant")},
         )
@@ -279,12 +297,16 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
     async def place(request: Request) -> Response:
         body = await json_object(request)
         return await call_tool(
-            server, "arrange_graph", {"product_system_id": request.path_params["id"], **body}
+            server,
+            context,
+            "arrange_graph",
+            {"product_system_id": request.path_params["id"], **body},
         )
 
     async def release(request: Request) -> Response:
         return await call_tool(
             server,
+            context,
             "arrange_graph",
             {
                 "product_system_id": request.path_params["id"],
@@ -298,7 +320,6 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
     return [
         Route("/api/server", server_details),
         Route("/api/monte-carlo", monte_carlo),
-        Route("/api/databases", databases),
         Route("/api/databases/{name}/vocabulary/{kind}", vocabulary),
         Route("/api/databases/{name}/processes", processes),
         Route("/api/databases/{name}/elementary-flows", elementary_flows),

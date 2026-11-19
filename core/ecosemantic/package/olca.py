@@ -8,7 +8,7 @@ import olca_schema as o
 from pydantic import BaseModel, ValidationError
 
 from ecosemantic.errors import Invalid, NotSupported, said
-from ecosemantic.model.entities import Uncertainty, UncertaintyType
+from ecosemantic.model.entities import REQUIRED_PARAMS, Uncertainty, UncertaintyType
 
 
 class WrittenLognormal(BaseModel):
@@ -17,6 +17,41 @@ class WrittenLognormal(BaseModel):
 
     loc: float
     scale: float
+
+
+class Bounds(BaseModel):
+    """The range openLCA writes for a uniform and a triangular and holds nowhere for a lognormal
+    and a normal, either end None where the distribution states none."""
+
+    minimum: float | None = None
+    maximum: float | None = None
+
+
+def _states_its_range(uncertainty: Uncertainty) -> bool:
+    """Whether the type's own required params are its range, as a uniform's and a triangular's
+    are, so openLCA writes the bounds itself."""
+    return REQUIRED_PARAMS[uncertainty.type] >= {"minimum", "maximum"}
+
+
+def bounds_of(uncertainty: Uncertainty | None) -> Bounds | None:
+    """The bounds a lognormal or a normal states, either of them None where it states none; None
+    for a uniform or a triangular, whose range openLCA writes itself, and for no distribution."""
+    if uncertainty is None or _states_its_range(uncertainty):
+        return None
+    low, high = uncertainty.bounds()
+    return None if low is None and high is None else Bounds(minimum=low, maximum=high)
+
+
+def bounded(uncertainty: Uncertainty | None, bounds: Bounds | None) -> Uncertainty | None:
+    """The distribution carrying these bounds, or as it stands for none."""
+    if uncertainty is None or bounds is None:
+        return uncertainty
+    params: dict[str, float | bool] = dict(uncertainty.params)
+    if bounds.minimum is not None:
+        params["minimum"] = bounds.minimum
+    if bounds.maximum is not None:
+        params["maximum"] = bounds.maximum
+    return Uncertainty(type=uncertainty.type, params=params)
 
 
 def to_olca_uncertainty(u: Uncertainty | None) -> o.Uncertainty | None:

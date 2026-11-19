@@ -7,50 +7,10 @@ from pathlib import Path
 import pytest
 from fastmcp import Client
 
-from ecosemantic.backends.native.calculation import NativeCalculation
-from ecosemantic.backends.native.store import NativeStore
-from ecosemantic.mcp.context import AGENT, ServerContext
+from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.server import build_server
-from ecosemantic.package.resolver import InventoryResolver
-from ecosemantic.ports.types import DatabaseSource
 from tests.fixture_data import CODES, FIXTURE_DB
-from tests.memory_activity import MemoryActivity
-from tests.memory_background import MemoryInventory, MemorySearch
-from tests.memory_installs import MemoryInstaller, MemoryInstalls
-from tests.memory_runs import MemoryLauncher, MemoryRuns
-from tests.memory_storage import MemoryStorage
-
-
-@pytest.fixture
-def ports_only(native_store: NativeStore, tmp_path: Path) -> ServerContext:
-    """Four ports in memory and the calculation backend, so a tool needing more fails here."""
-    inventory = MemoryInventory()
-    return ServerContext(
-        inventory=inventory,
-        search=MemorySearch(),
-        calculation=NativeCalculation(native_store),
-        storage=MemoryStorage(),
-        resolver=InventoryResolver(inventory),
-        actor=AGENT,
-        runs=MemoryRuns(),
-        activity=MemoryActivity(),
-        launcher=MemoryLauncher(),
-        installs=MemoryInstalls(),
-        installer=MemoryInstaller(
-            [
-                DatabaseSource(
-                    name="uslci",
-                    versions=["2024"],
-                    system_models=[],
-                    credential=None,
-                    terms=False,
-                )
-            ]
-        ),
-        systems_dir=tmp_path,
-        data_dir=native_store.directory,
-        uploads_dir=tmp_path / "uploads",
-    )
+from tests.memory_background import MemoryInventory
 
 
 async def test_a_positive_input_to_a_treatment_is_named_by_the_write_and_every_calculation(

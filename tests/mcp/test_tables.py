@@ -146,6 +146,25 @@ async def test_apply_tables_stores_the_space_for_the_actor_and_message_given(
     assert entry.message == "returned tables"
 
 
+async def test_import_tables_refuses_a_folder_that_changes_nothing(
+    full_server: FastMCP, spaced_bottle: str, tmp_path: Path
+) -> None:
+    async with Client(full_server) as client:
+        out = await client.call_tool(
+            "export_tables", {"product_system_id": spaced_bottle, "path": str(tmp_path)}
+        )
+        folder = Path(out.structured_content["value"]["path"])
+        log = await client.call_tool("get_product_system_log", {"product_system_id": spaced_bottle})
+        before = len(log.structured_content["items"])
+        with pytest.raises(ToolError) as caught:
+            await client.call_tool("import_tables", {"path": str(folder)})
+        log = await client.call_tool("get_product_system_log", {"product_system_id": spaced_bottle})
+    refused = json.loads(str(caught.value))
+    assert refused["error"] == "invalid"
+    assert refused["message"] == "the folder changes nothing in 'bottle'; nothing was written"
+    assert len(log.structured_content["items"]) == before
+
+
 async def test_import_tables_refuses_to_drop_a_case_a_link_names(
     full_server: FastMCP, spaced_bottle: str, tmp_path: Path
 ) -> None:

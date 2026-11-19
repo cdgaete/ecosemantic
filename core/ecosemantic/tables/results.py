@@ -19,9 +19,10 @@ from ecosemantic.ports.types import (
     Score,
     TreeNode,
 )
-from ecosemantic.tables.folder import FORMAT, SCHEMA_FILE, number, write_csv
+from ecosemantic.tables.folder import SCHEMA_FILE, number, write_csv
 
 RESULTS_DIR = "results"
+RESULT_FORMAT = 1
 SCORES = "scores.csv"
 UNCERTAINTY = "uncertainty.csv"
 SAMPLES = "samples.csv"
@@ -75,7 +76,7 @@ def _open(root: Path, key: ResultKey, at: datetime, label: str, extra: dict[str,
     folder = results_dir(root, at, label)
     folder.mkdir(parents=True, exist_ok=True)
     schema: dict[str, object] = {
-        "format": FORMAT,
+        "format": RESULT_FORMAT,
         "key": {
             "product_system_id": str(key.product_system_id),
             "hash": key.hash,
@@ -161,7 +162,12 @@ def _write_uncertainty(folder: Path, uncertainty: MonteCarloResult) -> None:
             "n",
             "stopped",
             "scope",
-            "normals_at_amount",
+            "parameters_drawn",
+            "foreground_drawn",
+            "foreground_there",
+            "background_drawn",
+            "background_there",
+            "background_held",
             "dropped",
             "median",
             "median_ci95_low",
@@ -177,7 +183,12 @@ def _write_uncertainty(folder: Path, uncertainty: MonteCarloResult) -> None:
                 "n": str(category.summary.n),
                 "stopped": uncertainty.stopped,
                 "scope": uncertainty.scope,
-                "normals_at_amount": str(uncertainty.normals_at_amount),
+                "parameters_drawn": str(uncertainty.drawn.parameters.drawn),
+                "foreground_drawn": str(uncertainty.drawn.foreground.drawn),
+                "foreground_there": str(uncertainty.drawn.foreground.there),
+                "background_drawn": str(uncertainty.drawn.background.drawn),
+                "background_there": str(uncertainty.drawn.background.there),
+                "background_held": str(uncertainty.drawn.background.held),
                 "dropped": str(len(uncertainty.dropped_draws)),
                 "median": number(category.summary.median),
                 "median_ci95_low": number(interval[0] if interval is not None else None),

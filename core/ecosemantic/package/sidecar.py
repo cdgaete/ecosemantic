@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterable
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
 
@@ -12,7 +13,7 @@ from ecosemantic.errors import NotFound, unreadable
 from ecosemantic.files import write_whole
 from ecosemantic.model.entities import Scenario
 from ecosemantic.model.refs import BackgroundRef, Database, ElementaryFlowRef, SystemRef
-from ecosemantic.package.olca import WrittenLognormal
+from ecosemantic.package.olca import Bounds, WrittenLognormal
 from ecosemantic.ports.types import Layout
 
 SIDECAR_DIR = "ecosemantic"
@@ -44,8 +45,11 @@ class Identities(BaseModel):
     product_flows: dict[str, uuid.UUID] = Field(default_factory=dict)
     links: dict[str, SystemRef] = Field(default_factory=dict)
     lognormals: dict[str, WrittenLognormal] = Field(default_factory=dict)
+    exchange_bounds: dict[str, Bounds] = Field(default_factory=dict)
     locations: dict[str, str] = Field(default_factory=dict)
     parameter_units: dict[str, str] = Field(default_factory=dict)
+    parameter_bounds: dict[str, Bounds] = Field(default_factory=dict)
+    parameter_lognormals: dict[str, WrittenLognormal] = Field(default_factory=dict)
     parameter_prefix: str
 
 
@@ -81,6 +85,10 @@ _FILES: dict[str, str] = {
     "metadata": "metadata.json",
 }
 
+_ADAPTERS: dict[str, TypeAdapter[Any]] = {
+    attr: TypeAdapter(Sidecar.model_fields[attr].annotation) for attr in _FILES
+}
+
 
 def write_lines(root: Path, filename: str, lines: Iterable[str]) -> None:
     """Write one file of JSON lines under root/ecosemantic/, each line ended, whole."""
@@ -106,23 +114,25 @@ def parsed_lines[M: BaseModel](path: Path, model: type[M], hint: str) -> list[M]
 
 
 def write_sidecar(root: Path, sidecar: Sidecar) -> None:
-    """Write each part of the sidecar as one whole JSON file under root/ecosemantic/."""
+    """Write each part of the sidecar as one whole JSON file under root/ecosemantic/, through the
+    adapter of its field built when this module loaded."""
     folder = root / SIDECAR_DIR
     folder.mkdir(parents=True, exist_ok=True)
     for attr, filename in _FILES.items():
         value = getattr(sidecar, attr)
-        adapter = TypeAdapter(Sidecar.model_fields[attr].annotation)
+        adapter = _ADAPTERS[attr]
         write_whole(folder / filename, adapter.dump_json(value, indent=1))
 
 
 def read_sidecar(root: Path) -> Sidecar:
-    """Read the sidecar under root/ecosemantic/."""
+    """Read the sidecar under root/ecosemantic/, each part through the adapter of its field built
+    when this module loaded."""
     folder = root / SIDECAR_DIR
     if not folder.is_dir():
         raise NotFound(f"no {SIDECAR_DIR}/ folder in {root}")
     parts = {}
     for attr, filename in _FILES.items():
-        adapter = TypeAdapter(Sidecar.model_fields[attr].annotation)
+        adapter = _ADAPTERS[attr]
         try:
             parts[attr] = adapter.validate_json((folder / filename).read_bytes())
         except ValidationError as error:

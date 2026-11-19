@@ -5,16 +5,23 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import TypeVar, cast
 
 import numpy as np
 
 from ecosemantic.backends.native.store import NativeStore
+from ecosemantic.compute.draws import ParameterDraws
 from ecosemantic.compute.links import linked_credit_loops
-from ecosemantic.compute.montecarlo import should_stop, summarize_samples, worst_rel_se
+from ecosemantic.compute.montecarlo import (
+    Holding,
+    Standing,
+    should_stop,
+    standing,
+    summarize_samples,
+)
 from ecosemantic.engine.calculation import Calculation, Solution
 from ecosemantic.engine.foreground import Foreground
-from ecosemantic.engine.montecarlo import MonteCarlo, Refactorised, Serial
+from ecosemantic.engine.montecarlo import Counts, MonteCarlo, Refactorised, Serial
 from ecosemantic.engine.paths import PathNode
 from ecosemantic.errors import Invalid, OtherBuild
 from ecosemantic.model.entities import Method
@@ -29,6 +36,9 @@ from ecosemantic.model.validation import credit_loops, off_build
 from ecosemantic.ports.calculation import CUTOFF, MAX_LEVEL, MAX_NODES, TOP_N
 from ecosemantic.ports.types import (
     Activity,
+    CompartmentName,
+    Drawn,
+    DrawnCount,
     FlowHotspot,
     FlowHotspots,
     FlowType,
@@ -54,6 +64,11 @@ T = TypeVar("T")
 TreeRef = BackgroundRef | ForegroundRef | LinkedProcessRef | ElementaryFlowRef
 
 
+def _counted(tally: Counts) -> DrawnCount:
+    """The engine's count of one kind, as the answer states it."""
+    return DrawnCount(there=tally.there, carried=tally.carried, drawn=tally.drawn, held=tally.held)
+
+
 @dataclass(frozen=True)
 class Named:
     """A background activity as people read it."""
@@ -72,7 +87,7 @@ class NamedFlow:
     """An elementary flow as people read it."""
 
     name: str
-    compartment: str
+    compartment: CompartmentName
     sub_compartment: str | None
     flow_type: FlowType
     unit: str
@@ -112,7 +127,16 @@ class NativeCalculation:
             )
             .fetchall()
         )
-        return {row[0]: NamedFlow(*row[1:]) for row in rows}
+        return {
+            row[0]: NamedFlow(
+                name=row[1],
+                compartment=cast(CompartmentName, row[2]),
+                sub_compartment=row[3],
+                flow_type=row[4],
+                unit=row[5],
+            )
+            for row in rows
+        }
 
     def _foreground(self, calculation: Calculation, system: System) -> Foreground | None:
         if system.product_system is None:
@@ -372,6 +396,12 @@ class NativeCalculation:
     ) -> MonteCarloResult:
         def run(calculation: Calculation) -> MonteCarloResult:
             foreground = self._foreground(calculation, system)
+            systems = (
+                []
+                if system.product_system is None
+                else [system.product_system, *system.linked.values()]
+            )
+            draws = ParameterDraws(systems, config.seed)
             sampler = MonteCarlo(
                 calculation,
                 foreground,
@@ -380,6 +410,7 @@ class NativeCalculation:
                 scope=config.scope,
                 seed=config.seed,
                 solve=Refactorised(self.store.solver),
+                formulas=draws,
             )
             pins = (
                 {c.system: c.at_hash for c in foreground.columns if c.at_hash is not None}
@@ -393,7 +424,10 @@ class NativeCalculation:
             failing: list[str] = []
             limit = config.n if config.n is not None else config.n_max
             stopped: Stopped = "fixed" if config.n is not None else "ceiling"
+            holding = Holding()
+            check: Standing | None = None
             for draw in Serial().run(sampler, range(limit)):
+                check = None
                 if draw.scores is None:
                     dropped.append(draw.index)
                     for owned in draw.short:
@@ -412,18 +446,19 @@ class NativeCalculation:
                 else:
                     for at, value in enumerate(draw.scores):
                         samples[at].append(float(value))
+                    check = standing(samples)
                 if on_iteration is not None:
-                    reached = worst_rel_se(samples)[0] if samples[0] else None
+                    reached = None if check is None else check.worst_rel_se
                     if not on_iteration(draw.index + 1, reached):
                         stopped = "cancelled"
                         break
-                if (
-                    config.n is None
-                    and draw.index + 1 >= config.n_min
-                    and should_stop(samples, config.n_min, config.rel_se_target)
-                ):
-                    stopped = "target"
-                    break
+                if config.n is None and check is not None:
+                    kept = len(samples[0])
+                    if kept >= config.n_min:
+                        holding.observe(check, config.rel_se_target)
+                    if should_stop(check, kept, config.n_min, config.rel_se_target):
+                        stopped = "target"
+                        break
             named = self._activities(system.database, failing)
             dropped_background = [named[label].label() for label in failing]
             if not samples[0]:
@@ -440,14 +475,21 @@ class NativeCalculation:
                     f"all {len(dropped)} draws were dropped: {names} used as much of their "
                     "products as they made in each; narrow the distributions on their amounts"
                 )
-            _, gating = worst_rel_se(samples)
+            held = holding.longest()
+            final = standing(samples)
             return MonteCarloResult(
                 database=self.store.registered(system.database).database,
                 n=len(samples[0]),
                 stopped=stopped,
-                gating_method=methods[gating].id,
+                gating_method=None if held is None else methods[held].id,
+                constant=[methods[at].id for at in final.constant],
+                indistinguishable_from_zero=[methods[at].id for at in final.near_zero],
                 scope=config.scope,
-                normals_at_amount=sampler.normals_at_amount,
+                drawn=Drawn(
+                    parameters=draws.counted(sampler.sampled_keys()),
+                    foreground=_counted(sampler.foreground_counted),
+                    background=_counted(sampler.background_counted),
+                ),
                 credit_loops=credit_loops(system.product_system)
                 if system.product_system is not None
                 else [],

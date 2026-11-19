@@ -20,6 +20,7 @@ from ecosemantic.mcp.requests import answer_write
 from ecosemantic.model.canonical import content_hash
 from ecosemantic.model.entities import Actor, ProductSystem
 from ecosemantic.model.refs import DemandItem
+from ecosemantic.package.log import changes_nothing
 from ecosemantic.ports.types import LogEntry
 from ecosemantic.tables.folder import folder_name, read_model, write_folder
 from ecosemantic.tables.reader import apply_inputs
@@ -32,14 +33,16 @@ async def apply_tables(
     folder: Path,
     actor: Actor,
     message: str,
-) -> tuple[ProductSystem, ProductSystem, LogEntry]:
+) -> tuple[ProductSystem, ProductSystem, LogEntry | None]:
     """Store the parameter space a table folder carries over the product system it was rendered
     from, holding that system's lock from the read to the write; the system as read, as
-    written, and the entry."""
+    written, and the entry, or None and no entry for a folder that changes nothing."""
     async with context.lock(product_system_id):
         stored = await context.storage.get_product_system(product_system_id)
         changed = await asyncio.to_thread(apply_inputs, stored, folder)
         await refuse_dropped_cases(context.storage, stored, changed)
+        if changes_nothing(stored, changed):
+            return stored, changed, None
         entry = await context.storage.put_product_system(changed, actor, message, source="tables")
     return stored, changed, entry
 
@@ -95,6 +98,8 @@ async def import_tables(context: ServerContext, path: str) -> Written[ParameterS
     stored, changed, entry = await apply_tables(
         context, model.id, folder, context.acting(), "imported tables"
     )
+    if entry is None:
+        raise Invalid(f"the folder changes nothing in {changed.name!r}; nothing was written")
     return await answer_write(context, space_of(changed), entry, stored, changed)
 
 
@@ -116,6 +121,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
         description=(
             "Read the inputs/ of a table folder back as the whole parameter space of the "
             "product system its model.yaml names. Refused when the document moved, when "
-            "model.yaml was edited, and cell by cell when a value cannot be read."
+            "model.yaml was edited, when the folder changes nothing, and cell by cell when a "
+            "value cannot be read."
         ),
     )(boundary(bound(import_tables, context)))

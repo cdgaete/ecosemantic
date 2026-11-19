@@ -18,6 +18,7 @@ from ecosemantic.ports.types import (
     LinkedLoop,
     MonteCarloResult,
     Score,
+    Total,
     TreeNode,
 )
 
@@ -27,15 +28,18 @@ class VariantScores(BaseModel):
     processes of each loop in the variant that holds a credit, whose delivery no check decides,
     and each exchange of the variant sending a positive amount to a treatment, which runs it
     backwards. `scores` are the point values and `deltas` each one less the base's, with or
-    without a Monte Carlo block. A pair is the base's and the variant's draws at one position,
-    over the first draws of each up to the shorter run, since each run's own stop rule ends it;
-    `paired_deltas` hold each pair's difference with its interval and percentage, and
-    `uncertainty` the variant's own samples at the base's seed, which can outnumber the
-    pairs."""
+    without a Monte Carlo block; `total_deltas` holds, in the order of `totals`, each total less
+    the base's total of the same set, and none where either gives none. A pair is the base's and
+    the variant's draws at one position, over the first draws of each up to the shorter run,
+    since each run's own stop rule ends it; `paired_deltas` hold each pair's difference with its
+    interval and percentage, and `uncertainty` the variant's own samples at the base's seed,
+    which can outnumber the pairs."""
 
     name: str
     scores: list[Score]
     deltas: list[float]
+    totals: list[Total] = Field(default_factory=list)
+    total_deltas: list[float | None]
     credit_loops: list[list[str]]
     linked_credit_loops: list[LinkedLoop] = Field(default_factory=list)
     treatments_run_backwards: list[str] = Field(default_factory=list)
@@ -59,7 +63,8 @@ class ImpactResult(BaseModel):
     behind, and each exchange sending a positive amount to a treatment, which runs it backwards
     and scores its emissions as credits. `methods` lists every method scored once, in the order
     `scores`, each variant's `scores` and each Monte Carlo category follow, and a score names its
-    method by `method_id`."""
+    method by `method_id`. `totals` holds one total per weighting set of the family the methods
+    belong to, each resting on the method's value choices."""
 
     product_system: str
     database: Database
@@ -67,6 +72,7 @@ class ImpactResult(BaseModel):
     scores: list[Score]
     demand: list[DemandItem]
     credit_loops: list[list[str]]
+    totals: list[Total] = Field(default_factory=list)
     linked_credit_loops: list[LinkedLoop] = Field(default_factory=list)
     links_behind: list[PinBehind] = Field(default_factory=list)
     treatments_run_backwards: list[str] = Field(default_factory=list)

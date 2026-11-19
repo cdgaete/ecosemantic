@@ -154,8 +154,10 @@ class NotifyingStorage:
         exported_root: Path,
         actor: Actor,
         at_entry: int | None = None,
-    ) -> LogEntry:
+    ) -> LogEntry | None:
         entry = await self.inner.return_package(product_system_id, exported_root, actor, at_entry)
+        if entry is None:
+            return None
         self.bus.publish(Event(kind="entry", product_system_id=product_system_id, entry=entry))
         return entry
 

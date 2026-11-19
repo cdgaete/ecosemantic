@@ -1,14 +1,16 @@
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAnchors, useCalculations, useDatabases, useRuns, useSystem, useSystems } from '@/api/queries'
-import type { SystemCard } from '@/api/types'
+import type { ListedDatabase, SystemCard } from '@/api/types'
+import { formatAmount } from '@/lib/format'
 import { beginsAWord } from '@/lib/matching'
 import { distinguishingId, sharedNames } from '@/lib/names'
 import { AppLink } from '@/lib/router'
-import { paths } from '@/lib/paths'
+import { databaseOfPath, paths } from '@/lib/paths'
 import { groupByStage } from '@/lib/stages'
 import { useUi } from '@/store/ui'
-import { SECTIONS } from '@/editors/explorer/sections'
+import { places } from '@/editors/explorer/sections'
 import { CanvasBadge } from './Badges'
 import { Icon } from './Icon'
 
@@ -98,6 +100,37 @@ function SystemNode({ card, depth, shared, current }: { card: SystemCard; depth:
   )
 }
 
+function DatabaseNode({ database, depth }: { database: ListedDatabase; depth: number }) {
+  const pathname = useLocation().pathname
+  const under = databaseOfPath(pathname) === database.name
+  const stored = useUi((state) => state.navDatabases[database.name])
+  const toggle = useUi((state) => state.toggleNavDatabase)
+  const open = under || stored === true
+  return (
+    <>
+      <Node
+        icon={<Icon name="database" />}
+        label={database.name}
+        to={paths.explorer(database.name)}
+        count={formatAmount(database.processes)}
+        depth={depth}
+        twisty={<Twisty open={open} onClick={() => toggle(database.name)} />}
+      />
+      {open
+        ? places(database.name).map((place) => (
+            <Node
+              key={place.key}
+              icon={<place.icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
+              label={place.title}
+              to={place.to}
+              depth={depth + 1}
+            />
+          ))
+        : null}
+    </>
+  )
+}
+
 export function NavPane() {
   const systems = useSystems()
   const databases = useDatabases()
@@ -122,18 +155,7 @@ export function NavPane() {
         ))}
         <Node icon={<Icon name="database" />} label="Background databases" to={paths.databases()} depth={0} />
         {(databases.data?.value ?? []).map((db) => (
-          <div key={db.name}>
-            <Node icon={<Icon name="database" />} label={db.name} to={paths.explorer(db.name)} depth={1} />
-            {SECTIONS.map((entry) => (
-              <Node
-                key={entry.section}
-                icon={<entry.icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}
-                label={entry.title}
-                to={paths.explorer(db.name, entry.section)}
-                depth={2}
-              />
-            ))}
-          </div>
+          <DatabaseNode key={db.name} database={db} depth={1} />
         ))}
       </div>
     </div>

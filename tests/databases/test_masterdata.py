@@ -97,3 +97,15 @@ def test_a_missing_compartment_element_stops_the_read(tmp_path: Path) -> None:
     empty.write(masterdata / "IntermediateExchanges.xml", encoding="utf-8")
     with pytest.raises(Invalid, match=CO2):
         read_masterdata(tmp_path)
+
+
+def test_the_masterdata_names_each_geography(tmp_path: Path) -> None:
+    master = read_masterdata(build_release(tmp_path).ecospold)
+    assert master.geographies == {"NA": "North America", "GLO": "Global"}
+
+
+def test_two_names_of_one_shortname_are_refused(tmp_path: Path) -> None:
+    release = build_release(tmp_path, one_shortname_two_names=True)
+    with pytest.raises(Invalid) as caught:
+        read_masterdata(release.ecospold)
+    assert "'NA' is named 'North America' and 'Northern Appalachia'" in str(caught.value)

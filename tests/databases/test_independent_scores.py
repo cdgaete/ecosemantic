@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import csv
+from datetime import UTC, datetime
 from pathlib import Path
 
 import independent_scores
@@ -25,6 +26,9 @@ from tests.databases.uslci_fixture import (
 )
 
 VERSION = "1.2026-09.0"
+
+NOW = datetime(2026, 1, 1, tzinfo=UTC)
+
 SCRIPT = Path(independent_scores.__file__)
 
 
@@ -33,7 +37,15 @@ def sources(tmp_path: Path) -> tuple[Path, Path, Path]:
     """The fixture's two zips, and the bundle the build writes beside their left-out list."""
     inventory = write_inventory(tmp_path / INVENTORY_NAME)
     method = write_method(tmp_path / METHOD_NAME)
-    built = build(inventory, (method,), version=VERSION, out_dir=tmp_path / "out")
+    built = build(
+        inventory,
+        (method,),
+        version=VERSION,
+        revision=1,
+        corrections=(),
+        now=NOW,
+        out_dir=tmp_path / "out",
+    )
     return inventory, method, built.bundle
 
 
@@ -140,7 +152,15 @@ def test_its_unlinked_inputs_are_the_core_s(
         rows = list(csv.DictReader(read))
     assert tuple(rows[0]) == independent_scores.UNLINKED_COLUMNS
     imported = read_background(
-        build(inventory, (method,), version="again", out_dir=tmp_path / "again").bundle,
+        build(
+            inventory,
+            (method,),
+            version="again",
+            revision=1,
+            corrections=(),
+            now=NOW,
+            out_dir=tmp_path / "again",
+        ).bundle,
         "uslci",
         foreground=frozenset(),
     )
@@ -157,7 +177,14 @@ def test_the_bridged_scores_are_the_hand_computed_ones(
     inventory, method, _bundle = sources
     bridged = write_bridged(tmp_path / BRIDGED_NAME)
     built = build(
-        inventory, (method,), version=VERSION, out_dir=tmp_path / "bridged", bridged=(bridged,)
+        inventory,
+        (method,),
+        version=VERSION,
+        revision=1,
+        corrections=(),
+        now=NOW,
+        out_dir=tmp_path / "bridged",
+        bridged=(bridged,),
     )
     scored, _ = _scored((inventory, method, built.bundle), tmp_path, bridged)
     found = {(code, category): score for code, _method, category, score, _unit in scored}
@@ -175,7 +202,14 @@ def test_its_unlinked_inputs_are_the_core_s_on_the_merged_bundle(
     inventory, method, _bundle = sources
     bridged = write_bridged(tmp_path / BRIDGED_NAME)
     built = build(
-        inventory, (method,), version=VERSION, out_dir=tmp_path / "merged", bridged=(bridged,)
+        inventory,
+        (method,),
+        version=VERSION,
+        revision=1,
+        corrections=(),
+        now=NOW,
+        out_dir=tmp_path / "merged",
+        bridged=(bridged,),
     )
     _, unlinked = _scored((inventory, method, built.bundle), tmp_path, bridged)
     with unlinked.open(newline="", encoding="utf-8") as read:

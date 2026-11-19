@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import math
 import uuid
 
@@ -10,15 +11,23 @@ import scipy.sparse as sp
 from ecosemantic.engine.background import Background, Exchanges, Factors, Rows
 from ecosemantic.engine.calculation import Calculation
 from ecosemantic.engine.montecarlo import (
+    BOUNDED_TRIES,
     DENSE,
     FOREGROUND_STREAM,
+    STREAMS,
+    Counts,
     Draw,
+    Formulas,
     MonteCarlo,
     Refactorised,
     Serial,
+    Variates,
     drawn,
     generator,
     on_block,
+    parameter_key,
+    sampled,
+    wide,
 )
 from ecosemantic.engine.solver import Solver
 from ecosemantic.errors import Invalid, NotFound
@@ -117,6 +126,7 @@ def sampler(
     scope: Scope = "full",
     seed: int = 5,
     dense: int = DENSE,
+    formulas: Formulas | None = None,
 ) -> MonteCarlo:
     foreground = None if system is None else calculation.foreground(system, {})
     return MonteCarlo(
@@ -128,7 +138,18 @@ def sampler(
         seed=seed,
         solve=Refactorised("superlu"),
         dense=dense,
+        formulas=formulas,
     )
+
+
+class Answered:
+    """Formulas that answer the same amounts at every draw."""
+
+    def __init__(self, answers: dict[tuple[int, int], float]) -> None:
+        self.answers = answers
+
+    def amounts(self, k: int) -> dict[tuple[int, int], float]:
+        return self.answers
 
 
 def scores(draws: list[Draw]) -> list[float | None]:
@@ -296,6 +317,152 @@ def rows_of(uncertainty: Uncertainty, amount: float, n: int) -> Exchanges:
     )
 
 
+def stream(g: np.random.Generator) -> Variates:
+    """A background's variates: its stream's standard normals, then its uniforms."""
+
+    def variates(mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        count = int(mask.sum())
+        return g.standard_normal(count), g.random(count)
+
+    return variates
+
+
+def test_no_kept_draw_lies_outside_its_bounds(calculation: Calculation) -> None:
+    def with_co2(spread: Uncertainty | None) -> ProductSystem:
+        system = host().model_copy(deep=True)
+        exchange = system.process("widget").exchanges[4]
+        exchange.amount = 1.0
+        exchange.uncertainty = spread
+        return system
+
+    bounded = Uncertainty(
+        type="normal", params={"loc": 1.0, "scale": 1.0, "minimum": 0.5, "maximum": 1.5}
+    )
+    plain = sampler(calculation, with_co2(None))
+    varied = sampler(calculation, with_co2(bounded))
+    kept = [varied.draw(k).scores[0] - plain.draw(k).scores[0] + 1.0 for k in range(200)]
+    assert all(0.5 <= value <= 1.5 for value in kept)
+    # the same normal unbounded draws outside the bounds within the same draws
+    loose_spread = Uncertainty(type="normal", params={"loc": 1.0, "scale": 1.0})
+    loose = sampler(calculation, with_co2(loose_spread))
+    unheld = [loose.draw(k).scores[0] - plain.draw(k).scores[0] + 1.0 for k in range(200)]
+    assert any(not 0.5 <= value <= 1.5 for value in unheld)
+
+
+def test_a_bounded_normal_is_drawn_not_held() -> None:
+    bounded = Uncertainty(
+        type="normal", params={"loc": 1.0, "scale": 5.0, "minimum": -1.0, "maximum": 3.0}
+    )
+    rows = rows_of(bounded, 1.0, 1)
+    assert wide(rows).tolist() == [False]
+    assert wide(rows_of(Uncertainty(type="normal", params={"loc": 1.0, "scale": 5.0}), 1.0, 1))
+    amounts = [
+        float(
+            sampled(
+                rows=rows,
+                variates=stream(generator(11, (k, 0))),
+                held=np.zeros(1, dtype=bool),
+                owners=lambda at: "mill",
+            )[0]
+        )
+        for k in range(50)
+    ]
+    assert all(-1.0 <= value <= 3.0 for value in amounts)
+    assert len(set(amounts)) > 1
+
+
+def test_the_fiftieth_draw_again_may_be_the_one_within_the_bounds() -> None:
+    bounded = Uncertainty(
+        type="normal", params={"loc": 1.0, "scale": 1.0, "minimum": 0.5, "maximum": 1.5}
+    )
+    rows = rows_of(bounded, 1.0, 1)
+    calls: list[int] = []
+
+    def variates(mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        calls.append(int(mask.sum()))
+        # every draw to the last lies outside, and the fiftieth draw again lands on the amount
+        outside = np.full(1, 3.0) if len(calls) <= BOUNDED_TRIES else np.zeros(1)
+        return outside, np.zeros(1)
+
+    amounts = sampled(
+        rows=rows,
+        variates=variates,
+        held=np.zeros(1, dtype=bool),
+        owners=lambda at: "mill",
+    )
+    assert amounts.tolist() == [1.0]
+    assert len(calls) == BOUNDED_TRIES + 1
+
+
+def test_a_distribution_that_keeps_drawing_outside_refuses_the_run_naming_its_exchange(
+    calculation: Calculation,
+) -> None:
+    bounded = Uncertainty(
+        type="lognormal",
+        params={"loc": 0.0, "scale": 3.0, "minimum": 0.999, "maximum": 1.001},
+    )
+    system = with_direct_co2(host(), bounded)
+    system.process("widget").exchanges[4].amount = 1.0
+    with pytest.raises(
+        Invalid,
+        match=(
+            "Carbon dioxide, fossil on widget keeps drawing outside its bounds 0.999 to 1.001 "
+            "after 50 tries; widen the bounds or narrow the distribution"
+        ),
+    ):
+        sampler(calculation, system).draw(0)
+
+
+def test_a_background_distribution_that_keeps_drawing_outside_names_its_activity() -> None:
+    bounded = Uncertainty(
+        type="lognormal",
+        params={"loc": 0.0, "scale": 3.0, "minimum": 0.999, "maximum": 1.001},
+    )
+    background = Background.compile(
+        SMALL,
+        activities=["mill"],
+        flows=["co2"],
+        methods=[SMALL_GWP],
+        technosphere=Rows(
+            rows=["mill"],
+            columns=["mill"],
+            amounts=[1.0],
+            flipped=[False],
+            uncertainties=[None],
+        ),
+        biosphere=Rows(
+            rows=["co2"],
+            columns=["mill"],
+            amounts=[1.0],
+            flipped=[False],
+            uncertainties=[bounded],
+        ),
+        factors=Factors(categories=[SMALL_GWP.id], flows=["co2"], values=[1.0]),
+    )
+    mill = [DemandItem(ref=BackgroundRef(database=SMALL.name, id="mill"), amount=1.0)]
+    with pytest.raises(Invalid, match="mill keeps drawing outside its bounds 0.999 to 1.001"):
+        sampler(Calculation(background), None, mill, methods=[SMALL_GWP]).draw(0)
+
+
+def test_an_unbounded_draw_takes_the_variates_it_took(calculation: Calculation) -> None:
+    rows = calculation.background.exchanges["technosphere"]
+    g = generator(5, (0, STREAMS["technosphere"]))
+    expected = drawn(
+        rows=rows,
+        z=g.standard_normal(rows.amount.size),
+        u=g.random(rows.amount.size),
+        held=wide(rows),
+    )
+    # the fixture states no bound on a background distribution, so no row is drawn again
+    amounts = sampled(
+        rows=rows,
+        variates=stream(generator(5, (0, STREAMS["technosphere"]))),
+        held=wide(rows),
+        owners=lambda at: str(at),
+    )
+    assert (amounts == expected).all()
+
+
 @pytest.mark.parametrize(
     ("uncertainty", "amount", "mean", "variance"),
     [
@@ -343,9 +510,15 @@ def test_a_row_held_keeps_its_amount() -> None:
 
 
 def test_the_wide_background_normals_are_counted(calculation: Calculation) -> None:
-    # one wide technosphere normal and one wide biosphere normal in the fixture
-    assert sampler(calculation, host()).normals_at_amount == 2
-    assert sampler(calculation, host(), scope="biosphere_only").normals_at_amount == 1
+    # the demand reaches three technosphere rows and three biosphere rows, one wide normal in
+    # each matrix, which a full run holds at their amounts and a biosphere run meets only the
+    # biosphere's
+    assert sampler(calculation, host()).background_counted == Counts(
+        there=6, carried=2, drawn=0, held=2
+    )
+    assert sampler(calculation, host(), scope="biosphere_only").background_counted == Counts(
+        there=6, carried=2, drawn=0, held=1
+    )
 
 
 def test_a_draw_in_which_a_foreground_loop_delivers_nothing_is_dropped(
@@ -500,8 +673,36 @@ def test_draws_under_pardiso_score_what_draws_under_superlu_score(
     assert run("pardiso") == pytest.approx(run("superlu"), rel=1e-12)
 
 
+def test_parameter_key_is_the_first_eight_bytes_of_the_names_hash() -> None:
+    assert parameter_key("steel") == int.from_bytes(hashlib.sha256(b"steel").digest()[:8], "big")
+    assert parameter_key("steel") != parameter_key("Steel")
+
+
+def test_a_block_takes_the_amounts_its_formulas_answer(calculation: Calculation) -> None:
+    system = certain(host())
+    frame_steel = (system.id.int, system.process("frame").exchanges[1].id.int)
+    co2 = (system.id.int, system.process("widget").exchanges[4].id.int)
+    mc = sampler(calculation, system, formulas=Answered({frame_steel: 0.0, co2: 0.6}))
+    # a quarter kilogram of frame at no steel, and the widget's 0.6 kg of CO2 for its 0.1
+    assert mc.draw(0).scores[0] == pytest.approx(4.158 - 0.25 * 2.4 * 2.78 - 0.1 + 0.6, rel=1e-12)
+
+
+def test_under_biosphere_only_only_the_direct_block_takes_the_formulas_amounts(
+    calculation: Calculation,
+) -> None:
+    system = certain(host())
+    frame_steel = (system.id.int, system.process("frame").exchanges[1].id.int)
+    co2 = (system.id.int, system.process("widget").exchanges[4].id.int)
+    answers = Answered({frame_steel: 0.0, co2: 0.6})
+    fixed = sampler(calculation, system, scope="biosphere_only", formulas=answers)
+    full = sampler(calculation, system, scope="full", formulas=answers)
+    # the elementary flow is drawn, the background product a formula exchange uses is not
+    assert fixed.draw(0).scores[0] == pytest.approx(4.158 - 0.1 + 0.6, rel=1e-12)
+    assert full.draw(0).scores[0] == pytest.approx(4.158 - 0.25 * 2.4 * 2.78 - 0.1 + 0.6, rel=1e-12)
+
+
 def test_a_method_the_background_does_not_hold_is_not_found(calculation: Calculation) -> None:
-    missing = Method.of(("fixture", "missing", "nothing"), "kg")
+    missing = Method.of(("fixture", "missing", "nothing", "nothing"), "kg")
     with pytest.raises(NotFound, match="lacks methods"):
         sampler(calculation, host(), methods=[missing])
 

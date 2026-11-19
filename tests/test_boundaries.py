@@ -72,6 +72,7 @@ CALLABLE_BELOW_MCP: dict[str, frozenset[str]] = {
             "ecosemantic.ports.classifications.values_under",
             "ecosemantic.ports.types.open_trail",
             "ecosemantic.ports.types.trail",
+            "ecosemantic.tables.folder.folder_name",
             "ecosemantic.tables.results.write_contribution",
             "ecosemantic.tables.results.write_impact",
             "ecosemantic.tables.results.write_inventory",

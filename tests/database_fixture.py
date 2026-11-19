@@ -31,7 +31,7 @@ BIO = f"{NAME}-biosphere"
 STEEL = BackgroundRef(database=BASE, id=f"{PROCESSES['steel']}_{FLOW_IDS['steel']}")
 ELEC = BackgroundRef(database=BASE, id=f"{PROCESSES['elec']}_{FLOW_IDS['electricity']}")
 CO2 = ElementaryFlowRef(database=BIO, id=FLOW_IDS["co2"])
-BASE_FINGERPRINT = "106df31f2c5f21863be3b72bd496eb2d18c2170dbcce66b8014e56e7c9ca73e6"
+BASE_FINGERPRINT = "320b2d8a42531b56f98cb511237b36a7a534110402e96c86793439ebd93d3f52"
 DATABASE = Database(
     name=BASE,
     elementary_flows=BIO,

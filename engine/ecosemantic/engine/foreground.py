@@ -35,13 +35,14 @@ class _Entry(NamedTuple):
     flipped: bool
     uncertainty: Uncertainty | None
     key: tuple[int, int]
+    owner: str
 
 
 @dataclass(frozen=True)
 class Entries:
     """One block's exchanges, one row each: its row and column in the block, its amount, whether
-    it enters negated, its distribution as stated, and the ids of its system and of the exchange,
-    which key its random numbers."""
+    it enters negated, its distribution as stated, the ids of its system and of the exchange,
+    which key its random numbers, and the exchange as a refusal names it."""
 
     rows: tuple[int, ...]
     columns: tuple[int, ...]
@@ -49,6 +50,7 @@ class Entries:
     flipped: tuple[bool, ...]
     uncertainties: tuple[Uncertainty | None, ...]
     keys: tuple[tuple[int, int], ...]
+    owners: tuple[str, ...]
 
     @classmethod
     def of(cls, entries: list[_Entry]) -> Entries:
@@ -60,6 +62,7 @@ class Entries:
             flipped=tuple(e.flipped for e in entries),
             uncertainties=tuple(e.uncertainty for e in entries),
             keys=tuple(e.key for e in entries),
+            owners=tuple(e.owner for e in entries),
         )
 
     def matrix(self, amounts: np.ndarray, shape: tuple[int, int]) -> sp.csc_matrix:
@@ -199,6 +202,7 @@ class Foreground:
                         flipped=block == "own" and exchange.type != "production",
                         uncertainty=exchange.uncertainty,
                         key=(column.system.int, exchange.id.int),
+                        owner=f"{exchange.name} on {self.label(j)}",
                     )
                 )
                 if exchange.type == "production":

@@ -1,0 +1,2 @@
+entity,id,field,published,corrected,why
+Flow,63169cac-1f80-354a-a831-82c2c641aa05,category,Elementary flows/emission/non-FEDEFL,Elementary flows/emission/air/non-FEDEFL,"an energy output in MJ of 22 electricity plants, filed under emission with no medium; ecoinvent files waste heat under air"

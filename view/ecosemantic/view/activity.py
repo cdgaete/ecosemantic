@@ -79,7 +79,7 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
         call = await context.activity.get_call(as_uuid(request.path_params["call_id"]))
         if call.effect in ("write", "delete"):
             raise Invalid(f"{call.tool} changes a model; the page reruns reads and calculations")
-        result = await structured(server, call.tool, call.arguments, started=True)
+        result = await structured(server, context, call.tool, call.arguments, started=True)
         hash_now = (
             await current_hash(context.storage, call.product_system_id)
             if call.product_system_id is not None

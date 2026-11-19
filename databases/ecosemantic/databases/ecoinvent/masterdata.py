@@ -1,4 +1,5 @@
-"""The elementary exchanges and the unit symbols a release's MasterData declares."""
+"""The elementary exchanges, the geographies and the unit symbols a release's MasterData
+declares."""
 
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ from ecosemantic.package.base_writer import BaseFlow
 from ecosemantic.ports.types import FlowType
 
 NS = "{http://www.EcoInvent.org/EcoSpold02}"
+_LANG = "{http://www.w3.org/XML/1998/namespace}lang"
 
 
 @dataclass(frozen=True)
@@ -29,9 +31,11 @@ class ElementaryExchange:
 
 @dataclass(frozen=True)
 class MasterData:
-    """A release's elementary exchanges by id, and the unit symbols the core does not know."""
+    """A release's elementary exchanges by id, the English name of each geography by its
+    shortname, and the unit symbols the core does not know."""
 
     elementary: dict[str, ElementaryExchange]
+    geographies: dict[str, str]
     unknown_units: dict[str, list[str]]
 
 
@@ -49,8 +53,34 @@ def flow_type(compartment: str) -> FlowType:
 
 
 def _exchanges(path: Path, tag: str) -> list[ET.Element]:
-    """The MasterData exchanges of one tag, in document order."""
+    """The MasterData elements of one tag, in document order."""
     return ET.parse(path).getroot().findall(f"{NS}{tag}")
+
+
+def _english(element: ET.Element, tag: str) -> str:
+    """The English text of a localised child element, empty when the element states none."""
+    for child in element.findall(f"{NS}{tag}"):
+        if child.get(_LANG) in (None, "en"):
+            return child.text or ""
+    return ""
+
+
+def _geographies(path: Path) -> dict[str, str]:
+    """The English name of every geography a release's MasterData declares, by its shortname.
+    Raises for a geography with no shortname or no name, and for two of one shortname named
+    differently."""
+    named: dict[str, str] = {}
+    for element in _exchanges(path, "geography"):
+        shortname = _english(element, "shortname")
+        name = _english(element, "name")
+        if not shortname or not name:
+            raise Invalid(
+                f"geography {element.get('id')!r} declares no shortname or no name in English"
+            )
+        first = named.setdefault(shortname, name)
+        if first != name:
+            raise Invalid(f"shortname {shortname!r} is named {first!r} and {name!r}")
+    return named
 
 
 def text(element: ET.Element, tag: str) -> str:
@@ -77,7 +107,8 @@ def exchange_unit(element: ET.Element, user: str, unknown_units: dict[str, list[
 
 
 def read_masterdata(ecospold: Path) -> MasterData:
-    """Read a release's MasterData: its elementary exchanges and the units it names."""
+    """Read a release's MasterData: its elementary exchanges, its geographies and the units it
+    names."""
     masterdata = ecospold / "MasterData"
     unknown_units: dict[str, list[str]] = {}
     elementary: dict[str, ElementaryExchange] = {}
@@ -95,7 +126,11 @@ def read_masterdata(ecospold: Path) -> MasterData:
         elementary[exchange.id] = exchange
     for element in _exchanges(masterdata / "IntermediateExchanges.xml", "intermediateExchange"):
         exchange_unit(element, text(element, "name"), unknown_units)
-    return MasterData(elementary=elementary, unknown_units=unknown_units)
+    return MasterData(
+        elementary=elementary,
+        geographies=_geographies(masterdata / "Geographies.xml"),
+        unknown_units=unknown_units,
+    )
 
 
 def read_units(ecospold: Path) -> tuple[str, ...]:

@@ -17,6 +17,8 @@ from ecosemantic.model.entities import Method, method_id
 from ecosemantic.model.refs import BackgroundRef, DemandItem, ElementaryFlowRef, ForegroundRef
 from ecosemantic.ports.types import (
     Cut,
+    Drawn,
+    DrawnCount,
     FlowHotspot,
     Hotspot,
     InventoryRow,
@@ -80,6 +82,7 @@ def test_the_scores_table_carries_the_base_and_each_variant(tmp_path: Path) -> N
                 name="lean",
                 scores=[Score(value=3.02, unit="kg CO2-Eq", method_id=GWP.id)],
                 deltas=[-1.19],
+                total_deltas=[],
                 credit_loops=[],
             )
         ],
@@ -193,8 +196,14 @@ def test_a_monte_carlo_block_writes_the_summary_and_the_samples(tmp_path: Path) 
             n=6,
             stopped="target",
             gating_method=GWP.id,
+            constant=[],
+            indistinguishable_from_zero=[],
             scope="full",
-            normals_at_amount=4,
+            drawn=Drawn(
+                parameters=DrawnCount(there=2, carried=2, drawn=2),
+                foreground=DrawnCount(there=7, carried=2, drawn=1),
+                background=DrawnCount(there=6, carried=3, drawn=1, held=4),
+            ),
             credit_loops=[],
             dropped_draws=[],
             dropped_loops=[],
@@ -218,7 +227,9 @@ def test_a_monte_carlo_block_writes_the_summary_and_the_samples(tmp_path: Path) 
     folder = write_impact(tmp_path, key(), result, AT)
     summary = list(csv.DictReader((folder / "uncertainty.csv").open(encoding="utf-8")))
     assert summary[0]["n"] == "6" and summary[0]["stopped"] == "target"
-    assert summary[0]["normals_at_amount"] == "4"
+    assert summary[0]["parameters_drawn"] == "2" and summary[0]["foreground_there"] == "7"
+    assert summary[0]["foreground_drawn"] == "1" and summary[0]["background_there"] == "6"
+    assert summary[0]["background_drawn"] == "1" and summary[0]["background_held"] == "4"
     assert summary[0]["median"] == "4.2" and summary[0]["mean"] == "4.2"
     assert summary[0]["median_ci95_low"] == "4.0" and summary[0]["median_ci95_high"] == "4.4"
     assert summary[0]["rel_se"] == "0.02"
@@ -301,7 +312,11 @@ def test_each_run_schema_names_the_loops_holding_a_credit(tmp_path: Path) -> Non
         scores=[total],
         credit_loops=loop,
         linked_credit_loops=linked,
-        variants=[VariantScores(name="lean", scores=[total], deltas=[0.0], credit_loops=[])],
+        variants=[
+            VariantScores(
+                name="lean", scores=[total], deltas=[0.0], total_deltas=[], credit_loops=[]
+            )
+        ],
     )
     schema = yaml.safe_load(
         (write_impact(tmp_path, key(), impact, AT) / "schema.yaml").read_text(encoding="utf-8")
@@ -349,7 +364,12 @@ def test_each_run_schema_names_the_exchanges_running_a_treatment_backwards(
     doubled = ["frame · steel at 2.4", "widget · steel at 1"]
     total = Score(value=4.21, unit="kg CO2-Eq", method_id=GWP.id)
     variant = VariantScores(
-        name="lean", scores=[total], deltas=[0.0], credit_loops=[], treatments_run_backwards=doubled
+        name="lean",
+        scores=[total],
+        deltas=[0.0],
+        total_deltas=[],
+        credit_loops=[],
+        treatments_run_backwards=doubled,
     )
     impact = ImpactResult(
         database=FIXTURE_DATABASE,
@@ -415,8 +435,14 @@ def test_the_uncertainty_tables_count_the_dropped_draws_and_number_samples_by_dr
             n=2,
             stopped="ceiling",
             gating_method=GWP.id,
+            constant=[],
+            indistinguishable_from_zero=[],
             scope="full",
-            normals_at_amount=0,
+            drawn=Drawn(
+                parameters=DrawnCount(there=0, carried=0, drawn=0),
+                foreground=DrawnCount(there=7, carried=2, drawn=2),
+                background=DrawnCount(there=6, carried=2, drawn=2, held=0),
+            ),
             credit_loops=[],
             dropped_draws=[1],
             dropped_loops=[["widget"]],

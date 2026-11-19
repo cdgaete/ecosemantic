@@ -29,6 +29,8 @@ FLOWS: dict[str, tuple[str, tuple[str, ...], str]] = {
     "pm": ("Particulate matter", ("air", "urban air close to ground"), "kilogram"),
 }
 FLOW_IDS: dict[str, str] = {key: str(uuid.uuid5(NS, "flow:" + key)) for key in FLOWS}
+CAS_FIELDS: dict[str, str] = {"co2": "124-38-9", "pm": "n.a."}
+"""The text each fixture flow writes in its CAS field: one valid number and one `n.a.`"""
 
 PROCESSES: dict[str, tuple[str, str, str, dict[str, float], dict[str, float]]] = {
     "elec": ("electricity production", "electricity", "kilowatt hour", {}, {"co2": 1.0}),

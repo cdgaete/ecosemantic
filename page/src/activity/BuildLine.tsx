@@ -8,6 +8,7 @@ import { openInspector } from '@/window/inspector'
 import { IconButton } from '@/window/IconButton'
 import { CalculateButton } from '@/editors/system/CalculateButton'
 import { actorOf } from './agents'
+import { Message } from './Message'
 
 interface BuildLineProps {
   systemId: string
@@ -42,7 +43,7 @@ export function BuildLine({ systemId, live, toolsOpen, onTools }: BuildLineProps
           }}
         >
           <span className="line-clamp-2 text-xs font-medium [overflow-wrap:anywhere]" title={newest.message}>
-            {newest.message}
+            <Message text={newest.message} />
           </span>
           <span className="min-w-0 truncate text-xs text-muted-foreground">
             {`${actorOf(newest)} · ${formatAgo(newest.timestamp)} · ${count}`}

@@ -18,6 +18,7 @@ from ecosemantic.databases.bafu.differences import (
     read_differences,
     write_differences,
 )
+from ecosemantic.databases.bafu.profile import Profile
 from ecosemantic.databases.bafu.validate import Validation, record, validate
 from ecosemantic.errors import Invalid
 from tests.databases.bafu_fixture import (
@@ -25,6 +26,7 @@ from tests.databases.bafu_fixture import (
     ELEC_CLIMATE,
     ELEC_LABEL,
     FUEL_OIL_CLIMATE,
+    LAND,
     STEEL_LABEL,
     TOTAL,
     TREATMENT_CLIMATE,
@@ -32,18 +34,21 @@ from tests.databases.bafu_fixture import (
     WATER,
     WIDGET_CLIMATE,
     WIDGET_LABEL,
+    WIDGET_LAND,
+    WIDGET_WATER,
     fixture_profile,
     workbook_rows,
     write_workbook,
 )
-from tests.openlca_fixture import PROCESSES, build_package
+from tests.openlca_fixture import PROCESSES, WEIGHTS, WEIGHTS_SET, build_package
 
 Row = tuple[str, str, Mapping[str, float]]
 
 
 def _bundle(tmp_path: Path, name: str = "fixture.zip") -> Path:
-    """A bundle of the test package, with the electricity process declared in kilowatt hours."""
-    return build_package(tmp_path / name, elec_in_kwh=True)
+    """A bundle of the test package, with the electricity process declared in kilowatt hours and
+    the method's weighting sets as the package writes them."""
+    return build_package(tmp_path / name, elec_in_kwh=True, weighting_sets=True)
 
 
 def _workbook(tmp_path: Path, rows: Sequence[Row] | None = None) -> Path:
@@ -59,12 +64,14 @@ def _with(rows: Sequence[Row], label: str, header: str, value: float) -> list[Ro
     ]
 
 
-def _checked(bundle: Path, results: Path, *, differences: Path | None = None) -> Validation:
+def _checked(
+    bundle: Path, results: Path, *, differences: Path | None = None, profile: Profile | None = None
+) -> Validation:
     """The validation of a bundle against a workbook, under the test release's profile."""
     return validate(
         bundle,
         results=results,
-        profile=fixture_profile(),
+        profile=fixture_profile() if profile is None else profile,
         unlinked=None,
         differences=differences,
     )
@@ -185,21 +192,51 @@ def test_a_kwh_process_is_compared_per_mj(tmp_path: Path) -> None:
     assert _checked(bundle, _workbook(tmp_path / "converted")).differences == ()
 
 
-def test_the_total_is_the_sum_of_its_method(tmp_path: Path) -> None:
+def test_the_total_is_its_sets_weighted_sum(tmp_path: Path) -> None:
     bundle = _bundle(tmp_path)
-    climate_only = _with(workbook_rows(), WIDGET_LABEL, TOTAL, WIDGET_CLIMATE)
+    summed = _with(workbook_rows(), WIDGET_LABEL, TOTAL, WIDGET_CLIMATE + WIDGET_WATER)
+    weighted = WEIGHTS["climate change"] * WIDGET_CLIMATE + WEIGHTS["water use"] * WIDGET_WATER
 
-    assert _checked(bundle, _workbook(tmp_path / "summed")).differences == ()
-    assert _checked(bundle, _workbook(tmp_path / "climate", climate_only)).differences == (
+    assert weighted == pytest.approx(0.5 * WIDGET_CLIMATE + 0.2 * WIDGET_WATER)
+    assert _checked(bundle, _workbook(tmp_path / "weighted")).differences == ()
+    assert _checked(bundle, _workbook(tmp_path / "summed", summed)).differences == (
         Difference(process_id=PROCESSES["widget"], column=TOTAL),
     )
 
 
-def test_the_total_sums_only_the_columns_the_profile_maps(tmp_path: Path) -> None:
-    bundle = build_package(tmp_path / "unmapped.zip", elec_in_kwh=True, unmapped_category=True)
-    workbook = _workbook(tmp_path)
+def test_a_category_the_set_leaves_out_takes_no_part_in_the_total(tmp_path: Path) -> None:
+    bundle = build_package(
+        tmp_path / "unmapped.zip", elec_in_kwh=True, unmapped_category=True, weighting_sets=True
+    )
+    rows = workbook_rows(land=True)
+    # the land-use column scores the widget's 0.02 m3 of water; the set weights climate and water
+    counted = _with(
+        rows,
+        WIDGET_LABEL,
+        TOTAL,
+        WEIGHTS["climate change"] * WIDGET_CLIMATE
+        + WEIGHTS["water use"] * WIDGET_WATER
+        + WIDGET_LAND,
+    )
+    land = fixture_profile(land=True)
 
-    assert _checked(bundle, workbook).differences == ()
+    assert _checked(bundle, _workbook(tmp_path / "left-out", rows), profile=land).differences == ()
+    assert _checked(bundle, _workbook(tmp_path / "counted", counted), profile=land).differences == (
+        Difference(process_id=PROCESSES["widget"], column=TOTAL),
+    )
+    assert land.columns[-1].header == LAND
+
+
+def test_a_profile_naming_a_set_the_family_lacks_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(Invalid) as refused:
+        _checked(
+            _bundle(tmp_path),
+            _workbook(tmp_path),
+            profile=fixture_profile(weighting_set="Weights nobody"),
+        )
+
+    assert "'Weights nobody'" in str(refused.value)
+    assert WEIGHTS_SET in str(refused.value)
 
 
 def test_record_writes_the_list_and_the_block(tmp_path: Path) -> None:
@@ -225,7 +262,11 @@ def test_record_writes_the_list_and_the_block(tmp_path: Path) -> None:
     assert written["tolerance"] == profile.tolerance
     assert isinstance(written["tolerance"], float)
     assert written["inventory"]["sha256"] == profile.inventory.sha256
-    assert written["total"] == {"header": TOTAL, "method": "fixture method"}
+    assert written["total"] == {
+        "header": TOTAL,
+        "method": "fixture method",
+        "weighting_set": WEIGHTS_SET,
+    }
 
 
 def test_record_is_refused_with_a_mismatch(tmp_path: Path) -> None:

@@ -94,22 +94,20 @@ def _category_key(key: list[str]) -> tuple[str, str]:
     return (key[1], " > ".join(key[2:]))
 
 
-def _category_normal(category: tuple[str, ...]) -> tuple[str, ...]:
-    """A category with openLCA's `Resource` spelled as ecoinvent's `natural resource` and any
-    trailing `unspecified` subcompartment left off."""
-    parts = ["natural resource" if part == "Resource" else part for part in category]
-    while parts and parts[-1].lower() == "unspecified":
-        parts = parts[:-1]
+def _category_normal(category: tuple[str, str | None]) -> tuple[str, str | None]:
+    """A compartment and sub-compartment with any trailing `unspecified` sub-compartment left
+    off."""
+    parts: list[str | None] = list(category)
+    while parts and parts[-1] is not None and parts[-1].lower() == "unspecified":
+        parts.pop()
     return tuple(parts)
 
 
-def _category_difference(left: tuple[str, ...], right: tuple[str, ...]) -> str:
-    """How two elementary-flow categories that differ are related: a resource spelling, a
-    trailing `unspecified` subcompartment on one side, or a difference in the data."""
+def _category_difference(left: tuple[str, str | None], right: tuple[str, str | None]) -> str:
+    """How two elementary-flow compartments that differ are related: a trailing `unspecified`
+    sub-compartment on one side, or a compartment that differs in the data."""
     if _category_normal(left) != _category_normal(right):
         return "flow category differs"
-    if ("Resource" in left) != ("Resource" in right):
-        return "flow category: natural resource spelled Resource"
     return "flow category: trailing unspecified subcompartment on one side"
 
 
@@ -320,8 +318,8 @@ class _Comparison:
                 self.report.difference(
                     "flow type differs", f"{code}: {a['type']!r} vs {b['type']!r}"
                 )
-            left_category = tuple(a["categories"])
-            right_category = tuple(b["categories"])
+            left_category = (a["compartment"], a["sub_compartment"])
+            right_category = (b["compartment"], b["sub_compartment"])
             if left_category != right_category:
                 self.report.difference(
                     _category_difference(left_category, right_category),

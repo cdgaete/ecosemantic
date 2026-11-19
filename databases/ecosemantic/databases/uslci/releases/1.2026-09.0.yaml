@@ -22,3 +22,5 @@ validated:
   datasets: 2548
   categories: 10
   largest_rel_diff_to_independent: 7.294959377939447e-10
+revision: 1
+corrections: corrections-1.2026-09.0.csv

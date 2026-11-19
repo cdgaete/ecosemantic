@@ -1,19 +1,23 @@
-"""The explorer's routes: one background database's counts, its classification and method trees,
-its compartments with the flows filed under them, the processes under a classification node, and
-one indicator's factors. Every route reads the request context's inventory and search ports."""
+"""The explorer's routes: the databases it browses with the processes each holds, and one
+background database's counts, its classification and method trees, its compartments with the flows
+filed under them, the processes under a classification node, one indicator's factors, and the flows
+a process's exchanges name. Every route reads the request context's inventory and search ports."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import TypeVar
 
+from pydantic import JsonValue
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from ecosemantic.errors import Invalid, NotFound
 from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.discovery import NO_DATABASE
 from ecosemantic.mcp.envelopes import Answer
+from ecosemantic.model.refs import Database
 from ecosemantic.ports.classifications import (
     classification_tree,
     method_tree,
@@ -22,6 +26,7 @@ from ecosemantic.ports.classifications import (
     values_under,
 )
 from ecosemantic.ports.types import Compartment
+from ecosemantic.view.api import json_object
 from ecosemantic.view.handling import answering
 
 T = TypeVar("T")
@@ -29,9 +34,16 @@ DEFAULT_LIMIT = 20
 NO_NODE = "no node is given; the route lists the processes under a classification node"
 
 
-def _answer(value: T) -> JSONResponse:
-    """One value as the envelope every route of the view answers with."""
-    return JSONResponse(Answer[T](value=value).model_dump(mode="json"))
+class ListedDatabase(Database):
+    """A background database the explorer browses, with the processes it holds."""
+
+    processes: int
+
+
+def _answer(value: T, hint: str | None = None) -> JSONResponse:
+    """One value as the envelope every route of the view answers with, with the hint that leads a
+    caller whose answer holds nothing."""
+    return JSONResponse(Answer[T](value=value, hint=hint).model_dump(mode="json"))
 
 
 def _query(params: Mapping[str, str]) -> str:
@@ -61,8 +73,28 @@ def _filed(compartments: Sequence[Compartment], database: str, name: str, sub: s
         raise NotFound(f"no sub-compartment {sub!r} under compartment {name!r} in {database!r}")
 
 
+def _ids(body: Mapping[str, JsonValue]) -> list[str]:
+    """The flow ids a read asks for; Invalid when `ids` is not a list of strings."""
+    ids = body.get("ids")
+    if not isinstance(ids, list) or not all(isinstance(id, str) for id in ids):
+        raise Invalid("ids is not a list of strings")
+    return ids
+
+
 def routes(context: ServerContext) -> list[Route]:
-    """The eight resources of one background database the explorer browses."""
+    """The databases the explorer browses, and the nine resources of one of them."""
+
+    @answering
+    async def databases(request: Request) -> Response:
+        listed = await context.inventory.list_databases()
+        counted = [
+            ListedDatabase(
+                **database.model_dump(),
+                processes=(await context.inventory.summarize(database.name)).processes,
+            )
+            for database in listed
+        ]
+        return _answer(counted, hint=None if counted else NO_DATABASE)
 
     @answering
     async def summary(request: Request) -> Response:
@@ -97,11 +129,13 @@ def routes(context: ServerContext) -> list[Route]:
         values = await context.inventory.classification_values(params["name"], params["scheme"])
         return _answer(
             await context.search.processes(
-                params["name"],
-                _query(query),
+                database=params["name"],
+                query=_query(query),
                 limit=_limit(query),
                 cursor=query.get("cursor"),
                 classifications=values_under(params["scheme"], values, node),
+                order="name",
+                item=query.get("item"),
             )
         )
 
@@ -119,14 +153,23 @@ def routes(context: ServerContext) -> list[Route]:
         _filed(await context.inventory.list_compartments(name), name, compartment, sub)
         return _answer(
             await context.search.elementary_flows(
-                name,
-                _query(query),
+                database=name,
+                query=_query(query),
                 compartment=compartment,
                 sub_compartment=sub,
                 limit=_limit(query),
                 cursor=query.get("cursor"),
+                order="name",
+                item=query.get("item"),
             )
         )
+
+    @answering
+    async def read_flows(request: Request) -> Response:
+        name = request.path_params["name"]
+        database = await context.inventory.get_database(name)
+        ids = _ids(await json_object(request))
+        return _answer(await context.inventory.get_elementary_flows(database.elementary_flows, ids))
 
     @answering
     async def methods(request: Request) -> Response:
@@ -148,12 +191,14 @@ def routes(context: ServerContext) -> list[Route]:
         )
 
     return [
+        Route("/api/databases", databases),
         Route("/api/databases/{name}/summary", summary),
         Route("/api/databases/{name}/classifications", classifications),
         Route("/api/databases/{name}/classifications/{scheme}", tree),
         Route("/api/databases/{name}/classifications/{scheme}/processes", processes),
         Route("/api/databases/{name}/compartments", compartments),
         Route("/api/databases/{name}/compartments/{compartment}/flows", flows),
+        Route("/api/databases/{name}/elementary-flows/read", read_flows, methods=["POST"]),
         Route("/api/databases/{name}/impact-methods", methods),
         Route("/api/databases/{name}/impact-methods/{id}/factors", factors),
     ]

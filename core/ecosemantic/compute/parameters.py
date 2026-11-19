@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import math
+import uuid
 from collections.abc import Mapping, Sequence
 from graphlib import CycleError, TopologicalSorter
 from typing import Final
@@ -14,7 +15,7 @@ from asteval.astutils import ExceptionHolder
 from pydantic import BaseModel
 
 from ecosemantic.errors import Invalid
-from ecosemantic.model.entities import Case, Parameter, ProductSystem
+from ecosemantic.model.entities import Case, Parameter, ProductSystem, Uncertainty
 
 
 class CaseRow(BaseModel):
@@ -72,6 +73,8 @@ FUNCTIONS: Final[Mapping[str, object]] = {
 }
 
 CONSTANTS: Final[Mapping[str, float]] = {"pi": math.pi, "e": math.e}
+
+CENTRE_TOLERANCE: Final = 1e-9
 
 TAKES: Final = (
     "a formula takes numbers, parameter names, arithmetic, comparisons, a conditional and the "
@@ -233,3 +236,100 @@ def materialize(product_system: ProductSystem) -> ProductSystem:
     for name, amount in amounts.items():
         named[name].amount = amount
     return refuse_zero_production(out)
+
+
+def require_centred(uncertainty: Uncertainty, value: float, owner: str) -> None:
+    """Nothing where the distribution is centred on the value within a relative
+    CENTRE_TOLERANCE; Invalid naming both centres otherwise, a lognormal's beside the loc that
+    centres it on the value."""
+    centre = uncertainty.centre()
+    if math.isclose(centre, value, rel_tol=CENTRE_TOLERANCE):
+        return
+    loc = ""
+    if uncertainty.type == "lognormal" and value != 0:
+        loc = f" (loc {math.log(abs(value))!r})"
+    raise Invalid(
+        f"{owner} is {value!r} and its {uncertainty.type} is centred on {centre!r}; "
+        f"centre it on {value!r}{loc}"
+    )
+
+
+def followed(uncertainty: Uncertainty | None, value: float, owner: str) -> Uncertainty | None:
+    """The distribution moved onto a value a case, a scenario or an exchange's new amount
+    resolved, keeping its relative spread: the distribution itself where it is centred on the
+    value as it stands, none where a distribution centred elsewhere meets a value of zero, and
+    Invalid naming the owner for a distribution centred on 0, which no other value follows."""
+    if uncertainty is None:
+        return None
+    if uncertainty.centre() == value:
+        return uncertainty
+    if value == 0:
+        return None
+    if uncertainty.centre() == 0:
+        raise Invalid(
+            f"{owner} carries a {uncertainty.type} centred on 0 and cannot follow {value!r}; "
+            f"give it a distribution centred on {value!r}, or none"
+        )
+    return uncertainty.anchored(value)
+
+
+def _reaches(formula: str, owner: str, formulas: Mapping[str, str]) -> set[str]:
+    """Every name a formula reads, and every name the formulas of those names read, in turn."""
+    found: set[str] = set()
+    pending = list(_reads(formula, owner))
+    while pending:
+        name = pending.pop()
+        if name in found:
+            continue
+        found.add(name)
+        if name in formulas:
+            pending.extend(_reads(formulas[name], f"of parameter {name!r}"))
+    return found
+
+
+def uncertain_reads(system: ProductSystem) -> dict[uuid.UUID, list[str]]:
+    """Each exchange whose formula reads an uncertain literal parameter, directly or through
+    formula parameters, to those parameters' names, sorted."""
+    uncertain = {p.name for p in system.parameters if p.uncertainty is not None}
+    if not uncertain:
+        return {}
+    formulas: dict[str, str] = {}
+    for parameter in system.parameters:
+        if parameter.formula is not None:
+            formulas[parameter.name] = parameter.formula
+    reads: dict[uuid.UUID, list[str]] = {}
+    for process in system.processes:
+        for exchange in process.exchanges:
+            if exchange.formula is None:
+                continue
+            owner = f"on exchange {system.exchange_named(exchange.id)}"
+            names = _reaches(exchange.formula, owner, formulas) & uncertain
+            if names:
+                reads[exchange.id] = sorted(names)
+    return reads
+
+
+def refuse_double_spread(system: ProductSystem) -> None:
+    """Nothing, or Invalid naming an exchange whose formula reads an uncertain parameter and
+    which carries a distribution of its own, with the parameters it reads."""
+    for exchange_id, names in uncertain_reads(system).items():
+        _, exchange = system.exchange(exchange_id)
+        if exchange.uncertainty is None:
+            continue
+        raise Invalid(
+            f"exchange {system.exchange_named(exchange_id)} carries a distribution and its "
+            f"formula reads the uncertain parameters {names}; an amount takes one spread: "
+            "remove one of them"
+        )
+
+
+def refuse_unfollowed_cases(system: ProductSystem) -> None:
+    """Nothing, or Invalid naming the case and the parameter for a case value the parameter's
+    distribution cannot follow; a case value of 0 leaves the parameter none unless the
+    distribution is centred on it."""
+    for case in system.cases:
+        for name, value in sorted(case.values.items()):
+            parameter = system.parameter(name)
+            if parameter.formula is None and parameter.uncertainty is not None:
+                owner = f"parameter {name!r}, which case {case.name!r} sets,"
+                followed(parameter.uncertainty, value, owner)

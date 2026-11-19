@@ -15,14 +15,13 @@ from ecosemantic.backends.native import store as store_module
 from ecosemantic.backends.native.install import install
 from ecosemantic.backends.native.store import NativeStore, install_lock
 from ecosemantic.engine.background import Background
-from ecosemantic.engine.calculation import Calculation
-from ecosemantic.errors import Conflict, Invalid, NotFound, NotSupported
-from ecosemantic.model.entities import Method
-from ecosemantic.model.refs import BackgroundRef, DemandItem
+from ecosemantic.errors import Conflict, Invalid, NotFound, NotSupported, Unavailable
 from ecosemantic.package.background import Import, Unlinked, read_background
 from ecosemantic.package.base_writer import write_base_bundle
 from tests.engine_fixture import NOW, fixture_bundle, fixture_rows, served_build
 from tests.fixture_data import CODES, FIXTURE_BIO, FIXTURE_DB, FLOW_IDS
+from tests.openlca_fixture import NAME as OLCA_NAME
+from tests.openlca_fixture import PUBLISHER_FLOW_IDS, build_package
 
 
 @pytest.fixture(scope="module")
@@ -34,7 +33,13 @@ def imported(bundle: Path, name: str = FIXTURE_DB) -> Import:
     return read_background(bundle, name, foreground=frozenset())
 
 
-def put(data: Path, bundle: Path, replace: bool = False, name: str = FIXTURE_DB):
+def put(
+    data: Path,
+    bundle: Path,
+    replace: bool = False,
+    name: str = FIXTURE_DB,
+    revision: int | None = None,
+):
     return install(
         data,
         imported(bundle, name),
@@ -42,6 +47,7 @@ def put(data: Path, bundle: Path, replace: bool = False, name: str = FIXTURE_DB)
         version="1",
         system_model="unit process",
         replace=replace,
+        revision=revision,
     )
 
 
@@ -56,7 +62,7 @@ def test_install_writes_the_entry_the_catalog_and_the_background(
     entry = json.loads((build / "entry.json").read_text(encoding="utf-8"))
     digest = hashlib.sha256(bundle.read_bytes()).hexdigest()
     fingerprint = Background.load(build / "background").fingerprint()
-    assert entry["format"] == 5 and entry["bundle"] == digest
+    assert entry["format"] == 6 and entry["bundle"] == digest
     assert entry["database"] == {
         "name": FIXTURE_DB,
         "elementary_flows": FIXTURE_BIO,
@@ -64,6 +70,7 @@ def test_install_writes_the_entry_the_catalog_and_the_background(
         "version": "1",
         "system_model": "unit process",
         "fingerprint": fingerprint,
+        "revision": None,
     }
     assert installed.database.fingerprint == fingerprint
     assert (tmp_path / "bundles" / f"{digest}.zip").read_bytes() == bundle.read_bytes()
@@ -143,8 +150,13 @@ def test_the_catalog_holds_the_datasets_exchanges_flows_methods_and_terms(
         "SELECT name, compartment, sub_compartment, unit, flow_type FROM flows WHERE code = ?",
         [FLOW_IDS["water_in"]],
     ).fetchone()
-    # a bundle files a natural resource under openLCA's "Resource"
-    assert water == ("Water, river", "Resource", "in water", "cubic meter", "natural resource")
+    assert water == (
+        "Water, river",
+        "natural resource",
+        "in water",
+        "cubic meter",
+        "natural resource",
+    )
     assert catalog.execute("SELECT count(*) FROM methods").fetchone() == (2,)
     # a method's id, spec and parts are Method.of(key, unit)'s, never stored beside the key
     columns = [c[0] for c in catalog.execute("DESCRIBE methods").fetchall()]
@@ -186,6 +198,9 @@ def test_an_entry_of_another_format_is_replaced_by_name(tmp_path: Path, bundle: 
         json.dumps({"format": 1, "database": entry["database"], "archive": "a" * 64}),
         encoding="utf-8",
     )
+    with pytest.raises(Unavailable, match="entry format 1; this store reads format 6") as raised:
+        NativeStore(tmp_path)
+    assert "--replace" in raised.value.hint
     put(tmp_path, bundle, replace=True)
     served = json.loads(
         (served_build(tmp_path / "databases" / "fixture") / "entry.json").read_text(
@@ -193,6 +208,47 @@ def test_an_entry_of_another_format_is_replaced_by_name(tmp_path: Path, bundle: 
         )
     )
     assert served == entry
+
+
+def test_a_format_5_build_is_refused_and_installed_over(tmp_path: Path, bundle: Path) -> None:
+    put(tmp_path, bundle)
+    target = tmp_path / "databases" / "fixture"
+    path = served_build(target) / "entry.json"
+    entry = json.loads(path.read_text(encoding="utf-8"))
+    path.write_text(json.dumps(entry | {"format": 5}), encoding="utf-8")
+
+    with pytest.raises(Unavailable, match="entry format 5; this store reads format 6") as raised:
+        NativeStore(tmp_path)
+    assert raised.value.hint == (
+        "install the database again: `ecosemantic setup <source> --replace` for a source,"
+        " `ecosemantic setup openlca --package <package> --replace` for a package, or"
+        " `install_database` with `replace`"
+    )
+
+    put(tmp_path, bundle, replace=True)
+    written = json.loads((served_build(target) / "entry.json").read_text(encoding="utf-8"))
+    assert written["format"] == 6
+    store = NativeStore(tmp_path)
+    assert [database.name for database in store.databases()] == [FIXTURE_DB]
+    assert CODES["steel"] in store.native_ids(FIXTURE_DB)
+    store.close()
+
+
+def test_a_format_4_directory_is_refused_with_the_remedy(tmp_path: Path, bundle: Path) -> None:
+    put(tmp_path, bundle)
+    target = tmp_path / "databases" / "fixture"
+    build = served_build(target)
+    entry = json.loads((build / "entry.json").read_text(encoding="utf-8"))
+    held = {"format": 4, "database": entry["database"], "bundle": entry["bundle"]}
+    (target / "entry.json").write_text(json.dumps(held), encoding="utf-8")
+    (target / "current").unlink()
+
+    with pytest.raises(Unavailable, match="entry format 4; this store reads format 6") as raised:
+        NativeStore(tmp_path)
+    assert "--replace" in raised.value.hint
+    assert json.loads((target / "entry.json").read_text(encoding="utf-8")) == held
+    assert not (target / "current").exists()
+    assert (build / "entry.json").is_file()
 
 
 def renamed(directory: Path) -> Path:
@@ -213,33 +269,6 @@ def renamed(directory: Path) -> Path:
         now=NOW,
     )
     return written.bundle
-
-
-GWP = Method.of(("fixture", "gwp", "climate change > GWP100"), "kg CO2-Eq")
-
-
-def score_of(calculation: Calculation) -> float:
-    """One kilogram of the fixture's steel, scored for climate change."""
-    demand = [DemandItem(ref=BackgroundRef(database=FIXTURE_DB, id=CODES["steel"]), amount=1.0)]
-    solution = calculation.solve(None, demand)
-    return float(calculation.scores(solution, [GWP]).values()[0])
-
-
-def format_4(tmp_path: Path, bundle: Path) -> tuple[Path, dict]:
-    """The fixture downgraded to a format-4 directory; its target and its entry."""
-    put(tmp_path, bundle)
-    target = tmp_path / "databases" / "fixture"
-    build = served_build(target)
-    entry = json.loads((build / "entry.json").read_text(encoding="utf-8"))
-    shutil.move(str(build / "background"), str(target / "background"))
-    shutil.move(str(build / "catalog.duckdb"), str(target / "catalog.duckdb"))
-    (target / "entry.json").write_text(
-        json.dumps({"format": 4, "database": entry["database"], "bundle": entry["bundle"]}),
-        encoding="utf-8",
-    )
-    (target / "current").unlink()
-    shutil.rmtree(target / "builds")
-    return target, entry
 
 
 def steel_name(store: NativeStore) -> str | None:
@@ -281,6 +310,18 @@ def test_a_store_serves_a_database_installed_after_it_was_built(
     assert [database.name for database in running.databases()] == [FIXTURE_DB]
     assert CODES["steel"] in running.native_ids(FIXTURE_DB)
     running.close()
+
+
+def test_a_database_installed_at_a_revision_is_served_at_it(tmp_path: Path, bundle: Path) -> None:
+    installed = put(tmp_path, bundle, revision=2)
+    running = NativeStore(tmp_path)
+    try:
+        assert installed.database.revision == 2
+        assert [(database.name, database.revision) for database in running.databases()] == [
+            (FIXTURE_DB, 2)
+        ]
+    finally:
+        running.close()
 
 
 def test_a_second_store_on_the_directory_serves_an_install_it_did_not_carry(
@@ -423,34 +464,6 @@ def test_a_bundle_installed_twice_has_one_fingerprint(tmp_path: Path, bundle: Pa
     assert first.database.fingerprint == second.database.fingerprint
 
 
-def test_a_format_4_install_is_moved_into_the_new_layout_and_serves_the_same_scores(
-    tmp_path: Path, bundle: Path
-) -> None:
-    target, entry = format_4(tmp_path, bundle)
-
-    before = score_of(Calculation(Background.load(target / "background")))
-
-    store = NativeStore(tmp_path)
-    assert [database.name for database in store.databases()] == [FIXTURE_DB]
-    assert store.registered(FIXTURE_DB).database.fingerprint == entry["database"]["fingerprint"]
-    assert CODES["steel"] in store.native_ids(FIXTURE_DB)
-    after = score_of(store.call(FIXTURE_DB, lambda: store.calculation(FIXTURE_DB)))
-    assert after == pytest.approx(before)
-
-    builds = list((target / "builds").iterdir())
-    assert len(builds) == 1
-    moved = json.loads((builds[0] / "entry.json").read_text(encoding="utf-8"))
-    assert moved["format"] == 5
-    assert moved["database"] == entry["database"] and moved["bundle"] == entry["bundle"]
-    assert (
-        Background.load(builds[0] / "background").fingerprint() == entry["database"]["fingerprint"]
-    )
-    store.close()
-
-    NativeStore(tmp_path).close()
-    assert len(list((target / "builds").iterdir())) == 1
-
-
 def test_installing_again_while_a_store_maps_the_previous_build_serves_the_new_one(
     tmp_path: Path, bundle: Path
 ) -> None:
@@ -466,55 +479,6 @@ def test_installing_again_while_a_store_maps_the_previous_build_serves_the_new_o
     following.close()
     NativeStore(tmp_path).close()
     assert len(list((tmp_path / "databases" / "fixture" / "builds").iterdir())) == 1
-
-
-def test_a_crash_after_the_background_moved_is_resumed_and_serves(
-    tmp_path: Path, bundle: Path
-) -> None:
-    target, entry = format_4(tmp_path, bundle)
-    build_id = f"migrated-{entry['bundle'][:32]}"
-    half = target / "builds" / build_id
-    half.mkdir(parents=True)
-    shutil.move(str(target / "background"), str(half / "background"))
-
-    store = NativeStore(tmp_path)
-    assert [d.name for d in store.databases()] == [FIXTURE_DB]
-    assert store.registered(FIXTURE_DB).database.fingerprint == entry["database"]["fingerprint"]
-    store.close()
-    assert not (target / "background").exists()
-    assert not (target / "catalog.duckdb").exists()
-    assert not (target / "entry.json").exists()
-    assert len(list((target / "builds").iterdir())) == 1
-
-
-def test_a_crash_after_the_entry_moved_is_resumed_and_serves(tmp_path: Path, bundle: Path) -> None:
-    target, entry = format_4(tmp_path, bundle)
-    build_id = f"migrated-{entry['bundle'][:32]}"
-    half = target / "builds" / build_id
-    half.mkdir(parents=True)
-    shutil.move(str(target / "background"), str(half / "background"))
-    shutil.move(str(target / "catalog.duckdb"), str(half / "catalog.duckdb"))
-    shutil.move(str(target / "entry.json"), str(half / "entry.json"))
-
-    store = NativeStore(tmp_path)
-    assert [d.name for d in store.databases()] == [FIXTURE_DB]
-    assert store.registered(FIXTURE_DB).database.fingerprint == entry["database"]["fingerprint"]
-    store.close()
-    moved = json.loads((half / "entry.json").read_text(encoding="utf-8"))
-    assert moved["format"] == 5
-    assert moved["database"] == entry["database"] and moved["bundle"] == entry["bundle"]
-
-
-def test_installing_onto_a_format_4_database_migrates_then_refuses_without_replace(
-    tmp_path: Path, bundle: Path
-) -> None:
-    target, _entry = format_4(tmp_path, bundle)
-    with pytest.raises(Conflict, match="database 'fixture' is installed in"):
-        put(tmp_path, bundle)
-    assert (target / "current").is_file()
-    assert not (target / "background").exists()
-    assert not (target / "catalog.duckdb").exists()
-    assert not (target / "entry.json").exists()
 
 
 def test_a_store_that_loaded_only_the_background_serves_the_reinstall(
@@ -552,9 +516,7 @@ def test_a_store_serves_the_reinstall_when_windows_removal_stops_at_a_held_file(
     running.close()
 
 
-def test_a_pointerless_build_an_install_is_writing_is_ignored_not_migrated(
-    tmp_path: Path, bundle: Path
-) -> None:
+def test_a_pointerless_build_an_install_is_writing_is_ignored(tmp_path: Path, bundle: Path) -> None:
     put(tmp_path, bundle)
     target = tmp_path / "databases" / "looped"
     writing = target / "builds" / "0123456789abcdef0123456789abcdef"
@@ -565,13 +527,11 @@ def test_a_pointerless_build_an_install_is_writing_is_ignored_not_migrated(
         assert writing.exists()
         assert not (target / "current").exists()
         store.close()
-    (writing / "entry.json").write_text('{"format": 4, "marker": "untouched"}', encoding="utf-8")
+    (writing / "entry.json").write_text('{"marker": "untouched"}', encoding="utf-8")
     with install_lock(target):
         store = NativeStore(tmp_path)
         assert [d.name for d in store.databases()] == [FIXTURE_DB]
-        assert (writing / "entry.json").read_text(encoding="utf-8") == (
-            '{"format": 4, "marker": "untouched"}'
-        )
+        assert (writing / "entry.json").read_text(encoding="utf-8") == '{"marker": "untouched"}'
         assert not (target / "current").exists()
         store.close()
 
@@ -603,17 +563,6 @@ def test_a_pointerless_partial_build_is_removed_when_idle(tmp_path: Path, bundle
     assert [d.name for d in store.databases()] == [FIXTURE_DB]
     assert not writing.exists()
     store.close()
-
-
-def test_installing_a_format_4_database_with_replace_moves_its_root_files(
-    tmp_path: Path, bundle: Path
-) -> None:
-    target, _entry = format_4(tmp_path, bundle)
-    put(tmp_path, bundle, replace=True)
-    assert not (target / "background").exists()
-    assert not (target / "catalog.duckdb").exists()
-    assert not (target / "entry.json").exists()
-    assert (target / "current").is_file()
 
 
 def test_two_installs_of_a_new_database_without_replace_serialise(
@@ -709,3 +658,31 @@ def test_a_replace_that_commits_during_a_store_read_is_not_deleted(
     assert (target / "current").is_file()
     assert len(list((target / "builds").iterdir())) == 1
     assert [d.name for d in NativeStore(tmp_path).databases()] == ["fixture", "other"]
+
+
+def test_a_flow_of_each_publisher_vocabulary_is_stored_canonically(tmp_path: Path) -> None:
+    package = build_package(tmp_path / "publishers.zip", publisher_flows=True)
+    imported = read_background(package, OLCA_NAME, foreground=frozenset())
+    install(
+        tmp_path,
+        dataclasses.replace(imported, unlinked=[]),
+        package,
+        version="1",
+        system_model="unit process",
+        dropped=imported.unlinked,
+    )
+    build = served_build(tmp_path / "databases" / "fixture-olca")
+    catalog = duckdb.connect(build / "catalog.duckdb", read_only=True)
+    placed = {
+        key: catalog.execute(
+            "SELECT compartment, sub_compartment, flow_type FROM flows WHERE code = ?",
+            [PUBLISHER_FLOW_IDS[key]],
+        ).fetchone()
+        for key in ("nox", "dust", "ore", "wages")
+    }
+    assert placed == {
+        "nox": ("air", "unspecified", "emission"),
+        "dust": ("air", "troposphere, rural", "emission"),
+        "ore": ("natural resource", "ground", "natural resource"),
+        "wages": ("economic", "unspecified", "economic"),
+    }

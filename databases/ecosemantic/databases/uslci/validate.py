@@ -111,29 +111,32 @@ def list_mismatches(
     )
 
 
-def _independent(path: Path) -> dict[tuple[str, str, str], tuple[float, str]]:
-    """The scores another computation wrote, one per dataset code, method and category, with the
-    unit each is per."""
+def _independent(path: Path) -> dict[tuple[str, str, str, str], tuple[float, str]]:
+    """The scores another computation wrote, one per dataset code, method and category, the
+    category being the indicator too, with the unit each is per."""
     with path.open(newline="", encoding="utf-8") as read:
         return {
-            (row["code"], row["method"], row["category"]): (float(row["score"]), row["unit"])
+            (row["code"], row["method"], row["category"], row["category"]): (
+                float(row["score"]),
+                row["unit"],
+            )
             for row in csv.DictReader(read)
         }
 
 
-def _group(key: tuple[str, str, str]) -> str:
-    """A score's group: the method and the category it is scored under."""
+def _group(key: tuple[str, str, str, str]) -> str:
+    """A score's group: the method, the category and the indicator it is scored under."""
     return repr(key[1:])
 
 
 def _converted(
-    core: dict[tuple[str, str, str], float],
-    scored: dict[tuple[str, str, str], tuple[float, str]],
+    core: dict[tuple[str, str, str, str], float],
+    scored: dict[tuple[str, str, str, str], tuple[float, str]],
     declared: dict[str, str],
-) -> tuple[dict[tuple[str, str, str], float], list[str]]:
+) -> tuple[dict[tuple[str, str, str, str], float], list[str]]:
     """The core's scores per one unit of the unit the other computation scored in, and every
     dataset whose declared unit is of another quantity than that one."""
-    found: dict[tuple[str, str, str], float] = {}
+    found: dict[tuple[str, str, str, str], float] = {}
     found_mismatches: list[str] = []
     for key, ours in core.items():
         if key not in scored:
@@ -154,8 +157,8 @@ def _converted(
 
 
 def _differences(
-    core: dict[tuple[str, str, str], float],
-    independent: dict[tuple[str, str, str], float],
+    core: dict[tuple[str, str, str, str], float],
+    independent: dict[tuple[str, str, str, str], float],
     tolerance: float | None,
 ) -> tuple[float, list[str]]:
     """The largest relative difference between two computations' scores, and every pair beyond the
@@ -163,9 +166,10 @@ def _differences(
     one side scores is a mismatch."""
     differences = relative_differences(core, independent, group=_group)
     found: list[str] = []
-    for method, category in sorted({key[1:] for key in core} | {key[1:] for key in independent}):
-        mine = {code for code, m, c in core if (m, c) == (method, category)}
-        theirs = {code for code, m, c in independent if (m, c) == (method, category)}
+    for triple in sorted({key[1:] for key in core} | {key[1:] for key in independent}):
+        method, category, indicator = triple
+        mine = {key[0] for key in core if key[1:] == triple}
+        theirs = {key[0] for key in independent if key[1:] == triple}
         if not mine or not theirs:
             scored = "the core" if mine else "the independent computation"
             found.append(f"{method}, {category}: only {scored} scores it")
@@ -177,12 +181,12 @@ def _differences(
             if code not in mine:
                 found.append(f"{code} under {category}: only the independent computation scores it")
                 continue
-            difference = differences[(code, method, category)]
+            difference = differences[(code, method, category, indicator)]
             if tolerance is not None and difference > tolerance:
                 found.append(
-                    f"{code} under {category}: the core scores {core[(code, method, category)]!r}, "
-                    f"the independent computation "
-                    f"{independent[(code, method, category)]!r}, {difference:.3e} apart"
+                    f"{code} under {category}: the core scores "
+                    f"{core[(code, method, category, indicator)]!r}, the independent computation "
+                    f"{independent[(code, method, category, indicator)]!r}, {difference:.3e} apart"
                 )
     return max(differences.values(), default=0.0), found
 

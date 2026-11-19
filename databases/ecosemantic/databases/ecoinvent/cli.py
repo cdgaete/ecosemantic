@@ -20,6 +20,7 @@ from ecosemantic.databases.ecoinvent.build import build
 from ecosemantic.databases.ecoinvent.download import download
 from ecosemantic.databases.ecoinvent.probe import probe, report
 from ecosemantic.databases.ecoinvent.profile import (
+    RELEASES,
     Profile,
     default_profile,
     pinned,
@@ -27,6 +28,7 @@ from ecosemantic.databases.ecoinvent.profile import (
 )
 from ecosemantic.databases.ecoinvent.release import Release, SystemModel, sha256
 from ecosemantic.databases.ecoinvent.validate import TOLERANCE, Validation, validate
+from ecosemantic.databases.revision import listed_corrections
 from ecosemantic.errors import EcoSemanticError, NotFound, Unavailable, error_payload
 from ecosemantic.package.base_writer import Written
 
@@ -82,9 +84,18 @@ def _probe(args: argparse.Namespace) -> dict[str, object]:
 
 
 def _build(args: argparse.Namespace) -> Written:
-    """Build a release into one bundle under --out."""
+    """Build a release into one bundle under --out, at the revision and with the corrections its
+    profile names."""
     release = _release(args)
-    return build(release, _required(args, release), args.out, datetime.now(UTC))
+    profile = _required(args, release)
+    return build(
+        release,
+        profile,
+        args.out,
+        datetime.now(UTC),
+        revision=profile.revision,
+        corrections=listed_corrections(RELEASES, profile.corrections),
+    )
 
 
 def _validate(args: argparse.Namespace) -> Validation:

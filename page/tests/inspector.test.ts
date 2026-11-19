@@ -1,5 +1,5 @@
 import { useUi, type InspectorMode } from '@/store/ui'
-import { inspectorShown, openInspector, opensInspector, toggleInspector, toggleWidened } from '@/window/inspector'
+import { inspectorShown, openInspector, opensInspector, toggleInspector, toggleWidened, widthWithin } from '@/window/inspector'
 
 describe('inspectorShown', () => {
   it.each([
@@ -9,6 +9,19 @@ describe('inspectorShown', () => {
     [{ inspector: 'widened', sheetOpen: false }, false, true],
   ] as [{ inspector: InspectorMode; sheetOpen: boolean }, boolean, boolean][])('answers %o at %s narrow as %s', (state, narrow, shown) => {
     expect(inspectorShown(state, narrow)).toBe(shown)
+  })
+})
+
+describe('widthWithin', () => {
+  it.each([
+    [600, 1440, 600],
+    [599.6, 1440, 600],
+    [100, 1440, 320],
+    // four fifths of 1440
+    [2000, 1440, 1152],
+    [300, 380, 320],
+  ])('holds %d px in a %d px window to %d px', (asked, viewport, held) => {
+    expect(widthWithin(asked, viewport)).toBe(held)
   })
 })
 

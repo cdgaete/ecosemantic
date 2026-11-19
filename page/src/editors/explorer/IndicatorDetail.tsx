@@ -1,5 +1,5 @@
 import { useFactors, useMethodTree } from '@/api/queries'
-import type { Factor, Method, MethodCategory, MethodFamily } from '@/api/types'
+import type { Factor } from '@/api/types'
 import { useAddress } from '@/lib/address'
 import { formatAmount } from '@/lib/format'
 import { paths } from '@/lib/paths'
@@ -8,25 +8,10 @@ import { DataTable, NUMERIC, type Column } from '@/window/DataTable'
 import { Section } from '@/window/Section'
 import { DetailHeader } from './DetailHeader'
 import { Facts } from './Facts'
-import { ListingFilter, MorePages } from './ListingControls'
+import { ListingFilter, Pager } from './ListingControls'
+import { findIndicator } from './methods'
 
 const LIMIT = 25
-
-interface Found {
-  family: MethodFamily
-  category: MethodCategory
-  method: Method
-}
-
-function findIndicator(families: MethodFamily[], id: string): Found | null {
-  for (const family of families) {
-    for (const category of family.categories) {
-      const method = category.indicators.find((entry) => entry.id === id)
-      if (method !== undefined) return { family, category, method }
-    }
-  }
-  return null
-}
 
 export function IndicatorDetail({ name, item }: { name: string; item: string }) {
   const address = useAddress()
@@ -77,15 +62,19 @@ export function IndicatorDetail({ name, item }: { name: string; item: string }) 
           <p className="text-muted-foreground">Loading…</p>
         ) : (
           <>
+            {read.data.value.total === null || query === '' ? null : (
+              <p className="text-xs text-muted-foreground">{`${formatAmount(read.data.value.total)} ${read.data.value.total === 1 ? 'factor' : 'factors'}`}</p>
+            )}
             <DataTable
               columns={columns}
               rows={read.data.value.items}
               rowKey={(factor) => factor.flow.id}
               empty={query === '' ? 'This indicator carries no factor.' : 'No match.'}
             />
-            <MorePages
-              shown={read.data.value.has_more}
-              onMore={() => address.write({ fcursor: read.data?.value.next_cursor ?? undefined })}
+            <Pager
+              previous={read.data.value.previous_cursor}
+              next={read.data.value.next_cursor}
+              onPage={(cursor) => address.write({ fcursor: cursor })}
             />
           </>
         )}

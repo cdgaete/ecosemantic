@@ -10,21 +10,22 @@ import { closeInspector, openInspector, toggleWidened, useInspectorShown } from 
 import { menus, type Menu } from './menus'
 import { openNavigation } from './navigation'
 import { runCanvas } from './shortcuts'
+import { useCanvasVariant } from './useCanvasState'
 
 export function useMenus(): { menus: Menu[]; dialog: ReactNode; go: (path: string) => void } {
   const go = useGo()
   const location = useLocation()
   const systemId = useUi((s) => s.canvasSystemId)
-  const variant = useUi((s) => s.canvasVariant)
   const theme = useUi((s) => s.theme)
   const setTheme = useUi((s) => s.setTheme)
   const inspector = useUi((s) => s.inspector)
   const inspectorShown = useInspectorShown()
   const openRequest = useRequestDialog((s) => s.open)
   const read = useSystem(systemId ?? '', systemId !== null)
+  const state = useCanvasVariant(read.data?.value)
   const resolved = useResultParams(systemId ?? '', location.search)
   const files = useFiles()
-  const release = useReleaseCards(systemId ?? '', variant)
+  const release = useReleaseCards(systemId ?? '', state?.name ?? null)
   const onResult = systemId !== null && location.pathname.startsWith(`/systems/${systemId}/results/`) && !location.pathname.endsWith('/setup')
   const all = menus({
     systemId,

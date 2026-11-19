@@ -3,16 +3,102 @@ import pytest
 from ecosemantic.backends.native.calculation import Named, NativeCalculation
 from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.errors import Invalid, NotFound, OtherBuild
-from ecosemantic.model.entities import Method
-from ecosemantic.model.refs import BackgroundRef, DemandItem, ForegroundRef, LinkedProcessRef
+from ecosemantic.model.entities import Exchange, Method, Process, ProductSystem
+from ecosemantic.model.refs import (
+    BackgroundRef,
+    DemandItem,
+    ElementaryFlowRef,
+    ForegroundRef,
+    LinkedProcessRef,
+)
 from ecosemantic.ports.types import System
-from tests.conftest import fixture_system, split_system
+from tests.conftest import fixture_system, split_system, uid
 from tests.engine_fixture import LOOP_DB, LOOP_FINGERPRINT
-from tests.fixture_data import CODES, FIXTURE_DB, FIXTURE_FINGERPRINT
+from tests.fixture_data import (
+    CODES,
+    FIXTURE_BIO,
+    FIXTURE_DATABASE,
+    FIXTURE_DB,
+    FIXTURE_FINGERPRINT,
+    FLOW_IDS,
+)
 
-GWP = Method.of(("fixture", "gwp", "climate change > GWP100"), "kg CO2-Eq")
+GWP = Method.of(("fixture", "gwp", "climate change", "GWP100"), "kg CO2-Eq")
 WIDGET = [DemandItem(ref=ForegroundRef(code="widget"), amount=1.0)]
 PAPER = [DemandItem(ref=BackgroundRef(database=FIXTURE_DB, id=CODES["paper"]), amount=1.0)]
+
+
+def cancelling_system() -> System:
+    """A maker emitting 28 kg of CO2 and a sink drawing 1 kg of methane at 28 kg CO2-eq, so the
+    two parts are 28 and -28 and the total is 0."""
+    co2 = ElementaryFlowRef(database=FIXTURE_BIO, id=FLOW_IDS["co2"])
+    ch4 = ElementaryFlowRef(database=FIXTURE_BIO, id=FLOW_IDS["ch4"])
+    maker = Process(
+        id=uid("fixture-act", "maker"),
+        code="maker",
+        name="maker assembly",
+        unit="unit",
+        location="GLO",
+        reference_product="maker",
+        exchanges=[
+            Exchange(
+                id=uid("fixture-ex", "maker", "0"),
+                type="production",
+                name="maker",
+                amount=1.0,
+                unit="unit",
+            ),
+            Exchange(
+                id=uid("fixture-ex", "maker", "1"),
+                type="product",
+                name="sink",
+                amount=1.0,
+                unit="unit",
+                input=ForegroundRef(code="sink"),
+            ),
+            Exchange(
+                id=uid("fixture-ex", "maker", "2"),
+                type="elementary",
+                name="Carbon dioxide, fossil",
+                amount=28.0,
+                unit="kilogram",
+                input=co2,
+            ),
+        ],
+    )
+    sink = Process(
+        id=uid("fixture-act", "sink"),
+        code="sink",
+        name="sink",
+        unit="unit",
+        location="GLO",
+        reference_product="sink",
+        exchanges=[
+            Exchange(
+                id=uid("fixture-ex", "sink", "0"),
+                type="production",
+                name="sink",
+                amount=1.0,
+                unit="unit",
+            ),
+            Exchange(
+                id=uid("fixture-ex", "sink", "1"),
+                type="elementary",
+                name="Methane, fossil",
+                amount=-1.0,
+                unit="kilogram",
+                input=ch4,
+            ),
+        ],
+    )
+    product_system = ProductSystem(
+        id=uid("fixture-product_system", "cancelling"),
+        name="cancelling",
+        database=FIXTURE_DATABASE,
+        processes=[maker, sink],
+        reference_process="maker",
+    )
+    return System.of(product_system)
 
 
 @pytest.fixture
@@ -34,8 +120,8 @@ async def test_a_contribution_tree_takes_one_foreground_item_on_a_product_system
 async def test_a_method_or_a_database_the_store_lacks_is_not_found(
     calculation: NativeCalculation,
 ) -> None:
-    noise = Method.of(("fixture", "noise", "decibel"), "dB")
-    with pytest.raises(NotFound, match=r"lacks methods \['fixture > noise > decibel'\]"):
+    noise = Method.of(("fixture", "noise", "decibel", "decibel"), "dB")
+    with pytest.raises(NotFound, match=r"lacks methods \['fixture > noise > decibel > decibel'\]"):
         await calculation.score(fixture_system(), WIDGET, noise)
     with pytest.raises(NotFound, match="no database 'nowhere'"):
         await calculation.score(System(database="nowhere"), PAPER, GWP)
@@ -142,3 +228,25 @@ async def test_top_n_keeps_the_largest_and_the_total_stays_whole(
 def test_a_label_names_no_missing_location() -> None:
     assert Named("steel production", None, "steel").label() == "steel production"
     assert Named("steel production", "GLO", "steel").label() == "steel production [GLO]"
+
+
+async def test_a_decomposition_whose_total_is_0_shows_its_largest_parts_without_shares(
+    calculation: NativeCalculation,
+) -> None:
+    maker = [DemandItem(ref=ForegroundRef(code="maker"), amount=1.0)]
+    found = await calculation.hotspots(cancelling_system(), maker, GWP, top_n=1)
+    assert found.total.value == pytest.approx(0.0)
+    assert [(h.name, h.score) for h in found.items] == [("maker assembly", 28.0)]
+    assert found.items[0].fraction is None
+    assert (found.cut.below, found.cut.unlisted) == (0, 1)
+    assert (found.cut.share, found.cut.unlisted_share) == (None, None)
+    assert found.cut.unlisted_score == pytest.approx(-28.0)
+    flows = await calculation.flow_hotspots(cancelling_system(), maker, GWP, top_n=5)
+    assert flows.total.value == pytest.approx(0.0)
+    assert [flow.fraction for flow in flows.items] == [None, None]
+    assert (flows.cut.below, flows.cut.unlisted) == (0, 0)
+    assert (flows.cut.share, flows.cut.unlisted_share) == (None, None)
+    tree = await calculation.contribution_tree(cancelling_system(), maker, GWP)
+    assert tree.total.value == pytest.approx(0.0)
+    assert tree.root.fraction is None
+    assert [child.fraction for child in tree.root.children] == [None, None]

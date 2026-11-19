@@ -1,10 +1,10 @@
 import { Fragment, useState } from 'react'
 import { useContributions } from '@/api/queries'
-import type { Score } from '@/api/types'
-import { cutNotice, formatAmount, formatShare, methodById } from '@/lib/format'
+import type { Score, Total, VariantScores } from '@/api/types'
+import { cutNotice, formatAmount, formatShare, formatUnit, indicatorLabel, methodById, weightingSetName } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { RequestAction } from '@/requests/RequestAction'
-import { NUMERIC } from '@/window/DataTable'
+import { DataTable, NUMERIC, type Column } from '@/window/DataTable'
 import { EditorHeader } from '@/window/EditorHeader'
 import { Hint } from '@/window/Hint'
 import { Icon } from '@/window/Icon'
@@ -16,7 +16,44 @@ function signed(delta: number): string {
   return `${delta >= 0 ? '+' : '−'}${formatAmount(Math.abs(delta))}`
 }
 
-function Children({ result, score, by, cutoff }: { result: Result; score: Score; by: 'process' | 'flow'; cutoff: number }) {
+interface TotalRow {
+  total: Total
+  variants: ({ total: Total; delta: number | null } | null)[]
+}
+
+function Totals({ totals, variants, sectionKey }: { totals: Total[]; variants: VariantScores[]; sectionKey: string }) {
+  const columns: Column<TotalRow>[] = [
+    { key: 'set', header: 'Name', width: 'rest', render: (row) => weightingSetName(row.total) },
+    { key: 'value', header: 'Total', align: 'right', render: (row) => (row.total.value === null ? row.total.reason : formatAmount(row.total.value)) },
+    { key: 'unit', header: 'Unit', render: (row) => formatUnit(row.total.unit) },
+    ...variants.map((variant, i) => ({
+      key: `variant:${variant.name}`,
+      header: `${variant.name} (Δ)`,
+      align: 'right' as const,
+      folds: true,
+      render: (row: TotalRow) => {
+        const moved = row.variants[i]
+        if (moved === null || moved.total.value === null || moved.delta === null) return null
+        return `${formatAmount(moved.total.value)} (${signed(moved.delta)})`
+      },
+    })),
+  ]
+  const rows: TotalRow[] = totals.map((total) => ({
+    total,
+    variants: variants.map((variant) => {
+      const at = variant.totals.findIndex((moved) => moved.position === total.position)
+      return at < 0 ? null : { total: variant.totals[at], delta: variant.total_deltas[at] }
+    }),
+  }))
+  return (
+    <Section title="Totals" sectionKey={sectionKey}>
+      <DataTable columns={columns} rows={rows} rowKey={(row) => `total:${row.total.position}`} />
+      <p className="pt-1 text-xs text-muted-foreground">{totals[0].value_choices}</p>
+    </Section>
+  )
+}
+
+function Children({ result, score, by, cutoff, byMethod, byIndicator }: { result: Result; score: Score; by: 'process' | 'flow'; cutoff: number; byMethod: boolean; byIndicator: boolean }) {
   const parts = useContributions(result.id, result.hash, { by, method_id: score.method_id, top_n: 20, cutoff: cutoff / 100, demand: demandOf(result.params!, result.root) }, !result.stale)
   if (parts.error) return <tr><td colSpan={99} className="px-2 text-destructive">{parts.error.message}</td></tr>
   if (!parts.data) return <tr><td colSpan={99} className="px-2 text-muted-foreground">{result.waiting}</td></tr>
@@ -44,10 +81,11 @@ function Children({ result, score, by, cutoff }: { result: Result; score: Score;
             <span className="flex flex-wrap items-center gap-1">
               <Icon name={r.icon} />
               {r.name}
-              <span className="text-muted-foreground @lg:hidden">· {formatShare(r.share)}</span>
+              <span className="text-muted-foreground">· {formatShare(r.share)}</span>
             </span>
           </td>
-          <td className="hidden border-r border-b px-2 text-muted-foreground @lg:table-cell">{formatShare(r.share)}</td>
+          {byMethod ? <td className="hidden border-r border-b @lg:table-cell" /> : null}
+          {byIndicator ? <td className="hidden border-r border-b @lg:table-cell" /> : null}
           <td className={cn('border-r border-b px-2 text-right', NUMERIC)}>{formatAmount(r.score)}</td>
           <td className="border-r border-b px-2">{score.unit}</td>
           {result.params?.variants.map((v) => (
@@ -66,8 +104,11 @@ export function ImpactPage({ result }: { result: Result }) {
   const [open, setOpen] = useState<string[]>([])
   const value = impact.data?.value
   const methods = value?.methods ?? []
+  const scores = value?.scores ?? []
   const first = value?.scores[0]
   const title = params?.impact_method ?? (first === undefined ? '' : methodById(methods, first.method_id).impact_method)
+  const byMethod = new Set(scores.map((score) => methodById(methods, score.method_id).impact_method)).size > 1
+  const byIndicator = scores.some((score) => indicatorLabel(methodById(methods, score.method_id)) !== '')
   return (
     <>
       <EditorHeader icon="result" page="Impact analysis" entity={system?.name ?? ''} />
@@ -100,7 +141,8 @@ export function ImpactPage({ result }: { result: Result }) {
                 <tr>
                   {[
                     { text: 'Name', right: false, wide: false },
-                    { text: 'Category', right: false, wide: true },
+                    ...(byMethod ? [{ text: 'Method', right: false, wide: true }] : []),
+                    ...(byIndicator ? [{ text: 'Indicator', right: false, wide: true }] : []),
                     { text: 'Impact assessment result', right: true, wide: false },
                     { text: 'Unit', right: false, wide: false },
                     ...(params?.variants ?? []).map((v) => ({ text: `${v} (Δ)`, right: true, wide: true })),
@@ -122,15 +164,28 @@ export function ImpactPage({ result }: { result: Result }) {
                             {open.includes(score.method_id) ? '▾' : '▸'}
                           </button>
                           <Icon name="result" /> {method.impact_category}
+                          {byMethod ? (
+                            <span className="block text-xs @lg:hidden">
+                              <span className="text-muted-foreground">Method:</span> {method.impact_method}
+                            </span>
+                          ) : null}
+                          {byIndicator ? (
+                            <span className="block text-xs @lg:hidden">
+                              <span className="text-muted-foreground">Indicator:</span> {indicatorLabel(method)}
+                            </span>
+                          ) : null}
                           {value.variants.map((variant) => (
                             <span key={variant.name} className="block text-xs text-muted-foreground @lg:hidden">
                               {variant.name}: {formatAmount(variant.scores[i].value)} ({signed(variant.deltas[i])})
                             </span>
                           ))}
                         </td>
-                        <td className="hidden border-r border-b px-2 @lg:table-cell">
-                          {[method.impact_method, method.indicator].filter(Boolean).join(' · ')}
-                        </td>
+                        {byMethod ? (
+                          <td className="hidden border-r border-b px-2 @lg:table-cell">{method.impact_method}</td>
+                        ) : null}
+                        {byIndicator ? (
+                          <td className="hidden border-r border-b px-2 @lg:table-cell">{indicatorLabel(method)}</td>
+                        ) : null}
                         <td className={cn('border-r border-b px-2 text-right', NUMERIC)}>{formatAmount(score.value)}</td>
                         <td className="border-r border-b px-2">{score.unit}</td>
                         {value.variants.map((variant) => (
@@ -139,7 +194,9 @@ export function ImpactPage({ result }: { result: Result }) {
                           </td>
                         ))}
                       </tr>
-                      {open.includes(score.method_id) ? <Children result={result} score={score} by={by} cutoff={cutoff} /> : null}
+                      {open.includes(score.method_id) ? (
+                        <Children result={result} score={score} by={by} cutoff={cutoff} byMethod={byMethod} byIndicator={byIndicator} />
+                      ) : null}
                     </Fragment>
                   )
                 })}
@@ -149,6 +206,7 @@ export function ImpactPage({ result }: { result: Result }) {
         ) : null}
         <Hint of={impact.data} />
       </Section>
+      {value !== undefined && value.totals.length > 0 ? <Totals totals={value.totals} variants={value.variants} sectionKey={`results:${id}:totals`} /> : null}
     </>
   )
 }

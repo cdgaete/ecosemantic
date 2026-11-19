@@ -10,7 +10,15 @@ from ecosemantic.errors import Invalid
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.envelopes import as_uuid
 from ecosemantic.mcp.systems import export_model
-from ecosemantic.view.handling import answering, created, sent, uploaded, working
+from ecosemantic.view.handling import (
+    answering,
+    created,
+    download_name,
+    sent,
+    unchanged,
+    uploaded,
+    working,
+)
 
 
 def _entry_of(stated: object) -> int | None:
@@ -32,7 +40,7 @@ def routes(context: ServerContext) -> list[Route]:
         with working("ecosemantic-export-", keep=True) as work:
             zipped = work / f"{system_id}.zip"
             system, _ = await export_model(context, system_id, zipped)
-            return sent(zipped, work, f"{system.name}.zip")
+            return sent(zipped, work, download_name(system, "openlca"))
 
     @answering
     async def returned(request: Request) -> Response:
@@ -41,6 +49,8 @@ def routes(context: ServerContext) -> list[Route]:
             exported, actor = await uploaded(request, "package", "the exported zip", work)
             at_entry = _entry_of((await request.form()).get("at_entry"))
             entry = await context.storage.return_package(system_id, exported, actor, at_entry)
+        if entry is None:
+            return unchanged("The returned package changes nothing; no entry was written.")
         return created(entry)
 
     return [

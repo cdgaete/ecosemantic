@@ -23,7 +23,9 @@ _PAIR_ID = re.compile(rf"^{_UUID}_{_UUID}$")
 class Database(BaseModel):
     """A background database a product system pins, as the inventory backend reports it.
     `fingerprint` names the build: the SHA-256 of its compiled arrays, which an installed
-    database always carries and a product system carries once it is stamped with one."""
+    database always carries and a product system carries once it is stamped with one. `revision`
+    is EcoSemantic's revision of the publisher's release, and none for a release installed as its
+    publisher built it."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -33,6 +35,7 @@ class Database(BaseModel):
     version: str
     system_model: str
     fingerprint: str | None = None
+    revision: int | None = None
 
 
 class BackgroundRef(BaseModel):

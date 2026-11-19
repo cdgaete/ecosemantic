@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { usePostRequest } from '@/api/queries'
-import type { Entity, RequestKind } from '@/api/types'
+import type { Entity, ProductSystem, RequestKind } from '@/api/types'
+import { entityName } from '@/lib/names'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/window/Icon'
 import { useUi } from '@/store/ui'
@@ -17,7 +18,7 @@ const ENTITY_ICON: Record<Entity, 'system' | 'process' | 'product' | 'parameter'
   scenario: 'parameter',
 }
 
-export function RequestForm({ systemId, atHash, entity, entityId, onDone }: { systemId: string; atHash: string; entity?: Entity; entityId?: string; onDone: () => void }) {
+export function RequestForm({ systemId, atHash, system, entity, entityId, onDone }: { systemId: string; atHash: string; system: ProductSystem; entity?: Entity; entityId?: string; onDone: () => void }) {
   const person = useUi((s) => s.person)
   const setPerson = useUi((s) => s.setPerson)
   const [name, setName] = useState(person ?? '')
@@ -64,9 +65,9 @@ export function RequestForm({ systemId, atHash, entity, entityId, onDone }: { sy
       {named ? (
         <>
           <span>Entity</span>
-          <span className="flex items-center gap-1.5">
+          <span className="flex items-center gap-1.5" title={entityId}>
             <Icon name={ENTITY_ICON[entity]} />
-            {entity} · {entityId}
+            {entityName(system, entity, entityId)}
           </span>
         </>
       ) : null}

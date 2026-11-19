@@ -1,6 +1,8 @@
 import { useParameters, useValidation } from '@/api/queries'
 import type { CaseRow, Override, Parameter, ProductSystem } from '@/api/types'
 import { formatAmount, shortHash } from '@/lib/format'
+import { entityName } from '@/lib/names'
+import { describeUncertainty } from '@/lib/uncertainty'
 import { RequestAction } from '@/requests/RequestAction'
 import { DataTable, type Column } from '@/window/DataTable'
 import { EditorHeader } from '@/window/EditorHeader'
@@ -10,6 +12,7 @@ import type { SystemView } from './SystemEditor'
 const inputColumns: Column<Parameter>[] = [
   { key: 'name', header: 'Name', render: (p) => p.name },
   { key: 'value', header: 'Value', align: 'right', render: (p) => (p.value === null ? '' : formatAmount(p.value)) },
+  { key: 'uncertainty', header: 'Uncertainty', render: (p) => describeUncertainty(p.uncertainty, p.unit) },
   { key: 'unit', header: 'Unit', render: (p) => p.unit },
   { key: 'description', header: 'Description', folds: true, render: (p) => p.description },
 ]
@@ -24,26 +27,18 @@ function dependentColumns(values: Record<string, number>): Column<Parameter>[] {
   ]
 }
 
-function exchangeLabel(system: ProductSystem, exchangeId: string): string {
-  for (const process of system.processes) {
-    const exchange = process.exchanges.find((e) => e.id === exchangeId)
-    if (exchange) return `${exchange.name} on ${process.name}`
-  }
-  return `exchange ${exchangeId}`
-}
-
 function describeOverride(system: ProductSystem, o: Override): string {
   if (o.kind === 'parameter') return `parameter ${o.name} = ${formatAmount(o.value)}`
-  const label = exchangeLabel(system, o.exchange_id)
+  const label = entityName(system, 'exchange', o.exchange_id)
   if (o.amount !== null) return `${label}: amount ${formatAmount(o.amount)}`
   if (o.multiplier !== null) return `${label}: × ${formatAmount(o.multiplier)}`
-  const input = o.input
-  return `${label}: input ${input?.kind === 'background' ? input.id : (input?.code ?? '')}`
+  const supplier = o.name ?? (o.input?.kind === 'background' ? o.input.id : (o.input?.code ?? ''))
+  return `${label}: input ${supplier}`
 }
 
 export function ParametersPage({ view }: { view: SystemView }) {
   const { id, system } = view
-  const read = useParameters(id, view.version)
+  const read = useParameters(id, view.version, view.state?.name ?? null)
   const validation = useValidation(id, view.version === null)
   const scenarioCase = validation.data?.value.cases.find((c) => c.id === 'scenarios_current')
   const behind = new Set(scenarioCase && !scenarioCase.passed && scenarioCase.detail ? scenarioCase.detail.split(', ') : [])
@@ -53,7 +48,7 @@ export function ParametersPage({ view }: { view: SystemView }) {
   const matrix = space?.matrix ?? { cases: [], rows: [] }
   return (
     <>
-      <EditorHeader icon="parameter" page="Parameters" entity={system.name} />
+      <EditorHeader icon="parameter" page="Parameters" entity={system.name} state={view.state} />
       {read.error ? <p className="px-4 text-destructive">{read.error.message}</p> : null}
       <Section title="Input parameters" sectionKey={key('input-parameters')} actions={action('parameter')}>
         <DataTable columns={inputColumns} rows={(space?.parameters ?? []).filter((p) => p.formula === null)} rowKey={(p) => p.name} empty="No literal parameter." />

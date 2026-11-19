@@ -11,6 +11,7 @@ import pytest
 from ecosemantic.backends.filesystem.records import RecordFolder
 from ecosemantic.backends.filesystem.run_folder import run_dir
 from ecosemantic.backends.filesystem.runs import FilesystemRuns
+from ecosemantic.backends.native.calculation import NativeCalculation
 from ecosemantic.compute.parameters import materialize
 from ecosemantic.mcp.calculation import demand_of
 from ecosemantic.mcp.context import ServerContext
@@ -145,25 +146,21 @@ async def test_a_system_on_another_build_fails_as_the_envelope(
 
 
 async def test_a_crash_inside_the_sampling_is_recorded_and_still_raised(
+    context: ServerContext,
     systems_dir: Path,
     bundle_dir: Path,
     tmp_path: Path,
     fixture_system_stored: ProductSystem,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runs = FilesystemRuns(tmp_path)
-    run = await runs.post_run(
-        RunDraft(
-            product_system_id=fixture_system_stored.id,
-            at_hash=content_hash(fixture_system_stored),
-            demand=demand_of(fixture_system_stored, None),
-            methods=[],
-            config=MonteCarloConfig(n=2),
-        )
-    )
-    # no method leaves no sample stream to report on
-    with pytest.raises(IndexError):
-        await asyncio.to_thread(run_once, systems_dir, bundle_dir, tmp_path, run.id)
-    failed = await runs.get_run(run.id)
+    def fall_over(self: object, *args: object, **kwargs: object) -> None:
+        raise RuntimeError("the sampler fell over")
+
+    monkeypatch.setattr(NativeCalculation, "monte_carlo", fall_over)
+    runs, run_id = await queued(context, tmp_path, fixture_system_stored, 2)
+    with pytest.raises(RuntimeError, match="the sampler fell over"):
+        await asyncio.to_thread(run_once, systems_dir, bundle_dir, tmp_path, run_id)
+    failed = await runs.get_run(run_id)
     assert failed.status == "failed" and failed.finished_at is not None
     assert failed.error is not None and failed.error.error == "failed"
 

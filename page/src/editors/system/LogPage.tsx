@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { actorOf, colourOfEntry } from '@/activity/agents'
 import { Digest } from '@/activity/Digest'
+import { Message } from '@/activity/Message'
 import { holds, type DigestFilter } from '@/activity/digest'
 import { touches } from '@/activity/filters'
 import { OpenTrails } from '@/activity/OpenTrails'
@@ -11,29 +12,15 @@ import { cn } from '@/lib/utils'
 import { AppLink } from '@/lib/router'
 import { paths } from '@/lib/paths'
 import { formatAgo, shortHash } from '@/lib/format'
+import { entityKind, entityName } from '@/lib/names'
 import { RequestAction } from '@/requests/RequestAction'
 import { useUi } from '@/store/ui'
 import { EditorHeader } from '@/window/EditorHeader'
 import { Section } from '@/window/Section'
 import type { SystemView } from './SystemEditor'
 
-function nameOf(change: Change, system: ProductSystem): string {
-  if (change.entity === 'process') {
-    const process = system.processes.find((p) => p.id === change.id)
-    return process ? `process ${process.code}` : `process ${change.id}`
-  }
-  if (change.entity === 'exchange') {
-    for (const process of system.processes) {
-      const exchange = process.exchanges.find((e) => e.id === change.id)
-      if (exchange) return `exchange ${exchange.name} of ${process.code}`
-    }
-    return `exchange ${change.id}`
-  }
-  return `${change.entity} ${change.id}`
-}
-
 function describe(change: Change, system: ProductSystem): string {
-  const target = nameOf(change, system)
+  const target = `${entityKind(change.entity)} ${entityName(system, change.entity, change.id)}`
   if (change.op === 'add') return `added ${target}`
   if (change.op === 'delete') return `deleted ${target}`
   return `${target}: ${change.field} ${JSON.stringify(change.before)} → ${JSON.stringify(change.after)}`
@@ -54,7 +41,9 @@ function Entry({ entry, systemId, system, fresh }: { entry: LogEntry; systemId: 
         <span>{actorOf(entry)}</span>
         <span className="text-muted-foreground">{entry.source}</span>
         {fresh ? <span className="rounded-full bg-accent/15 px-1.5 text-xs font-semibold text-accent">NEW</span> : null}
-        <span className="basis-full font-medium">{entry.message}</span>
+        <span className="basis-full font-medium">
+          <Message text={entry.message} />
+        </span>
         <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground">
           {entry.changes.length} change{entry.changes.length === 1 ? '' : 's'}
         </span>
@@ -114,7 +103,7 @@ export function LogPage({ view }: { view: SystemView }) {
       <Section title="Entries" sectionKey={`system:${view.id}:log`} actions={view.version ? undefined : <RequestAction systemId={view.id} entity="product_system" entityId={view.system.id} />}>
         {log.error ? <p className="text-destructive">{log.error.message}</p> : null}
         {counted === 'failed' ? (
-          <Trail calls={failed} />
+          <Trail calls={failed} whole />
         ) : (
           <ul>
             {entries.map((entry) => (

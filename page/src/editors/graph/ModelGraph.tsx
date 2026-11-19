@@ -6,7 +6,9 @@ import type { LogEntry, ProductSystem } from '@/api/types'
 import { useUi } from '@/store/ui'
 import { useClearance, type Clearance } from '@/window/clearance'
 import { InSlot } from '@/window/slots'
+import { ToolsGrip } from '@/window/ToolsGrip'
 import { CANVAS_EVENT, type CanvasCommand } from '@/window/shortcuts'
+import { useCanvasVariant } from '@/window/useCanvasState'
 import { useMinWidth } from '@/window/useMinWidth'
 import { buildGraph, changedCards, changedSuppliers, droppedCards, edgeText, hotFrom, type GraphNode, type Outlines } from './build'
 import { CanvasToolbar } from './CanvasToolbar'
@@ -36,7 +38,7 @@ function Graph({ system, latest, outlines, calculate }: GraphProps) {
   const theme = useUi((s) => s.theme)
   const chooseProcess = useUi((s) => s.chooseProcess)
   const reference = system.reference_process
-  const variant = useUi((s) => (s.canvasSystemId === system.id ? s.canvasVariant : null))
+  const variant = useCanvasVariant(system)?.name ?? null
   const formulaValues = useUi((s) => s.formulaValues)
   const scaledView = useUi((s) => s.scaledView)
   const wide = useMinWidth(1024)
@@ -228,7 +230,7 @@ function Graph({ system, latest, outlines, calculate }: GraphProps) {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
-        onNodeClick={(_, node) => (node.type === 'process' ? chooseProcess(node.data.process.id) : undefined)}
+        onNodeClick={(_, node) => chooseProcess(node.type === 'process' ? node.data.process.id : null)}
         onPaneClick={() => chooseProcess(null)}
         onMoveStart={startMove}
         onMove={moveBy}
@@ -274,6 +276,7 @@ function Graph({ system, latest, outlines, calculate }: GraphProps) {
         <CanvasToolbar
           system={system}
           calculate={narrow ? undefined : calculate}
+          grip={narrow ? undefined : <ToolsGrip />}
           notes={notes}
           following={following}
           fit={fit}

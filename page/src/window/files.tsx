@@ -32,7 +32,7 @@ export function useFiles(): { importFile: (format: Format) => void; downloadResu
     const demand = demandOf(params, root)
     const body = kind === 'impact' ? toImpactArguments(params, root) : kind === 'contributions' ? { by: 'process', ...method, ...(demand ? { demand } : {}) } : { ...(demand ? { demand } : {}) }
     api.resultZip(systemId, kind, body).then(
-      (blob) => save(blob, `${kind}.zip`),
+      (file) => save(file.blob, file.name),
       (error: Error) => toast.error(error.message),
     )
   }

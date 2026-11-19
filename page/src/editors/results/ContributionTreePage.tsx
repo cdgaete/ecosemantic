@@ -57,7 +57,7 @@ export function ContributionTreePage({ result }: { result: Result }) {
   const [maxNodes, setMaxNodes] = useState(50)
   const [cutoff, setCutoff] = useState(0.1)
   const [open, setOpen] = useState<Set<string>>(new Set(['root']))
-  const { chosen, choose } = useCategory(scores)
+  const { chosen, choose } = useCategory(scores, id, (category) => category.value)
   const tree = useContributions(id, hash, { by: 'path', method_id: chosen?.method_id, max_level: maxLevel, max_nodes: maxNodes, cutoff: cutoff / 100, demand: demandOf(params!, root) }, chosen !== undefined && !stale)
   const toggle = (key: string) =>
     setOpen((s) => {

@@ -49,8 +49,7 @@ def test_inventory_resolver_carries_the_flow_type(
     water = inventory_resolver.flow(
         ElementaryFlowRef(database=FIXTURE_BIO, id=FLOW_IDS["water_in"])
     )
-    # a bundle files a natural resource under openLCA's "Resource"
-    assert water.name == "Water, river" and water.compartment == "Resource"
+    assert water.name == "Water, river" and water.compartment == "natural resource"
     assert water.sub_compartment == "in water" and water.unit == "cubic meter"
     assert water.flow_type == "natural resource"
     co2 = inventory_resolver.flow(ElementaryFlowRef(database=FIXTURE_BIO, id=FLOW_IDS["co2"]))

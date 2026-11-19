@@ -11,11 +11,15 @@
       "tuple": [
         "fixture",
         "gwp",
-        "climate change > GWP100"
+        "climate change",
+        "GWP100"
       ],
       "unit": "kg CO2-Eq"
     }
   ],
   "next_cursor": null,
-  "view_url": null
+  "view_url": null,
+  "weighting_sets": {
+    "gwp": []
+  }
 }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import statistics
+from collections.abc import Sequence
 from functools import cache
 
 from pydantic import BaseModel
@@ -11,6 +12,7 @@ from ecosemantic.errors import Invalid
 from ecosemantic.ports.types import MonteCarloResult, MonteCarloSummary
 
 Z95 = 1.959963984540054
+EQUAL = 1e-12
 
 
 class PairedDelta(BaseModel):
@@ -62,26 +64,93 @@ def summarize_samples(samples: list[float]) -> MonteCarloSummary:
     )
 
 
-def worst_rel_se(samples_by_category: list[list[float]]) -> tuple[float | None, int]:
-    """The largest relative standard error of a category's median, and that category; None, and
-    the first category without one, while any is undefined."""
+def constant(samples: Sequence[float]) -> bool:
+    """True when every draw equals the rest within `EQUAL` of their magnitude: the largest less
+    the smallest is at most `EQUAL` times the larger magnitude of the two, so thirty zeros are
+    constant and so are draws a rounding apart."""
+    if not samples:
+        raise Invalid("the stop rule needs at least one sample per category")
+    low, high = min(samples), max(samples)
+    return high - low <= EQUAL * max(abs(low), abs(high))
+
+
+def near_zero(summary: MonteCarloSummary) -> bool:
+    """True when the median's 95 % interval exists and holds 0: no relative error then states how
+    far from zero the median is."""
+    interval = summary.median_ci95
+    return interval is not None and interval[0] <= 0.0 <= interval[1]
+
+
+class Standing(BaseModel):
+    """The stop rule's reading of a run at one check: the largest relative standard error among
+    the categories it can measure and that category, both None when it can measure none; the
+    categories met as constant, every draw equal; those left out, their median indistinguishable
+    from zero; and those unmeasured, under six draws, where a median has no interval. A constant
+    category is never left out."""
+
+    worst_rel_se: float | None
+    worst: int | None
+    constant: list[int]
+    near_zero: list[int]
+    unmeasured: list[int]
+
+
+def standing(samples_by_category: list[list[float]]) -> Standing:
+    """One check of the stop rule over every category's draws so far."""
     if not samples_by_category:
         raise Invalid("the stop rule needs at least one category")
-    rel = [summarize_samples(cat).rel_se for cat in samples_by_category]
-    defined = [r for r in rel if r is not None]
-    if len(defined) < len(rel):
-        return None, rel.index(None)
-    gating = max(range(len(defined)), key=defined.__getitem__)
-    return defined[gating], gating
+    met: list[int] = []
+    left_out: list[int] = []
+    unmeasured: list[int] = []
+    errors: dict[int, float] = {}
+    for at, samples in enumerate(samples_by_category):
+        if not samples:
+            unmeasured.append(at)
+        elif constant(samples):
+            met.append(at)
+        else:
+            summary = summarize_samples(samples)
+            if near_zero(summary):
+                left_out.append(at)
+            elif summary.rel_se is None:
+                unmeasured.append(at)
+            else:
+                errors[at] = summary.rel_se
+    worst = max(errors, key=errors.__getitem__) if errors else None
+    return Standing(
+        worst_rel_se=None if worst is None else errors[worst],
+        worst=worst,
+        constant=met,
+        near_zero=left_out,
+        unmeasured=unmeasured,
+    )
 
 
-def should_stop(samples_by_category: list[list[float]], n_min: int, tau: float) -> bool:
-    """True once every category has n_min samples and the relative standard error of every
-    median is within tau."""
-    if len(samples_by_category[0]) < n_min:
+def should_stop(standing: Standing, n: int, n_min: int, tau: float) -> bool:
+    """True once the run has kept `n_min` draws and every category it can measure is within
+    `tau`: none is unmeasured, and the worst relative standard error is at most `tau`, or none
+    exists because no category is left to measure."""
+    if n < n_min or standing.unmeasured:
         return False
-    worst, _ = worst_rel_se(samples_by_category)
-    return worst is not None and worst <= tau
+    return standing.worst_rel_se is None or standing.worst_rel_se <= tau
+
+
+class Holding:
+    """The category that held a run, its median's error above the target at the latest check that
+    found one; the standing names the largest error of that check, which breaks a tie."""
+
+    def __init__(self) -> None:
+        self._held: int | None = None
+
+    def observe(self, standing: Standing, tau: float) -> None:
+        """Take a check, keeping the category remembered when it finds none above `tau`."""
+        if standing.worst_rel_se is not None and standing.worst_rel_se > tau:
+            self._held = standing.worst
+
+    def longest(self) -> int | None:
+        """The category above the target at the latest check that found one, or None when no
+        check found any."""
+        return self._held
 
 
 def paired_samples(

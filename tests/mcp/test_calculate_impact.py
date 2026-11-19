@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import dataclasses
 import json
+import math
 import statistics
 import uuid
 
@@ -8,6 +10,7 @@ import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.exceptions import ToolError
 from mcp.types import Implementation
+from pydantic import ValidationError
 
 from ecosemantic.compute.parameters import materialize
 from ecosemantic.mcp import calculation
@@ -23,11 +26,21 @@ from ecosemantic.model.entities import (
     Process,
     ProductSystem,
     Scenario,
+    Uncertainty,
     method_id,
 )
 from ecosemantic.model.refs import BackgroundRef, DemandItem, ForegroundRef
-from ecosemantic.ports.types import MAX_DRAWS, MonteCarloConfig, System
+from ecosemantic.package.resolver import InventoryResolver
+from ecosemantic.ports.types import (
+    MAX_DRAWS,
+    VALUE_CHOICES,
+    MonteCarloConfig,
+    System,
+    WeightingFactor,
+    WeightingSet,
+)
 from tests.fixture_data import CODES, FIXTURE_DB, FIXTURE_FINGERPRINT, GWP, WATER
+from tests.memory_background import MemoryInventory
 
 GWP_ID = method_id(" > ".join(GWP))
 WIDGET_DEMAND = [{"ref": {"kind": "foreground", "code": "widget"}, "amount": 1.0}]
@@ -65,6 +78,46 @@ async def varied(context: ServerContext, fixture_system_stored: ProductSystem) -
     system.scenarios[0].base_hash = base_pin(system)
     await context.storage.put_product_system(system, context.actor, "created")
     return system.id
+
+
+async def steel_parameterised(
+    context: ServerContext, stored: ProductSystem, *, name: str, uncertain: bool
+) -> uuid.UUID:
+    """The widget with its steel input read from a parameter, drawn when `uncertain`, and a case
+    that halves it."""
+    system = stored.model_copy(deep=True, update={"hash": None})
+    system.id = uuid.uuid5(system.id, name)
+    system.name = name
+    steel = system.process("widget").exchanges[1]
+    steel.formula = "steel_kg"
+    steel.uncertainty = None
+    steel.amount = 0.5
+    system.parameters = [
+        Parameter(
+            name="steel_kg",
+            value=0.5,
+            uncertainty=Uncertainty(type="lognormal", params={"loc": math.log(0.5), "scale": 0.2})
+            if uncertain
+            else None,
+        )
+    ]
+    system.cases = [Case(name="light steel", values={"steel_kg": 0.25})]
+    await context.storage.put_product_system(system, context.actor, "created")
+    return system.id
+
+
+@pytest.fixture(scope="module")
+async def steel_drawn(context: ServerContext, fixture_system_stored: ProductSystem) -> uuid.UUID:
+    return await steel_parameterised(
+        context, fixture_system_stored, name="widget_steel_drawn", uncertain=True
+    )
+
+
+@pytest.fixture(scope="module")
+async def steel_fixed(context: ServerContext, fixture_system_stored: ProductSystem) -> uuid.UUID:
+    return await steel_parameterised(
+        context, fixture_system_stored, name="widget_steel_fixed", uncertain=False
+    )
 
 
 async def test_score_of_the_stored_system(server: FastMCP, widget: uuid.UUID) -> None:
@@ -310,7 +363,9 @@ async def test_a_scenario_swapping_an_input_to_an_ordinary_foreground_process_ca
             name="light",
             overrides=[
                 ExchangeOverride(
-                    exchange_id=assembly.exchanges[3].id, input=ForegroundRef(code="frame_light")
+                    exchange_id=assembly.exchanges[3].id,
+                    input=ForegroundRef(code="frame_light"),
+                    name="frame",
                 )
             ],
         )
@@ -327,6 +382,64 @@ async def test_a_scenario_swapping_an_input_to_an_ordinary_foreground_process_ca
     # the frame's 0.25 kg at 6.672 gives way to the light frame's 0.25 kg at 3.336
     assert out["scores"][0]["value"] == pytest.approx(4.158)
     assert out["variants"][0]["scores"][0]["value"] == pytest.approx(3.324)
+
+
+async def test_a_parameters_spread_reaches_the_score(
+    server: FastMCP, steel_drawn: uuid.UUID, steel_fixed: uuid.UUID
+) -> None:
+    args = {"method_id": GWP_ID, "monte_carlo": {"n": 50, "seed": 3}, "samples": True}
+    async with Client(server) as client:
+        drawn = (
+            await client.call_tool(
+                "calculate_impact", {"product_system_id": str(steel_drawn), **args}
+            )
+        ).structured_content["value"]
+        fixed = (
+            await client.call_tool(
+                "calculate_impact", {"product_system_id": str(steel_fixed), **args}
+            )
+        ).structured_content["value"]
+    low, high = drawn["uncertainty"]["categories"][0]["summary"]["percentiles"]
+    # the widget's 0.5 kg of steel at 2.78 kg CO2-Eq per kg is drawn about 20 % either way
+    assert high - low > 0.4
+    assert drawn["scores"][0]["value"] == pytest.approx(4.158)
+    # with no distribution on the parameter every draw scores the deterministic point
+    assert len(set(fixed["uncertainty"]["categories"][0]["samples"])) == 1
+    assert fixed["uncertainty"]["categories"][0]["summary"]["percentiles"] == [
+        pytest.approx(4.158),
+        pytest.approx(4.158),
+    ]
+
+
+async def test_a_case_moves_a_parameters_distribution_and_paired_deltas_hold(
+    server: FastMCP, steel_drawn: uuid.UUID
+) -> None:
+    async with Client(server) as client:
+        out = (
+            await client.call_tool(
+                "calculate_impact",
+                {
+                    "product_system_id": str(steel_drawn),
+                    "method_id": GWP_ID,
+                    "variants": ["light steel"],
+                    "monte_carlo": {"n": 100, "seed": 3},
+                    "samples": True,
+                },
+            )
+        ).structured_content["value"]
+    [variant] = out["variants"]
+    [delta] = variant["deltas"]
+    [paired] = variant["paired_deltas"]
+    low, high = paired["delta_ci95"]
+    # the case sets steel_kg to 0.25, so the deterministic delta is half the steel's 1.39
+    assert delta == pytest.approx(-0.695)
+    assert low <= delta <= high
+    assert paired["delta_abs"] == pytest.approx(delta, abs=0.05)
+    base = out["uncertainty"]["categories"][0]["summary"]["percentiles"]
+    moved = variant["uncertainty"]["categories"][0]["summary"]["percentiles"]
+    # the distribution moved onto the case's value keeps its relative spread
+    assert moved[1] - moved[0] > 0.2
+    assert moved[1] - moved[0] == pytest.approx(0.5 * (base[1] - base[0]), rel=1e-9)
 
 
 async def test_an_unknown_variant_is_not_found(server: FastMCP, varied: uuid.UUID) -> None:
@@ -511,7 +624,7 @@ async def test_an_impact_answer_lists_each_method_once_and_every_score_names_one
     assert [[score.method_id for score in v.scores] for v in result.variants] == [ids]
     assert result.uncertainty is not None
     assert [category.method_id for category in result.uncertainty.categories] == ids
-    assert result.uncertainty.gating_method in ids
+    assert result.uncertainty.gating_method is None
     assert result.variants[0].uncertainty is not None
     assert [category.method_id for category in result.variants[0].uncertainty.categories] == ids
 
@@ -721,6 +834,13 @@ def test_the_call_takes_the_run_defaults_and_caps_them_at_its_own_ceiling():
     assert MAX_ITERATIONS < MAX_DRAWS
 
 
+def test_the_call_refuses_an_adaptive_n_min_below_6() -> None:
+    with pytest.raises(ValidationError) as caught:
+        ImpactMonteCarlo(n_min=5, n_max=40)
+    assert "an adaptive run takes n_min of at least 6" in str(caught.value)
+    assert ImpactMonteCarlo(n=3, n_min=1).n_min == 1
+
+
 async def test_a_monte_carlo_call_answers_a_histogram_unless_the_samples_are_asked_for(
     server: FastMCP, varied: uuid.UUID
 ) -> None:
@@ -749,3 +869,84 @@ async def test_a_monte_carlo_call_answers_a_histogram_unless_the_samples_are_ask
     assert asked["uncertainty"]["categories"][0]["histogram"] is None
     assert len(asked["variants"][0]["uncertainty"]["categories"][0]["samples"]) == 8
     assert asked["variants"][0]["uncertainty"]["categories"][0]["histogram"] is None
+
+
+FAMILY_SETS = [
+    WeightingSet(
+        impact_method="gwp",
+        name="weighted",
+        unit="Pt",
+        factors=[WeightingFactor(method_id=GWP_ID, normalisation=None, weighting=2.0)],
+    ),
+    WeightingSet(
+        impact_method="gwp",
+        name=None,
+        unit=None,
+        factors=[WeightingFactor(method_id=GWP_ID, normalisation=None, weighting=1.0)],
+    ),
+]
+
+
+@pytest.fixture(scope="module")
+def family_server(context: ServerContext) -> FastMCP:
+    """The calculation tools over a background whose `gwp` family carries two weighting sets."""
+    inventory = MemoryInventory(weighting_sets=FAMILY_SETS)
+    bound = dataclasses.replace(context, inventory=inventory, resolver=InventoryResolver(inventory))
+    built = build_server()
+    calculation.register(built, bound)
+    return built
+
+
+async def test_calculate_impact_on_a_family_answers_one_total_per_set(
+    family_server: FastMCP, widget: uuid.UUID
+) -> None:
+    args = {"product_system_id": str(widget), "impact_method": "gwp"}
+    async with Client(family_server) as client:
+        point = (await client.call_tool("calculate_impact", args)).structured_content["value"]
+        drawn = (
+            await client.call_tool(
+                "calculate_impact", {**args, "monte_carlo": {"n": 6, "seed": 3}, "samples": True}
+            )
+        ).structured_content["value"]
+        single = (
+            await client.call_tool(
+                "calculate_impact", {"product_system_id": str(widget), "method_id": GWP_ID}
+            )
+        ).structured_content["value"]
+    score = point["scores"][0]["value"]
+    assert [
+        (total["weighting_set"], total["position"], total["value"], total["unit"])
+        for total in point["totals"]
+    ] == [
+        ("weighted", 0, pytest.approx(2 * score), "Pt"),
+        (None, 1, pytest.approx(score), "kg CO2-Eq"),
+    ]
+    assert [total["categories"] for total in point["totals"]] == [[GWP_ID], [GWP_ID]]
+    assert [total["value_choices"] for total in point["totals"]] == [VALUE_CHOICES, VALUE_CHOICES]
+    assert point["variants"] == []
+    assert single["totals"] == []
+
+    sampled = [total["samples"] for total in drawn["uncertainty"]["totals"]]
+    assert len(sampled[0]) == len(sampled[1]) == 6
+    assert sampled[0] == pytest.approx([2.0 * draw for draw in sampled[1]])
+    assert [total["summary"]["n"] for total in drawn["uncertainty"]["totals"]] == [6, 6]
+    assert [total["value_choices"] for total in drawn["uncertainty"]["totals"]] == [
+        VALUE_CHOICES,
+        VALUE_CHOICES,
+    ]
+
+
+async def test_a_variants_totals_answer_how_far_each_moved(
+    family_server: FastMCP, varied: uuid.UUID
+) -> None:
+    args = {"product_system_id": str(varied), "impact_method": "gwp", "variants": ["half"]}
+    async with Client(family_server) as client:
+        value = (await client.call_tool("calculate_impact", args)).structured_content["value"]
+    [variant] = value["variants"]
+    assert variant["total_deltas"] == [
+        pytest.approx(total["value"] - base["value"])
+        for total, base in zip(variant["totals"], value["totals"], strict=True)
+    ]
+    assert variant["total_deltas"][1] == pytest.approx(
+        variant["scores"][0]["value"] - value["scores"][0]["value"]
+    )

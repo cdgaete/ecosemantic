@@ -5,6 +5,7 @@ import { useUi, type EditorTab } from '@/store/ui'
 import { Dock } from '@/window/Dock'
 import { NameIsland } from '@/window/NameIsland'
 import { PinChips } from '@/window/PinChips'
+import { FieldGrid } from '@/window/FieldGrid'
 import server from './fixtures/server.json'
 import system from './fixtures/system.json'
 import { renderAt } from './render'
@@ -72,5 +73,17 @@ describe('the frame', () => {
     expect(within(chips).getByRole('link', { name: tab.title })).toHaveAttribute('aria-current', 'page')
     fireEvent.click(within(chips).getByRole('button', { name: `Unpin ${tab.title}` }))
     expect(useUi.getState().pinned).toEqual([])
+  })
+
+  it('a detail’s value is text', () => {
+    renderAt('/', <FieldGrid rows={[{ label: 'Reference product', value: 'widget' }]} />)
+    const value = screen.getByText('widget')
+    expect(value.tagName).toBe('DD')
+    expect(value).toHaveClass('break-words')
+    expect(value.className).not.toContain('border')
+    expect(value.className).not.toContain('rounded')
+    expect(value.className).not.toContain('bg-background')
+    expect(value.className).not.toContain('min-h-7')
+    expect(value.className).not.toContain('px-2')
   })
 })

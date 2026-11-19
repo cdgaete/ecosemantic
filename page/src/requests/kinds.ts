@@ -1,4 +1,5 @@
 import type { Entity, RequestKind } from '@/api/types'
+import { entityKind } from '@/lib/names'
 
 export interface KindWords {
   label: string
@@ -26,5 +27,5 @@ export const KIND_WORDS: Record<RequestKind, KindWords> = {
 
 export function kindLabel(kind: RequestKind, entity?: Entity): string {
   const words = KIND_WORDS[kind]
-  return words.named && entity !== undefined ? `${words.label} ${entity}` : words.label
+  return words.named && entity !== undefined ? `${words.label} ${entityKind(entity)}` : words.label
 }

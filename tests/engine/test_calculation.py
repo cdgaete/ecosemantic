@@ -283,7 +283,7 @@ def test_the_intensities_are_each_dataset_cradle_to_gate(calculation: Calculatio
 
 
 def test_a_method_is_resolved_by_its_id(calculation: Calculation) -> None:
-    same = Method.of(("fixture", "gwp", "climate change > GWP100"), "kg CO2-Eq")
+    same = Method.of(("fixture", "gwp", "climate change", "GWP100"), "kg CO2-Eq")
     assert same.id == GWP_METHOD.id
     solution = calculation.solve(calculation.foreground(host(), {}), WIDGET)
     assert calculation.scores(solution, [same]).values()[0] == pytest.approx(4.158)

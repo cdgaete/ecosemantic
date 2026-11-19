@@ -121,9 +121,29 @@ async def test_a_record_the_base_holds_outside_the_closure_is_written_from_the_b
     bench: Bench, tmp_path: Path
 ) -> None:
     widened, member = _base_holding_the_packages_location(bench, tmp_path)
-    working, release = tmp_path / "working.zip", tmp_path / "release.zip"
+    working = tmp_path / "working.zip"
     await build_working(bench.storage, widened, BASE_DB, "work", "1", working, NOW)
-    await build_release(bench.storage, widened, BASE_DB, "rel", "1", release, None, NOW)
-    for bundle in (working, release):
-        with zipfile.ZipFile(bundle) as built, zipfile.ZipFile(widened) as base:
-            assert built.read(member) == base.read(member)
+    with zipfile.ZipFile(working) as built, zipfile.ZipFile(widened) as base:
+        assert built.read(member) == base.read(member)
+
+
+async def test_a_release_states_the_base_databases_own_location_record(
+    bench: Bench, tmp_path: Path
+) -> None:
+    release = tmp_path / "release.zip"
+    await build_release(bench.storage, bench.base_bundle, BASE_DB, "rel", "1", release, None, NOW)
+    with zipfile.ZipFile(release) as built:
+        locations = [
+            json.loads(built.read(name))
+            for name in built.namelist()
+            if name.startswith("locations/")
+        ]
+        processes = [
+            json.loads(built.read(name))
+            for name in built.namelist()
+            if name.startswith("processes/")
+        ]
+    assert [(found["code"], found["name"]) for found in locations] == [("GLO", "Global")]
+    assert {process["location"]["@id"] for process in processes} == {
+        location["@id"] for location in locations
+    }

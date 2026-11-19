@@ -64,25 +64,31 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
     """The sources and the installs, the terms file, and the zip an openLCA install reads."""
 
     async def sources(request: Request) -> Response:
-        return await call_tool(server, "list_sources", {})
+        return await call_tool(server, context, "list_sources", {})
 
     async def posted(request: Request) -> Response:
-        return await call_tool(server, "install_database", await json_object(request))
+        return await call_tool(server, context, "install_database", await json_object(request))
 
     async def listed(request: Request) -> Response:
-        return await call_tool(server, "list_installs", {})
+        return await call_tool(server, context, "list_installs", {})
 
     async def read(request: Request) -> Response:
-        return await call_tool(server, "get_install", {"install_id": request.path_params["id"]})
+        return await call_tool(
+            server, context, "get_install", {"install_id": request.path_params["id"]}
+        )
 
     async def cancelled(request: Request) -> Response:
-        return await call_tool(server, "cancel_install", {"install_id": request.path_params["id"]})
+        return await call_tool(
+            server, context, "cancel_install", {"install_id": request.path_params["id"]}
+        )
 
     @answering
     async def licence(request: Request) -> Response:
         """The terms file of the install the request names, NotFound when it stopped at none."""
         install = Answer[Install].model_validate(
-            await structured(server, "get_install", {"install_id": request.path_params["id"]})
+            await structured(
+                server, context, "get_install", {"install_id": request.path_params["id"]}
+            )
         )
         terms = install.value.terms
         if terms is None:
@@ -114,7 +120,9 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
         except BaseException:
             zipped.unlink(missing_ok=True)
             raise
-        answered = await call_tool(server, "install_database", {**draft, "package": str(zipped)})
+        answered = await call_tool(
+            server, context, "install_database", {**draft, "package": str(zipped)}
+        )
         if answered.status_code >= 400:
             zipped.unlink(missing_ok=True)
         return answered

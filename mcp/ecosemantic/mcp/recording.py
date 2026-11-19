@@ -5,23 +5,23 @@ from __future__ import annotations
 
 import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from typing import Protocol, runtime_checkable
 
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
-from fastmcp.tools.base import ToolResult
+from fastmcp.tools.base import Tool, ToolResult
 from mcp.types import CallToolRequestParams
 from pydantic import JsonValue
 
 from ecosemantic.errors import ErrorEnvelope, Invalid, NotFound
-from ecosemantic.events import Event, EventBus
+from ecosemantic.events import Event
 from ecosemantic.mcp.calls import InProgress, begin, end
+from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import effect_of
 from ecosemantic.mcp.envelopes import envelope_of, tool_error
 from ecosemantic.model.refs import slug
 from ecosemantic.model.summary import Summarising
-from ecosemantic.ports.activity import ActivityPort
 from ecosemantic.ports.storage import StoragePort
 from ecosemantic.ports.types import CallDraft, Effect, LogEntry, Origin, checked_agent
 
@@ -83,17 +83,8 @@ class Recorder(Middleware):
     """Records every tool call an agent makes, and every calculation a person starts from the
     page; the calculations the page makes to draw a result are not recorded."""
 
-    def __init__(
-        self,
-        activity: ActivityPort,
-        storage: StoragePort,
-        events: EventBus,
-        configured: str | None,
-    ) -> None:
-        self.activity = activity
-        self.storage = storage
-        self.events = events
-        self.configured = configured
+    def __init__(self, context: ServerContext) -> None:
+        self.context = context
 
     async def on_call_tool(
         self,
@@ -114,68 +105,89 @@ class Recorder(Middleware):
         meta = served.request_context.meta if served.request_context else None
         started = isinstance(meta, dict) and meta.get(STARTED) is True
         try:
-            agent = agent_named(on_url, self.configured, client)
+            agent = agent_named(on_url, self.context.agent, client)
         except Invalid as refused:
             raise tool_error(refused) from refused
-        origin: Origin = "view" if client == VIEW else "agent"
-        effect = effect_of(tool.annotations, tool.tags)
-        progress = InProgress(agent=agent, client=client)
-        token = begin(progress)
-        started_at = datetime.now(UTC)
-        clock = time.perf_counter()
-        failed: ErrorEnvelope | None = None
-        try:
-            return await call_next(context)
-        except Exception as raised:
-            failed = envelope_of(raised)
-            raise
-        finally:
-            end(token)
-            if origin == "agent" or (effect == "compute" and started):
-                await self._record(
-                    progress,
-                    origin,
-                    context.message.name,
-                    effect,
-                    dict(context.message.arguments or {}),
-                    started_at,
-                    round((time.perf_counter() - clock) * 1000),
-                    failed,
-                )
-
-    async def _record(
-        self,
-        progress: InProgress,
-        origin: Origin,
-        tool: str,
-        effect: Effect,
-        arguments: dict[str, JsonValue],
-        started_at: datetime,
-        duration_ms: int,
-        failed: ErrorEnvelope | None,
-    ) -> None:
-        answer = progress.answer
-        system = progress.product_system_id or _named_system(arguments)
-        entry = answer.entry if isinstance(answer, Logged) else None
-        at_hash = entry.result_hash if entry is not None else None
-        if at_hash is None and system is not None and failed is None:
-            at_hash = await current_hash(self.storage, system)
-        call = await self.activity.record(
-            CallDraft(
-                agent=progress.agent,
-                client=progress.client,
-                origin=origin,
-                tool=tool,
-                effect=effect,
-                arguments=arguments,
-                product_system_id=system,
-                at_hash=at_hash,
-                entry_seq=entry.seq if entry is not None else None,
-                started_at=started_at,
-                duration_ms=duration_ms,
-                outcome="ok" if failed is None else "error",
-                summary=answer.summarise() if isinstance(answer, Summarising) else None,
-                error=failed,
-            )
+        return await recorded(
+            self.context,
+            tool,
+            dict(context.message.arguments or {}),
+            InProgress(agent=agent, client=client),
+            started,
+            lambda: call_next(context),
         )
-        self.events.publish(Event(kind="call", product_system_id=system, call=call))
+
+
+async def recorded(
+    context: ServerContext,
+    tool: Tool,
+    arguments: dict[str, JsonValue],
+    progress: InProgress,
+    started: bool,
+    run: Callable[[], Awaitable[ToolResult]],
+) -> ToolResult:
+    """Run one tool call as the call in progress, and record it when it is kept: every call an
+    agent makes, and every calculation a person starts from the page."""
+    origin: Origin = "view" if progress.client == VIEW else "agent"
+    effect = effect_of(tool.annotations, tool.tags) if origin == "agent" or started else None
+    token = begin(progress)
+    started_at = datetime.now(UTC)
+    clock = time.perf_counter()
+    failed: ErrorEnvelope | None = None
+    try:
+        return await run()
+    except Exception as raised:
+        failed = envelope_of(raised)
+        raise
+    finally:
+        end(token)
+        if effect is not None and (origin == "agent" or effect == "compute"):
+            await _record(
+                context,
+                progress,
+                origin,
+                tool.name,
+                effect,
+                arguments,
+                started_at,
+                round((time.perf_counter() - clock) * 1000),
+                failed,
+            )
+
+
+async def _record(
+    context: ServerContext,
+    progress: InProgress,
+    origin: Origin,
+    tool: str,
+    effect: Effect,
+    arguments: dict[str, JsonValue],
+    started_at: datetime,
+    duration_ms: int,
+    failed: ErrorEnvelope | None,
+) -> None:
+    answer = progress.answer
+    system = progress.product_system_id or _named_system(arguments)
+    entry = answer.entry if isinstance(answer, Logged) else None
+    at_hash = entry.result_hash if entry is not None else None
+    if at_hash is None and system is not None and failed is None:
+        at_hash = await current_hash(context.storage, system)
+    call = await context.activity.record(
+        CallDraft(
+            agent=progress.agent,
+            client=progress.client,
+            origin=origin,
+            tool=tool,
+            effect=effect,
+            arguments=arguments,
+            product_system_id=system,
+            at_hash=at_hash,
+            entry_seq=entry.seq if entry is not None else None,
+            started_at=started_at,
+            duration_ms=duration_ms,
+            outcome="ok" if failed is None else "error",
+            summary=answer.summarise() if isinstance(answer, Summarising) else None,
+            error=failed,
+        )
+    )
+    context.events.publish(Event(kind="call", product_system_id=system, call=call))

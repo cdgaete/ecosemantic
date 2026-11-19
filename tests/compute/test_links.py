@@ -17,8 +17,21 @@ from ecosemantic.errors import Invalid, NotFound
 from ecosemantic.model.canonical import base_pin, content_hash
 from ecosemantic.model.entities import Actor, Case, Exchange, Parameter, Process, ProductSystem
 from ecosemantic.model.refs import SystemRef
+from ecosemantic.ports.types import ProductSystemSummary
 from tests.conftest import DATABASE, frame_system, widget_linking
 from tests.memory_storage import MemoryStorage
+
+
+class _RecordingStore(MemoryStorage):
+    """A store that counts the listings made of it."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.listings = 0
+
+    async def list_product_systems(self) -> list[ProductSystemSummary]:
+        self.listings += 1
+        return await super().list_product_systems()
 
 
 def _system(name: str, *links: SystemRef) -> ProductSystem:
@@ -188,3 +201,16 @@ async def test_held_pins_name_what_the_store_holds_for_each_link() -> None:
     ]
     await storage.delete_product_system(frame.id, agent)
     assert [p.name for p in await held_pins(widget, storage)] == [None]
+
+
+async def test_a_system_that_links_none_is_validated_without_listing_the_store() -> None:
+    agent = Actor(kind="agent", id="claude")
+    storage = _RecordingStore()
+    frame = frame_system()
+    await storage.put_product_system(frame, agent, "created")
+    stored = await storage.get_product_system(frame.id)
+    storage.listings = 0
+    assert await held_pins(stored, storage) == []
+    assert storage.listings == 0
+    assert [p.name for p in await held_pins(widget_linking(stored), storage)] == ["frame"]
+    assert storage.listings == 1

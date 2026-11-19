@@ -19,7 +19,7 @@ SMALL = Database(
     version="1",
     system_model="unit process",
 )
-SMALL_GWP = Method.of(("small", "gwp", "climate change > GWP100"), "kg CO2-Eq")
+SMALL_GWP = Method.of(("small", "gwp", "climate change", "GWP100"), "kg CO2-Eq")
 
 
 def small(

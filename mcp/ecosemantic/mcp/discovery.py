@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Literal, assert_never
 
 from fastmcp import FastMCP
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import READ
@@ -49,6 +49,20 @@ class Term(BaseModel):
     detail: str | None = None
 
 
+class MethodListing(Listing[Method]):
+    """One page of impact methods, with each method family among the hits to the names of its
+    weighting sets, in the bundle's order of them, none where the bundle names none."""
+
+    weighting_sets: dict[str, list[str | None]] = Field(default_factory=dict)
+
+    @classmethod
+    def weighted(
+        cls, page: Listing[Method], weighting_sets: dict[str, list[str | None]]
+    ) -> MethodListing:
+        """The methods of a page with their families' weighting sets beside them."""
+        return cls(**page.model_dump(), weighting_sets=weighting_sets)
+
+
 async def list_databases(context: ServerContext) -> Answer[list[Database]]:
     """The background databases this server serves, with the hint that leads an engine serving
     none to the sources it installs one from."""
@@ -86,7 +100,9 @@ async def search_processes(
     if page.items:
         return listing(page)
     strangers = []
-    if location is not None and location not in await context.inventory.list_locations(database):
+    if location is not None and location not in {
+        found.code for found in await context.inventory.list_locations(database)
+    }:
         strangers.append(stranger("location", location, database, "locations"))
     if unit is not None and unit not in await context.inventory.list_units(database):
         strangers.append(stranger("unit", unit, database, "units"))
@@ -140,12 +156,18 @@ async def search_methods(
     query: str,
     limit: Limit = 20,
     cursor: str | None = None,
-) -> Listing[Method]:
+) -> MethodListing:
     require_term(query)
     page = await context.search.methods(database, query, limit, cursor)
+    weightings = {
+        family: [
+            weighting.name for weighting in await context.inventory.weighting_sets(database, family)
+        ]
+        for family in sorted({method.impact_method for method in page.items})
+    }
     if not page.items:
-        return listing(page, empty_methods_hint(query))
-    return listing(page)
+        return MethodListing.weighted(listing(page, empty_methods_hint(query)), weightings)
+    return MethodListing.weighted(listing(page), weightings)
 
 
 async def get_background_process(
@@ -172,7 +194,10 @@ async def list_vocabulary(
         case "units":
             terms = [Term(value=u) for u in await context.inventory.list_units(database)]
         case "locations":
-            terms = [Term(value=lo) for lo in await context.inventory.list_locations(database)]
+            terms = [
+                Term(value=location.code, detail=location.name)
+                for location in await context.inventory.list_locations(database)
+            ]
         case "compartments":
             terms = []
             for compartment in await context.inventory.list_compartments(database):
@@ -185,10 +210,15 @@ async def list_vocabulary(
             counts: dict[str, int] = {}
             for method in await context.inventory.list_methods(database):
                 counts[method.impact_method] = counts.get(method.impact_method, 0) + 1
-            terms = [
-                Term(value=name, detail=f"{n} method" if n == 1 else f"{n} methods")
-                for name, n in sorted(counts.items())
-            ]
+            terms = []
+            for name, n in sorted(counts.items()):
+                sets = [
+                    weighting.name or "an unnamed set"
+                    for weighting in await context.inventory.weighting_sets(database, name)
+                ]
+                counted = f"{n} method" if n == 1 else f"{n} methods"
+                detail = f"{counted}; weighting sets: {'; '.join(sets)}" if sets else counted
+                terms.append(Term(value=name, detail=detail))
         case "impact_categories":
             seen: list[str] = []
             for method in await context.inventory.list_methods(database):

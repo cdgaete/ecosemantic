@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useBackgroundProcess } from '@/api/queries'
 import type { BackgroundProcess } from '@/api/types'
 import { paths } from '@/lib/paths'
@@ -8,6 +8,7 @@ import { Section } from '@/window/Section'
 import { DetailHeader } from './DetailHeader'
 import { BackgroundExchangeTables } from './ExchangeTables'
 import { Facts } from './Facts'
+import { EXPLORER_LINKS, type DatasetLinks } from './links'
 
 interface Classification {
   scheme: string
@@ -45,7 +46,22 @@ function factsOf(name: string, process: BackgroundProcess): [string, string][] {
   ]
 }
 
-export function ProcessDetail({ name, item }: { name: string; item: string }) {
+function listed(title: string): ReactNode {
+  return <DetailHeader title={title} />
+}
+
+/** One background process: its facts, classifications, comment and exchanges, under the header and with the links its place gives it; the explorer's by default. */
+export function ProcessDetail({
+  name,
+  item,
+  links = EXPLORER_LINKS,
+  header = listed,
+}: {
+  name: string
+  item: string
+  links?: DatasetLinks
+  header?: (title: string) => ReactNode
+}) {
   const read = useBackgroundProcess(name, item)
   const [opened, setOpened] = useState(false)
   const process = read.data?.value
@@ -77,7 +93,7 @@ export function ProcessDetail({ name, item }: { name: string; item: string }) {
   const key = `explorer:${name}:${item}`
   return (
     <section aria-label={process.name} className="flex min-w-0 flex-col">
-      <DetailHeader title={process.name} />
+      {header(process.name)}
       <Facts rows={factsOf(name, process)} />
       {process.url === null ? null : (
         <a href={process.url} target="_blank" rel="noreferrer" className="min-w-0 pt-1 text-xs text-accent [overflow-wrap:anywhere]">
@@ -99,7 +115,7 @@ export function ProcessDetail({ name, item }: { name: string; item: string }) {
           </p>
         </Section>
       )}
-      <BackgroundExchangeTables database={name} exchanges={process.exchanges ?? []} sectionKey={key} />
+      <BackgroundExchangeTables database={name} exchanges={process.exchanges ?? []} sectionKey={key} links={links} />
     </section>
   )
 }

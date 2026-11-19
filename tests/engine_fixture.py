@@ -24,6 +24,7 @@ from ecosemantic.package.base_writer import (
 )
 from ecosemantic.package.compile import compile_background
 from tests.fixture_data import (
+    CAS_FIELDS,
     CLASSIFICATIONS,
     CODES,
     FIXTURE_DATABASE,
@@ -69,7 +70,7 @@ def _flows() -> tuple[BaseFlow, ...]:
             unit=unit,
             categories=categories,
             type="natural resource" if categories[0] == "natural resource" else "emission",
-            cas=None,
+            cas=CAS_FIELDS.get(key),
         )
         for key, (name, categories, unit) in FLOWS.items()
     )
@@ -121,7 +122,7 @@ def fixture_rows() -> BaseRows:
         )
         for key, unit, factors in METHODS
     )
-    return BaseRows(datasets=datasets, flows=flows, methods=methods)
+    return BaseRows(datasets=datasets, flows=flows, methods=methods, locations={"GLO": "Global"})
 
 
 def fixture_bundle(directory: Path) -> Path:
@@ -177,7 +178,7 @@ def looped_rows() -> BaseRows:
         for key, (name, unit, inputs, co2) in LOOP_PROCESSES.items()
     )
     methods = (BaseMethod(key=LOOP_GWP, unit="kg CO2-Eq", factors=((FLOW_IDS["co2"], 1.0),)),)
-    return BaseRows(datasets=datasets, flows=_flows(), methods=methods)
+    return BaseRows(datasets=datasets, flows=_flows(), methods=methods, locations={"GLO": "Global"})
 
 
 def looped_bundle(directory: Path) -> Path:

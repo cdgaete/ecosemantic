@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from ecosemantic.databases import profiles
 
@@ -37,8 +37,8 @@ class Validated(BaseModel):
 
 class Profile(BaseModel):
     """One USLCI release's pinned facts: its inventory, the repositories its bridges link to and its
-    methods, the file names of its two lists, and the tolerance and counts a validated run
-    recorded."""
+    methods, the file names of its two lists, the revision EcoSemantic builds it at and the
+    correction list it records, and the tolerance and counts a validated run recorded."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -49,6 +49,8 @@ class Profile(BaseModel):
     bridged: tuple[Pin, ...] = ()
     unlinked: str
     left_out: str
+    revision: int = Field(ge=1)
+    corrections: str | None = None
     tolerance: float | None = None
     validated: Validated | None = None
 

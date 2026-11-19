@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.exceptions import ToolError
 from mcp.types import Implementation
 
+from ecosemantic.errors import NotFound
 from ecosemantic.mcp.context import ServerContext
-from ecosemantic.mcp.graph import Arrangement
+from ecosemantic.mcp.graph import Arrangement, graph_layout
 from ecosemantic.model.canonical import base_pin
 from ecosemantic.model.entities import (
     Case,
@@ -21,10 +23,12 @@ from ecosemantic.model.entities import (
     ProductSystem,
     Scenario,
 )
-from ecosemantic.model.refs import ForegroundRef
-from ecosemantic.ports.types import Layout, Spot
+from ecosemantic.model.refs import ElementaryFlowRef, ForegroundRef
+from ecosemantic.ports.inventory import InventoryPort, no_flow
+from ecosemantic.ports.types import ElementaryFlow, Layout, Spot
 from ecosemantic.troubles import score, troubles
-from tests.conftest import frame_system, widget_linking
+from tests.conftest import fixture_system, frame_system, widget_linking
+from tests.fixture_data import FIXTURE_BIO, FLOW_IDS
 
 
 async def test_the_map_names_every_card_and_says_what_is_wrong(
@@ -306,6 +310,70 @@ async def test_a_linked_card_holds_its_reference_processs_production_at_its_leve
     production = next(e for e in frame.processes[0].exchanges if e.type == "production")
     assert card["activity"] == pytest.approx(0.25)
     assert card["scaled"] == {str(production.id): pytest.approx(0.25)}
+
+
+class CountedFlows:
+    """The inventory it wraps, counting the flow reads a tool makes of it."""
+
+    def __init__(self, inventory: InventoryPort) -> None:
+        self.inventory = inventory
+        self.many: list[tuple[str, list[str]]] = []
+        self.single: list[ElementaryFlowRef] = []
+
+    async def get_elementary_flow(self, ref: ElementaryFlowRef) -> ElementaryFlow:
+        self.single.append(ref)
+        return await self.inventory.get_elementary_flow(ref)
+
+    async def get_elementary_flows(self, database: str, ids: Sequence[str]) -> list[ElementaryFlow]:
+        self.many.append((database, list(ids)))
+        return await self.inventory.get_elementary_flows(database, ids)
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self.inventory, name)
+
+
+def _with_an_extra_emission(system: ProductSystem) -> ProductSystem:
+    """The fixture's widget with a second elementary input on the same flows database."""
+    varied = system.model_copy(deep=True, update={"id": uuid.uuid4()})
+    varied.process("widget").exchanges.append(
+        Exchange(
+            id=uuid.uuid4(),
+            type="elementary",
+            name="Methane, fossil",
+            amount=0.02,
+            unit="kilogram",
+            input=ElementaryFlowRef(database=FIXTURE_BIO, id=FLOW_IDS["ch4"]),
+        )
+    )
+    return varied
+
+
+async def test_a_layout_reads_its_flows_in_one_call_per_database(
+    context: ServerContext, fixture_system_stored: ProductSystem
+) -> None:
+    system = _with_an_extra_emission(fixture_system_stored)
+    await context.storage.put_product_system(system, context.actor, "created")
+    counted = CountedFlows(context.inventory)
+    wrapped = dataclasses.replace(context, inventory=counted)
+    one_read = await graph_layout(wrapped, str(system.id))
+    assert [database for database, _ in counted.many] == [FIXTURE_BIO]
+    assert {FLOW_IDS["co2"], FLOW_IDS["ch4"]} == set(counted.many[0][1])
+    assert counted.single == []
+    assert one_read == await graph_layout(context, str(system.id))
+
+
+async def test_a_layout_names_the_flow_its_database_lacks(ports_only: ServerContext) -> None:
+    system = _with_an_extra_emission(fixture_system().product_system)
+    absent = ElementaryFlowRef(database=FIXTURE_BIO, id=FLOW_IDS["ch4"][:-1] + "0")
+    system.process("widget").exchanges[-1].input = absent
+    await ports_only.storage.put_product_system(system, ports_only.actor, "created")
+    counted = CountedFlows(ports_only.inventory)
+    wrapped = dataclasses.replace(ports_only, inventory=counted)
+    with pytest.raises(NotFound) as raised:
+        await graph_layout(wrapped, str(system.id))
+    assert str(raised.value) == str(no_flow(absent))
+    assert [database for database, _ in counted.many] == [FIXTURE_BIO]
+    assert counted.single == []
 
 
 def _without_reference(system: ProductSystem) -> None:

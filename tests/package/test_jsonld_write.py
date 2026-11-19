@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import uuid
 from pathlib import Path
 
@@ -9,7 +10,7 @@ import pytest
 
 from ecosemantic.errors import NotFound, NotSupported
 from ecosemantic.model import units
-from ecosemantic.model.entities import Exchange, Process, ProductSystem
+from ecosemantic.model.entities import Exchange, Process, ProductSystem, Uncertainty
 from ecosemantic.model.refs import (
     Database,
     ElementaryFlowRef,
@@ -26,10 +27,26 @@ from ecosemantic.package.jsonld import (
     strip_prefix,
     write_jsonld,
 )
+from ecosemantic.package.olca import Bounds, WrittenLognormal
 from ecosemantic.package.sidecar import supplier_key
 from ecosemantic.ports.resolver import FlowInfo
 from tests.conftest import COTTON, ELEC_CH
 from tests.dict_resolver import DictResolver
+
+
+def bounded(product_system: ProductSystem) -> ProductSystem:
+    """The fixture document with bounds on an exchange's lognormal and on the lognormal of the one
+    literal parameter no uncertain exchange reads."""
+    out = product_system.model_copy(deep=True)
+    out.process("tshirt").exchanges[2].uncertainty = Uncertainty(
+        type="lognormal",
+        params={"loc": math.log(0.3), "scale": 0.2, "minimum": 0.2, "maximum": 0.45},
+    )
+    out.parameter("waste_rate").uncertainty = Uncertainty(
+        type="lognormal",
+        params={"loc": math.log(0.1), "scale": 0.2, "minimum": 0.05, "maximum": 0.2},
+    )
+    return out
 
 
 def test_formula_rewriting_is_reversible() -> None:
@@ -91,6 +108,24 @@ def test_writer_derives_background_ids_and_prefixes_parameters(
     )
     assert [s["name"] for s in system["parameterSets"]] == ["small", "large"]
     assert system["parameterSets"][0]["parameters"][0]["name"] == "cotton_tshirt__fabric_mass"
+
+
+def test_bounds_live_in_the_sidecar_and_openlca_reads_the_distribution_without_them(
+    product_system: ProductSystem, resolver: DictResolver, tmp_path: Path
+) -> None:
+    system = bounded(product_system)
+    identities = write_jsonld(system, tmp_path, resolver)
+    tshirt = system.process("tshirt")
+    key = f"{tshirt.id}:3"
+    assert tshirt.exchanges[2].name == "sewing electricity"
+    assert identities.exchange_bounds[key] == Bounds(minimum=0.2, maximum=0.45)
+    assert identities.lognormals[key] == WrittenLognormal(loc=math.log(0.3), scale=0.2)
+    assert identities.parameter_bounds["waste_rate"] == Bounds(minimum=0.05, maximum=0.2)
+    data = json.loads((tmp_path / "processes" / f"{tshirt.id}.json").read_text(encoding="utf-8"))
+    written = next(e for e in data["exchanges"] if e["internalId"] == 3)
+    assert written["uncertainty"]["distributionType"] == "LOG_NORMAL_DISTRIBUTION"
+    assert "minimum" not in written["uncertainty"]
+    assert "maximum" not in written["uncertainty"]
 
 
 def test_writer_rejects_unknown_units(

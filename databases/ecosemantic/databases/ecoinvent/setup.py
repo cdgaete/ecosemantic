@@ -8,9 +8,10 @@ from pathlib import Path
 
 from ecosemantic.databases.ecoinvent.build import build
 from ecosemantic.databases.ecoinvent.download import ReleaseClient, download
-from ecosemantic.databases.ecoinvent.profile import Profile, database_name
+from ecosemantic.databases.ecoinvent.profile import RELEASES, Profile, database_name
 from ecosemantic.databases.ecoinvent.release import SystemModel
 from ecosemantic.databases.ecoinvent.validate import TOLERANCE, Validation, validate
+from ecosemantic.databases.revision import listed_corrections
 from ecosemantic.errors import Invalid
 from ecosemantic.package.background import Import, read_background
 from ecosemantic.ports.types import InstallProgress, Reporter
@@ -67,7 +68,14 @@ def prepare(
     release = download(version, system_model, client)
     report(InstallProgress(step="downloaded", count=_bytes(*release.files().values())))
     report(InstallProgress(step="building"))
-    built = build(release, profile, work, datetime.now(UTC))
+    built = build(
+        release,
+        profile,
+        work,
+        datetime.now(UTC),
+        revision=profile.revision,
+        corrections=listed_corrections(RELEASES, profile.corrections),
+    )
     report(InstallProgress(step="validating"))
     validation = validate(
         release,

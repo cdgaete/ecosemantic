@@ -4,19 +4,19 @@
       "agent": "fixture-agent",
       "arguments": {
         "method_id": "m_bff077f3bd",
-        "product_system_id": "c5bd37b7-f847-4161-87e7-6505a2e76d11"
+        "product_system_id": "b7f31920-33c5-4e54-bfa5-c05a2479dc66"
       },
       "at_hash": "07a6bf4ddc0b9dd36be657b755ddd13e908b50af2fb6538e4ed633217c07be59",
       "client": "fixture-agent",
-      "duration_ms": 9,
+      "duration_ms": 5,
       "effect": "compute",
       "entry_seq": null,
       "error": null,
-      "id": "4356d927-908d-4ae7-91c5-3c6b60c9e014",
+      "id": "be945025-00a6-4cc3-8e94-e7dc542ad0ee",
       "origin": "agent",
       "outcome": "ok",
-      "product_system_id": "c5bd37b7-f847-4161-87e7-6505a2e76d11",
-      "started_at": "2026-11-17T01:07:39.487594Z",
+      "product_system_id": "b7f31920-33c5-4e54-bfa5-c05a2479dc66",
+      "started_at": "2026-11-19T15:55:50.644076Z",
       "summary": {
         "count": null,
         "demand": [

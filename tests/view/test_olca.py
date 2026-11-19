@@ -54,6 +54,39 @@ def test_the_package_downloads_and_returns(
     assert any(c["after"] == "checked in openLCA" for c in entry["changes"])
 
 
+def test_a_package_return_that_changes_nothing_writes_no_entry(
+    client: TestClient, fixture_system_stored: ProductSystem
+) -> None:
+    base = f"/api/product-systems/{fixture_system_stored.id}"
+    downloaded = client.get(f"{base}/package.zip").content
+    before = len(client.get(f"{base}/log").json()["value"])
+    response = client.post(
+        f"{base}/return",
+        files={"package": ("export.zip", downloaded, "application/zip")},
+        data={"actor": "Carlos"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "message": "The returned package changes nothing; no entry was written."
+    }
+    assert len(client.get(f"{base}/log").json()["value"]) == before
+
+
+async def test_the_package_is_named_after_its_system(
+    client: TestClient, context: ServerContext
+) -> None:
+    copper = frame_system().model_copy(
+        update={"id": uuid.uuid4(), "name": "Cátodo de cobre — Chile (ruta pirometalúrgica)"}
+    )
+    await context.storage.put_product_system(copper, context.actor, "created")
+    response = client.get(f"/api/product-systems/{copper.id}/package.zip")
+    assert response.status_code == 200
+    assert response.headers["content-disposition"] == (
+        "attachment; filename="
+        f'"catodo-de-cobre-chile-ruta-pirometalurgica-{str(copper.id)[:8]}-openlca.zip"'
+    )
+
+
 def test_a_failed_export_leaves_no_temp_directory(
     context: ServerContext,
     full_server: FastMCP,
@@ -144,7 +177,10 @@ def test_an_upload_at_each_limit_returns(
         files={"package": ("export.zip", downloaded, "application/zip")},
         data={"actor": "Carlos"},
     )
-    assert response.status_code == 201, response.text
+    assert response.status_code == 200, response.text
+    assert response.json()["message"] == (
+        "The returned package changes nothing; no entry was written."
+    )
 
 
 def test_the_limits_are_100_mb_uploaded_1_gb_unpacked_and_100000_entries() -> None:

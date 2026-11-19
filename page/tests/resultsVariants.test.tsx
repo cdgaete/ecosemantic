@@ -40,9 +40,9 @@ vi.mock('@/api/client', async (importOriginal) => {
   }
 })
 
-it('keeps the score on screen in a narrow panel: the category folds away and the variants go under the name', async () => {
+it('keeps the score on screen in a narrow panel: the indicator folds away and the variants go under the name', async () => {
   renderAt(`/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}&variants=small`, <App router={false} />)
-  const header = await screen.findByRole('columnheader', { name: 'Category' })
+  const header = await screen.findByRole('columnheader', { name: 'Indicator' })
   expect(header).toHaveClass('hidden', '@lg:table-cell')
   const variant = withVariant.value.variants[0]
   const sign = variant.deltas[0] >= 0 ? '+' : '−'

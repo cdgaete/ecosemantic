@@ -130,6 +130,7 @@ def fixture_release(
         ),
         unlinked=f"unlinked-{VERSION}.csv",
         left_out=f"left-out-{VERSION}.csv",
+        revision=1,
     )
     released = tmp_path / "releases"
     released.mkdir()

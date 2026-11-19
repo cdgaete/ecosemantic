@@ -3,7 +3,8 @@
   "hint": null,
   "items": [
     {
-      "cas_number": null,
+      "cas_as_published": null,
+      "cas_number": "124-38-9",
       "compartment": "air",
       "flow_type": "emission",
       "name": "Carbon dioxide, fossil",

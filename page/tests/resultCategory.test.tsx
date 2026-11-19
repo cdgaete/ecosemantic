@@ -1,6 +1,9 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { useLocation } from 'react-router-dom'
 import { Screens } from '@/App'
+import { api } from '@/api/client'
+import { useUi } from '@/store/ui'
+import type { Answer, ImpactResult } from '@/api/types'
 import databases from './fixtures/databases.json'
 import byPath from './fixtures/contributions_path.json'
 import impact from './fixtures/impact.json'
@@ -64,4 +67,47 @@ it('writes the chosen category into the address, which the other result pages ca
   fireEvent.change(select, { target: { value: 'm_second' } })
   await waitFor(() => expect(screen.getByTestId('address').textContent).toContain('category=m_second'))
   expect(screen.getByRole('link', { name: 'Sankey diagram' }).getAttribute('href')).toContain('category=m_second')
+})
+
+const systemId = system.value.id
+const firstZero = { ...twoCategories, value: { ...twoCategories.value, scores: [{ ...first, value: 0 }, second] } }
+const allZero = { ...twoCategories, value: { ...twoCategories.value, scores: [{ ...first, value: 0 }, { ...second, value: 0 }] } }
+
+beforeEach(() => {
+  useUi.setState({ resultCategories: {} })
+})
+
+const categorySelect = async () => (await screen.findByLabelText('Impact category')) as HTMLSelectElement
+
+it('process results open on the category last chosen for the system', async () => {
+  renderAt(`${base}/processes${search}`, <Screens />)
+  const select = await categorySelect()
+  await waitFor(() => expect(select.value).toBe(first.method_id))
+  fireEvent.change(select, { target: { value: 'm_second' } })
+  await waitFor(() => expect(select.value).toBe('m_second'))
+  cleanup()
+  renderAt(`${base}/processes${search}`, <Screens />)
+  const again = await categorySelect()
+  await waitFor(() => expect(again.value).toBe('m_second'))
+})
+
+it('a first visit opens on the first category whose score is not 0', async () => {
+  vi.mocked(api.impact).mockResolvedValue(firstZero as Answer<ImpactResult>)
+  renderAt(`${base}/processes${search}&amount=2`, <Screens />)
+  const select = await categorySelect()
+  await waitFor(() => expect(select.value).toBe('m_second'))
+})
+
+it('scores all 0 open on the first', async () => {
+  vi.mocked(api.impact).mockResolvedValue(allZero as Answer<ImpactResult>)
+  renderAt(`${base}/processes${search}&amount=3`, <Screens />)
+  const select = await categorySelect()
+  await waitFor(() => expect(select.value).toBe(first.method_id))
+})
+
+it('a category of another family is not kept', async () => {
+  useUi.setState({ resultCategories: { [systemId]: 'm_gone' } })
+  renderAt(`${base}/processes${search}`, <Screens />)
+  const select = await categorySelect()
+  await waitFor(() => expect(select.value).toBe(first.method_id))
 })

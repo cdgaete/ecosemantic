@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
 import type { ContributionArguments, Credential, CredentialKind, ImpactArguments, InstallDraft, InventoryArguments, RequestDraft, StartRunArguments, VocabularyKind } from './types'
 
@@ -6,9 +6,10 @@ export const keys = {
   databases: ['databases'] as const,
   vocabulary: (database: string, kind: VocabularyKind) => ['vocabulary', database, kind] as const,
   systems: ['systems'] as const,
+  home: ['systems', 'home'] as const,
   system: (id: string) => ['system', id] as const,
   log: (id: string) => ['log', id] as const,
-  parameters: (id: string, hash: string | null) => ['parameters', id, hash] as const,
+  parameters: (id: string, hash: string | null, variant: string | null) => ['parameters', id, hash, variant] as const,
   validation: (id: string) => ['validation', id] as const,
   anchors: (id: string) => ['anchors', id] as const,
   layouts: (id: string) => ['layout', id] as const,
@@ -21,6 +22,7 @@ export const keys = {
   version: (id: string, hash: string) => ['version', id, hash] as const,
   background: (database: string, ref: string) => ['background', database, ref] as const,
   flow: (database: string, id: string) => ['flow', database, id] as const,
+  flows: (database: string, ids: string[]) => ['flows', database, [...ids].sort()] as const,
   search: (database: string, kind: string, params: Record<string, string | number | undefined>) => ['search', database, kind, params] as const,
   summary: (database: string) => ['summary', database] as const,
   schemes: (database: string) => ['schemes', database] as const,
@@ -59,12 +61,13 @@ export const useCompartments = (database: string, enabled = true) =>
     ...forever,
   })
 export const useSystems = () => useQuery({ queryKey: keys.systems, queryFn: ({ signal }) => api.systems(signal), ...forever })
+export const useHome = () => useQuery({ queryKey: keys.home, queryFn: ({ signal }) => api.home(signal), ...forever })
 export const useSystem = (id: string, enabled = true) => useQuery({ queryKey: keys.system(id), queryFn: ({ signal }) => api.system(id, signal), enabled, ...forever })
 export const useSystemAs = (id: string, variant: string | null) =>
   useQuery({ queryKey: [...keys.system(id), 'variant', variant] as const, queryFn: () => api.systemAs(id, variant!), enabled: variant !== null, ...forever })
 export const useLog = (id: string, enabled = true) => useQuery({ queryKey: keys.log(id), queryFn: ({ signal }) => api.log(id, signal), enabled, ...forever })
-export const useParameters = (id: string, hash: string | null) =>
-  useQuery({ queryKey: keys.parameters(id, hash), queryFn: () => api.parameters(id, hash ?? undefined), ...forever })
+export const useParameters = (id: string, hash: string | null, variant: string | null) =>
+  useQuery({ queryKey: keys.parameters(id, hash, variant), queryFn: () => api.parameters(id, hash ?? undefined, variant ?? undefined), ...forever })
 export const useValidation = (id: string, enabled = true) => useQuery({ queryKey: keys.validation(id), queryFn: ({ signal }) => api.validation(id, undefined, signal), enabled, ...forever })
 export const useAnchors = (id: string, enabled = true) => useQuery({ queryKey: keys.anchors(id), queryFn: ({ signal }) => api.anchors(id, signal), enabled, ...forever })
 export const useAgents = () => useQuery({ queryKey: keys.agents, queryFn: ({ signal }) => api.agents(signal), ...forever })
@@ -78,10 +81,10 @@ export const useOpenTrail = (agent: string, systemId: string) => useQuery(openTr
 export const useRerun = () => useMutation({ mutationFn: (callId: string) => api.rerun(callId) })
 export const useRequests = (id: string) => useQuery({ queryKey: keys.requests(id), queryFn: () => api.requests(id), ...forever })
 export const useVersion = (id: string, hash: string) => useQuery({ queryKey: keys.version(id, hash), queryFn: () => api.version(id, hash), ...forever })
-export const useBackgroundProcess = (database: string, ref: string) =>
-  useQuery({ queryKey: keys.background(database, ref), queryFn: () => api.backgroundProcess(database, ref), ...forever })
-export const useElementaryFlow = (database: string, id: string) =>
-  useQuery({ queryKey: keys.flow(database, id), queryFn: () => api.elementaryFlow(database, id), ...forever })
+export const useBackgroundProcess = (database: string, ref: string, enabled = true) =>
+  useQuery({ queryKey: keys.background(database, ref), queryFn: () => api.backgroundProcess(database, ref), enabled, ...forever })
+export const useElementaryFlow = (database: string, id: string, enabled = true) =>
+  useQuery({ queryKey: keys.flow(database, id), queryFn: () => api.elementaryFlow(database, id), enabled, ...forever })
 export const useSearchProcesses = (database: string, params: { query: string; location?: string; unit?: string; limit?: number; cursor?: string }) =>
   useQuery({ queryKey: keys.search(database, 'processes', params), queryFn: () => api.searchProcesses(database, params), enabled: params.query.length > 0, ...forever })
 export const useSearchElementaryFlows = (database: string, params: { query: string; compartment?: string; limit?: number; cursor?: string }) =>
@@ -94,20 +97,22 @@ export const useSchemes = (database: string) =>
   useQuery({ queryKey: keys.schemes(database), queryFn: () => api.schemes(database), ...forever })
 export const useTree = (database: string, scheme: string | null) =>
   useQuery({ queryKey: keys.tree(database, scheme ?? ''), queryFn: () => api.tree(database, scheme!), enabled: Boolean(scheme), ...forever })
-export const useUnderNode = (database: string, scheme: string | null, params: { node: string; query?: string; limit?: number; cursor?: string }) =>
+export const useUnderNode = (database: string, scheme: string | null, params: { node: string; query?: string; limit?: number; cursor?: string; item?: string }) =>
   useQuery({
     queryKey: keys.underNode(database, scheme ?? '', params),
     queryFn: () => api.underNode(database, scheme!, params),
     enabled: Boolean(scheme) && params.node.length > 0,
+    placeholderData: keepPreviousData,
     ...forever,
   })
 export const useCompartmentList = (database: string) =>
   useQuery({ queryKey: keys.compartments(database), queryFn: () => api.compartments(database), ...forever })
-export const useFlowsIn = (database: string, compartment: string | null, params: { sub_compartment?: string; query?: string; limit?: number; cursor?: string }) =>
+export const useFlowsIn = (database: string, compartment: string | null, params: { sub_compartment?: string; query?: string; limit?: number; cursor?: string; item?: string }) =>
   useQuery({
     queryKey: keys.flowsIn(database, compartment ?? '', params),
     queryFn: () => api.flowsIn(database, compartment!, params),
     enabled: Boolean(compartment),
+    placeholderData: keepPreviousData,
     ...forever,
   })
 export const useMethodTree = (database: string) =>
@@ -190,7 +195,7 @@ export function useReturnTables(id: string) {
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.system(id) })
       void client.invalidateQueries({ queryKey: keys.log(id) })
-      void client.invalidateQueries({ queryKey: keys.parameters(id, null) })
+      void client.invalidateQueries({ queryKey: keys.parameters(id, null, null) })
     },
   })
 }

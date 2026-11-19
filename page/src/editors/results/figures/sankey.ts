@@ -6,7 +6,7 @@ export interface SankeyNodeDatum {
   name: string
   location: string | null
   score: number
-  fraction: number
+  fraction: number | null
   depth: number
 }
 
@@ -18,7 +18,8 @@ export interface SankeyLinkDatum {
 
 const MAX_LINK_WIDTH = 70
 
-export function linkWidth(fraction: number): number {
+export function linkWidth(fraction: number | null): number {
+  if (fraction === null) return 1
   return Math.max(1, Math.min(MAX_LINK_WIDTH, Math.ceil(Math.abs(fraction) * MAX_LINK_WIDTH)))
 }
 

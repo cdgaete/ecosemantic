@@ -14,7 +14,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.exceptions import ValidationError as ArgumentsInvalid
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
-from fastmcp.tools.base import ToolResult
+from fastmcp.tools.base import Tool, ToolResult
 from mcp.types import CallToolRequestParams
 from pydantic import BaseModel, Field, ValidationError
 
@@ -323,11 +323,16 @@ class ArgumentRefusal(Middleware):
             tool = await self.server.get_tool(name)
             if tool is None:
                 raise tool_error(NotFound(f"no tool {name!r}")) from error
-            takes = sorted(tool.parameters["properties"])
-            cause = error.__cause__
-            if not isinstance(cause, ValidationError):
-                raise tool_error(Invalid(f"{name}: {error}")) from error
-            said = [_refused(name, problem) for problem in cause.errors()]
-            raise tool_error(
-                Invalid(f"{'; '.join(said)}. {name} takes {', '.join(takes)}")
-            ) from error
+            raise refused_arguments(tool, error) from error
+
+
+def refused_arguments(tool: Tool, error: ArgumentsInvalid) -> ToolError:
+    """A call whose arguments do not validate, as the `Invalid` envelope: the arguments the tool
+    does not take with their remedy, or the values of the wrong type with what arrived, and the
+    arguments the tool does take."""
+    cause = error.__cause__
+    if not isinstance(cause, ValidationError):
+        return tool_error(Invalid(f"{tool.name}: {error}"))
+    said = [_refused(tool.name, problem) for problem in cause.errors()]
+    takes = sorted(tool.parameters["properties"])
+    return tool_error(Invalid(f"{'; '.join(said)}. {tool.name} takes {', '.join(takes)}"))

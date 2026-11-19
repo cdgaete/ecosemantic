@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
+from typing import cast, get_args
 
 import yaml
 from pydantic import ValidationError
@@ -12,10 +13,19 @@ from ecosemantic.compute.edits import set_parameter_space
 from ecosemantic.compute.parameters import materialize
 from ecosemantic.errors import Conflict, Invalid, NotFound, Refusal, Refused, said
 from ecosemantic.model.canonical import canonical_model, content_hash
-from ecosemantic.model.entities import Case, Parameter, ProductSystem
+from ecosemantic.model.entities import (
+    Case,
+    Parameter,
+    ProductSystem,
+    Uncertainty,
+    UncertaintyType,
+    takes,
+)
 from ecosemantic.tables.folder import (
     CASES,
     DEPENDENT_PARAMETERS,
+    DISTRIBUTION_COLUMNS,
+    FORMAT,
     FORMULA_COLUMNS,
     INPUT_PARAMETERS,
     INPUTS_DIR,
@@ -28,9 +38,10 @@ from ecosemantic.tables.folder import (
 
 
 def _read(path: Path) -> tuple[list[str], list[dict[str, str]]]:
-    """A CSV file's header and its rows."""
+    """A CSV file's header and its rows, a row's cells past its last written one read as the
+    blanks they hold."""
     with path.open(newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
+        reader = csv.DictReader(handle, restval="")
         header = list(reader.fieldnames or [])
         return header, [dict(row) for row in reader]
 
@@ -87,6 +98,94 @@ def _key(
     return None
 
 
+def _type(file: str, row: int, text: str, found: list[Refusal]) -> UncertaintyType | None:
+    """The distribution type a cell names, or None after a refusal naming the types the model
+    holds."""
+    if text in get_args(UncertaintyType):
+        return cast(UncertaintyType, text)
+    found.append(
+        Refusal(
+            file=file,
+            row=row,
+            column="distribution",
+            found=text,
+            reason=f"a distribution is {', '.join(get_args(UncertaintyType))} or blank",
+        )
+    )
+    return None
+
+
+def _distribution(
+    file: str, row: int, line: dict[str, str], found: list[Refusal]
+) -> Uncertainty | None:
+    """The distribution a row's cells state, none for a row that states none; a cell the type
+    does not take, a type the model does not know and a distribution the model refuses are each a
+    Refusal naming file, row and column."""
+    named = line["distribution"].strip()
+    if not named:
+        for column in DISTRIBUTION_COLUMNS[1:]:
+            if line[column].strip():
+                found.append(
+                    Refusal(
+                        file=file,
+                        row=row,
+                        column=column,
+                        found=line[column],
+                        reason="a parameter with no distribution takes no cell of one",
+                    )
+                )
+        return None
+    type = _type(file, row, named, found)
+    if type is None:
+        return None
+    params: dict[str, float | bool] = {}
+    for column in DISTRIBUTION_COLUMNS[1:]:
+        text = line[column].strip()
+        if not text:
+            continue
+        if column not in takes(type):
+            found.append(
+                Refusal(
+                    file=file,
+                    row=row,
+                    column=column,
+                    found=text,
+                    reason=f"a {type} takes no {column}",
+                )
+            )
+            continue
+        if column == "negative":
+            if text != "true":
+                found.append(
+                    Refusal(
+                        file=file,
+                        row=row,
+                        column=column,
+                        found=text,
+                        reason="negative is true or blank",
+                    )
+                )
+                continue
+            params[column] = True
+            continue
+        value = _number(file, row, column, text, found)
+        if value is not None:
+            params[column] = value
+    try:
+        return Uncertainty(type=type, params=params)
+    except ValidationError as error:
+        found.append(
+            Refusal(
+                file=file,
+                row=row,
+                column="distribution",
+                found=named,
+                reason=said(error.errors()[0]["msg"]),
+            )
+        )
+        return None
+
+
 def _parameter(
     file: str,
     row: int,
@@ -96,10 +195,16 @@ def _parameter(
     description: str,
     value: float | None = None,
     formula: str | None = None,
+    uncertainty: Uncertainty | None = None,
 ) -> Parameter | None:
     try:
         return Parameter(
-            name=name, value=value, formula=formula, unit=unit, description=description
+            name=name,
+            value=value,
+            formula=formula,
+            unit=unit,
+            description=description,
+            uncertainty=uncertainty,
         )
     except ValidationError as error:
         found.append(
@@ -130,6 +235,7 @@ def _parameters(inputs: Path, found: list[Refusal]) -> list[Parameter]:
             unit=line["unit"],
             description=line["description"],
             value=value,
+            uncertainty=_distribution(INPUT_PARAMETERS, row, line, found),
         )
         if made is not None:
             out.append(made)
@@ -198,6 +304,9 @@ def read_inputs(folder: Path) -> tuple[list[Parameter], list[Case], str]:
     if not schema_file.is_file():
         raise NotFound(f"no {INPUTS_DIR}/{SCHEMA_FILE} in {folder}")
     schema = yaml.safe_load(schema_file.read_text(encoding="utf-8"))
+    stated = schema["format"]
+    if stated != FORMAT:
+        raise Invalid(f"{schema_file} states format {stated}; this reader reads format {FORMAT}")
     at_hash = str(schema["product_system"]["at_hash"])
     descriptions = {
         name: str(body.get("description", "")) for name, body in (schema.get("cases") or {}).items()

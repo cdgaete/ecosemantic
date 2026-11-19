@@ -27,7 +27,17 @@ from ecosemantic.tables.results import (
     write_inventory,
 )
 from ecosemantic.view.api import json_object, structured
-from ecosemantic.view.handling import Handler, answering, created, sent, uploaded, working
+from ecosemantic.view.handling import (
+    DownloadContent,
+    Handler,
+    answering,
+    created,
+    download_name,
+    sent,
+    unchanged,
+    uploaded,
+    working,
+)
 
 Payload = dict[str, JsonValue]
 Render = Callable[[Path, ResultKey, Payload, datetime], Path]
@@ -66,8 +76,8 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
     @answering
     async def tables_zip(request: Request) -> Response:
         with working("ecosemantic-tables-", keep=True) as work:
-            folder, _ = await write_tables(context, as_uuid(request.path_params["id"]), work)
-            return _zipped(folder, work, f"{folder.name}.zip")
+            folder, system = await write_tables(context, as_uuid(request.path_params["id"]), work)
+            return _zipped(folder, work, download_name(system, "tables"))
 
     @answering
     async def tables_returned(request: Request) -> Response:
@@ -75,16 +85,23 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
         with working("ecosemantic-tables-return-") as work:
             folder, actor = await uploaded(request, "tables", "the edited folder, zipped", work)
             _, _, entry = await apply_tables(context, system_id, folder, actor, "returned tables")
+        if entry is None:
+            return unchanged("The returned folder changes nothing; no entry was written.")
         return created(entry)
 
-    def calculation(tool: str, render: Render, filename: str, **fixed: JsonValue) -> Handler:
+    def calculation(
+        tool: str, render: Render, content: DownloadContent, **fixed: JsonValue
+    ) -> Handler:
         @answering
         async def handler(request: Request) -> Response:
             body = await json_object(request)
             system_id = as_uuid(request.path_params["id"])
             stored = await context.storage.get_product_system(system_id)
             answered = await structured(
-                server, tool, {"product_system_id": str(system_id), **body, **fixed}
+                server,
+                context,
+                tool,
+                {"product_system_id": str(system_id), **body, **fixed},
             )
             key = result_key(
                 stored,
@@ -95,7 +112,7 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             )
             with working("ecosemantic-result-", keep=True) as work:
                 folder = await asyncio.to_thread(render, work, key, answered, datetime.now(UTC))
-                return _zipped(folder, work, filename)
+                return _zipped(folder, work, download_name(stored, content))
 
         return handler
 
@@ -105,17 +122,17 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
         Route(f"{base}/tables", tables_returned, methods=["POST"]),
         Route(
             f"{base}/impact.zip",
-            calculation("calculate_impact", _impact, "impact.zip", samples=True),
+            calculation("calculate_impact", _impact, "impact", samples=True),
             methods=["POST"],
         ),
         Route(
             f"{base}/contributions.zip",
-            calculation("contribution_analysis", _contribution, "contributions.zip"),
+            calculation("contribution_analysis", _contribution, "contributions"),
             methods=["POST"],
         ),
         Route(
             f"{base}/inventory.zip",
-            calculation("calculate_inventory", _inventory, "inventory.zip"),
+            calculation("calculate_inventory", _inventory, "inventory"),
             methods=["POST"],
         ),
     ]

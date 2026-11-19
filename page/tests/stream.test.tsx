@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { keys, useSystem } from '@/api/queries'
-import { useLive, useSystemStream } from '@/api/stream'
+import { gathered, useLive, useSystemStream } from '@/api/stream'
 import { useGo } from '@/lib/paths'
 import log from './fixtures/log.json'
 import run from './fixtures/run.json'
@@ -41,13 +41,14 @@ describe('stream', () => {
     act(() => source.onopen?.())
     expect(view.getByTestId('state').textContent).toBe('open')
     act(() => source.emit('entry', { kind: 'entry', product_system_id: 's1', entry: log.value[0], request: null }))
+    await act(() => new Promise(requestAnimationFrame))
     expect(spy).toHaveBeenCalledWith({ queryKey: keys.system('s1') })
     expect(spy).toHaveBeenCalledWith({ queryKey: keys.log('s1') })
     expect(spy).toHaveBeenCalledWith({ queryKey: keys.validation('s1') })
     expect(useLive.getState().latest.s1?.seq).toBe(log.value[0].seq)
   })
 
-  it('invalidates the parameters of the system it follows on an entry', () => {
+  it('invalidates the parameters of the system it follows on an entry', async () => {
     const client = new QueryClient()
     const spy = vi.spyOn(client, 'invalidateQueries')
     render(
@@ -57,10 +58,11 @@ describe('stream', () => {
     )
     const source = FakeSource.instances[0]
     act(() => source.emit('entry', { kind: 'entry', product_system_id: 's1', entry: log.value[0], request: null }))
+    await act(() => new Promise(requestAnimationFrame))
     expect(spy).toHaveBeenCalledWith({ queryKey: ['parameters', 's1'] })
   })
 
-  it("writes a run event into that run's read and refreshes the list", () => {
+  it("writes a run event into that run's read and refreshes the list", async () => {
     const client = new QueryClient()
     const spy = vi.spyOn(client, 'invalidateQueries')
     render(
@@ -72,6 +74,7 @@ describe('stream', () => {
     const moving = { ...run.value, status: 'running', open: true, result: null, progress: { iterations: 9, worst_rel_se: 0.3 } }
     act(() => source.emit('run', { kind: 'run', product_system_id: 's1', entry: null, request: null, run: moving }))
     expect(client.getQueryData(keys.run(moving.id))).toEqual({ value: moving, hint: null, view_url: null })
+    await act(() => new Promise(requestAnimationFrame))
     expect(spy).toHaveBeenCalledWith({ queryKey: keys.runs('s1') })
   })
 
@@ -241,11 +244,14 @@ describe('one stream per tab', () => {
     expect(FakeSource.instances).toHaveLength(1)
     const source = FakeSource.instances[0]
     act(() => source.emit('entry', { kind: 'entry', product_system_id: 's2', entry: log.value[0], request: null, run: null, call: null }))
+    await act(() => new Promise(requestAnimationFrame))
     expect(spy).toHaveBeenCalledWith({ queryKey: keys.systems })
     expect(spy).not.toHaveBeenCalledWith({ queryKey: keys.system('s1') })
     act(() => source.emit('entry', { kind: 'entry', product_system_id: 's1', entry: log.value[0], request: null, run: null, call: null }))
+    await act(() => new Promise(requestAnimationFrame))
     expect(spy).toHaveBeenCalledWith({ queryKey: keys.system('s1') })
     act(() => source.emit('call', { kind: 'call', product_system_id: null, entry: null, request: null, run: null, call: { agent: 'a1' } }))
+    await act(() => new Promise(requestAnimationFrame))
     expect(spy).toHaveBeenCalledWith({ queryKey: keys.agents })
     view.unmount()
     expect(source.readyState).toBe(2)
@@ -259,7 +265,7 @@ describe('validation follows a linked system', () => {
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  it("refetches this system's validation on an entry of a system it links", () => {
+  it("refetches this system's validation on an entry of a system it links", async () => {
     const client = new QueryClient()
     const doc = system.value as { processes: { exchanges: unknown[] }[] }
     const linking = {
@@ -277,8 +283,96 @@ describe('validation follows a linked system', () => {
     )
     const source = FakeSource.instances[0]
     act(() => source.emit('entry', { kind: 'entry', product_system_id: 'elsewhere', entry: log.value[0], request: null, run: null, call: null }))
+    await act(() => new Promise(requestAnimationFrame))
     expect(spy).not.toHaveBeenCalledWith({ queryKey: keys.validation('s1') })
     act(() => source.emit('entry', { kind: 'entry', product_system_id: 'part', entry: log.value[0], request: null, run: null, call: null }))
+    await act(() => new Promise(requestAnimationFrame))
     expect(spy).toHaveBeenCalledWith({ queryKey: keys.validation('s1') })
+  })
+})
+
+describe('events that arrive together', () => {
+  beforeEach(() => {
+    FakeSource.instances = []
+    vi.stubGlobal('EventSource', FakeSource)
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('gathers the keys in first-seen order, dropping a repeat and a key a gathered key covers', () => {
+    expect(gathered([['system', 's1'], ['systems', 'home'], ['systems'], ['system', 's1'], ['calls', 's1', null], ['calls']])).toEqual([
+      ['system', 's1'],
+      ['systems'],
+      ['calls'],
+    ])
+  })
+
+  it('refetches each key once for an entry, a layout and a call that arrive together', async () => {
+    const { useProcessStream } = await import('@/api/processStream')
+    function Process() {
+      useProcessStream()
+      return null
+    }
+    const client = new QueryClient()
+    const spy = vi.spyOn(client, 'invalidateQueries')
+    const view = render(
+      <QueryClientProvider client={client}>
+        <Probe id="s1" />
+        <Process />
+      </QueryClientProvider>,
+    )
+    const source = FakeSource.instances[0]
+    act(() => {
+      source.emit('entry', { kind: 'entry', product_system_id: 's1', entry: log.value[0], request: null, run: null, call: null })
+      source.emit('layout', { kind: 'layout', product_system_id: 's1', entry: null, request: null, run: null, call: null })
+      source.emit('call', { kind: 'call', product_system_id: 's1', entry: null, request: null, run: null, call: { agent: 'a1' } })
+    })
+    expect(spy).not.toHaveBeenCalled()
+    await act(() => new Promise(requestAnimationFrame))
+    const asked = spy.mock.calls.map(([filter]) => JSON.stringify(filter?.queryKey)).sort()
+    const once = [
+      keys.system('s1'),
+      keys.log('s1'),
+      keys.validation('s1'),
+      keys.anchors('s1'),
+      keys.layouts('s1'),
+      ['parameters', 's1'],
+      keys.systems,
+      keys.agents,
+      ['calls'],
+      ['calculations'],
+      keys.openTrail('a1'),
+    ]
+      .map((queryKey) => JSON.stringify(queryKey))
+      .sort()
+    expect(asked).toEqual(once)
+    view.unmount()
+  })
+
+  it('holds a thousand entries for one system to one key each at the frame', async () => {
+    const client = new QueryClient()
+    const spy = vi.spyOn(client, 'invalidateQueries')
+    const hashed = vi.spyOn(JSON, 'stringify')
+    const view = render(
+      <QueryClientProvider client={client}>
+        <Probe id="s1" />
+      </QueryClientProvider>,
+    )
+    const source = FakeSource.instances[0]
+    act(() => {
+      for (let i = 0; i < 1000; i += 1) source.emit('entry', { kind: 'entry', product_system_id: 's1', entry: log.value[0], request: null, run: null, call: null })
+    })
+    expect(spy).not.toHaveBeenCalled()
+    hashed.mockClear()
+    await act(() => new Promise(requestAnimationFrame))
+    const gatheredWork = hashed.mock.calls.length
+    const asked = spy.mock.calls.map(([filter]) => JSON.stringify(filter?.queryKey)).sort()
+    const once = [keys.system('s1'), keys.log('s1'), keys.validation('s1'), keys.anchors('s1'), keys.layouts('s1'), ['parameters', 's1']]
+      .map((queryKey) => JSON.stringify(queryKey))
+      .sort()
+    expect(asked).toEqual(once)
+    // A key named a thousand times is held once, so the frame hashes the six distinct keys and not the backlog.
+    expect(gatheredWork).toBeLessThan(1000)
+    hashed.mockRestore()
+    view.unmount()
   })
 })

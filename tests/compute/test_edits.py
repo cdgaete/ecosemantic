@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import uuid
 
 import pytest
@@ -22,6 +23,7 @@ from ecosemantic.compute.edits import (
     remove_scenario,
     set_parameter_space,
 )
+from ecosemantic.compute.overrides import apply_scenario
 from ecosemantic.errors import Conflict, Invalid, NotFound
 from ecosemantic.model.canonical import base_pin, content_hash
 from ecosemantic.model.entities import (
@@ -32,6 +34,7 @@ from ecosemantic.model.entities import (
     ParameterOverride,
     ProductSystem,
     Scenario,
+    Uncertainty,
 )
 from ecosemantic.model.refs import (
     BackgroundRef,
@@ -296,6 +299,32 @@ def test_add_exchange_with_a_formula_stores_its_value(product_system: ProductSys
         )
 
 
+def test_add_exchange_takes_an_amount_its_formula_evaluates_to(
+    product_system: ProductSystem,
+) -> None:
+    # what get_product_system answers for an exchange, amount and formula, writes back
+    out, exchange = add_exchange(
+        product_system,
+        "tshirt",
+        type="product",
+        input=ForegroundRef(code="yarn"),
+        amount=0.4,
+        formula="fabric_mass * 2",
+    )
+    assert exchange.formula == "fabric_mass * 2" and exchange.amount == pytest.approx(0.4)
+    with pytest.raises(Invalid, match=r"amount 0\.5 is not what formula 'fabric_mass \* 2'"):
+        add_exchange(
+            product_system,
+            "tshirt",
+            type="product",
+            input=ForegroundRef(code="yarn"),
+            amount=0.5,
+            formula="fabric_mass * 2",
+        )
+    with pytest.raises(Invalid, match="give an amount, a formula or both"):
+        add_exchange(product_system, "tshirt", type="product", input=ForegroundRef(code="yarn"))
+
+
 def test_a_second_production_is_refused_by_the_edit(product_system: ProductSystem) -> None:
     with pytest.raises(Invalid, match="already has a production exchange"):
         add_exchange(product_system, "tshirt", type="production", amount=3.0)
@@ -333,6 +362,22 @@ def test_patch_exchange_respects_a_formula_until_it_is_cleared(
     assert exchange.formula is None and exchange.amount == 0.3
     out, exchange = patch_exchange(product_system, fabric_in.id, formula="fabric_mass * 3")
     assert exchange.amount == pytest.approx(0.6)
+
+
+def test_patch_exchange_takes_an_amount_its_formula_evaluates_to(
+    product_system: ProductSystem,
+) -> None:
+    fabric_in = product_system.process("tshirt").exchanges[1]
+    out, exchange = patch_exchange(
+        product_system, fabric_in.id, amount=fabric_in.amount, comment="as read"
+    )
+    assert exchange.formula == fabric_in.formula and exchange.amount == fabric_in.amount
+    out, exchange = patch_exchange(
+        product_system, fabric_in.id, amount=0.6, formula="fabric_mass * 3"
+    )
+    assert exchange.formula == "fabric_mass * 3" and exchange.amount == pytest.approx(0.6)
+    with pytest.raises(Invalid, match="clear the formula to set an amount of its own"):
+        patch_exchange(product_system, fabric_in.id, amount=0.7, formula="fabric_mass * 3")
 
 
 def test_patch_exchange_units_follow_the_provider(product_system: ProductSystem) -> None:
@@ -465,6 +510,59 @@ def test_add_scenario_pins_the_base_and_dry_runs(product_system: ProductSystem) 
             description="",
             overrides=[ParameterOverride(name="fibre_mass", value=1.0)],
         )
+
+
+def test_a_scenario_swap_records_the_suppliers_name_and_applying_it_names_the_exchange(
+    product_system: ProductSystem,
+) -> None:
+    yarn = product_system.process("fabric").exchanges[1]
+    out, scenario = add_scenario(
+        product_system,
+        name="organic_yarn",
+        description="",
+        overrides=[ExchangeOverride(exchange_id=yarn.id, input=ForegroundRef(code="organic_yarn"))],
+    )
+    [override] = scenario.overrides
+    assert isinstance(override, ExchangeOverride)
+    assert override.name == "organic cotton yarn"
+    applied = apply_scenario(out, scenario)
+    swapped = applied.process("fabric").exchanges[1]
+    assert (swapped.name, swapped.input) == (
+        "organic cotton yarn",
+        ForegroundRef(code="organic_yarn"),
+    )
+    named = ExchangeOverride(
+        exchange_id=yarn.id, input=ForegroundRef(code="organic_yarn"), name="recycled yarn"
+    )
+    _, given = add_scenario(product_system, name="recycled", description="", overrides=[named])
+    assert given.overrides[0].name == "recycled yarn"
+    with pytest.raises(Invalid, match="name"):
+        add_scenario(
+            product_system,
+            name="unnamed",
+            description="",
+            overrides=[ExchangeOverride(exchange_id=yarn.id, input=COTTON)],
+        )
+
+
+def test_a_swap_to_a_supplier_in_another_unit_is_refused(product_system: ProductSystem) -> None:
+    yarn = product_system.process("fabric").exchanges[1]
+    assert yarn.unit == "kilogram"
+    with pytest.raises(Invalid, match="'cotton t-shirt, assembled' is in 'unit', not 'kilogram'"):
+        add_scenario(
+            product_system,
+            name="wrong_unit",
+            description="",
+            overrides=[ExchangeOverride(exchange_id=yarn.id, input=ForegroundRef(code="tshirt"))],
+        )
+
+
+def test_a_name_without_an_input_swap_is_refused(product_system: ProductSystem) -> None:
+    elec = product_system.process("tshirt").exchanges[2]
+    with pytest.raises(ValidationError, match="only when it swaps its input"):
+        ExchangeOverride(exchange_id=elec.id, multiplier=0.5, name="sewing electricity")
+    with pytest.raises(ValidationError, match="only when it swaps its input"):
+        ExchangeOverride(exchange_id=elec.id, amount=1.0, name="sewing electricity")
 
 
 def test_a_case_takes_no_scenario_name_and_a_scenario_no_case_name(
@@ -605,3 +703,163 @@ def test_rebase_database_onto_another_database_renames_every_reference(
     assert {d for k, d, _ in after if k == "elementary_flow"} == {"other-biosphere"}
     # the scenario's swap to a background dataset names the new database too
     assert ("background", "other", ORGANIC.id) in after
+
+
+def test_a_parameter_whose_distribution_is_centred_elsewhere_is_refused_naming_the_centre(
+    product_system: ProductSystem,
+) -> None:
+    with pytest.raises(Invalid) as caught:
+        set_parameter_space(
+            product_system,
+            parameters=[
+                Parameter(
+                    name="waste_rate",
+                    value=0.1,
+                    uncertainty=Uncertainty(
+                        type="lognormal", params={"loc": math.log(0.3), "scale": 0.2}
+                    ),
+                )
+            ],
+        )
+    message = str(caught.value)
+    assert "parameter 'waste_rate' is 0.1 and its lognormal is centred on" in message
+    assert f"centre it on 0.1 (loc {math.log(0.1)!r})" in message
+    kept = set_parameter_space(
+        product_system,
+        parameters=[
+            Parameter(
+                name="waste_rate",
+                value=0.1,
+                uncertainty=Uncertainty(
+                    type="lognormal", params={"loc": math.log(0.1), "scale": 0.2}
+                ),
+            )
+        ],
+    )
+    assert kept.parameter("waste_rate").uncertainty is not None
+
+
+def test_an_exchange_whose_distribution_is_centred_elsewhere_is_refused_naming_the_centre(
+    product_system: ProductSystem,
+) -> None:
+    with pytest.raises(Invalid) as caught:
+        add_exchange(
+            product_system,
+            "yarn",
+            type="product",
+            input=BackgroundRef(database=DATABASE.name, id="polyester"),
+            amount=1.0,
+            unit="kilogram",
+            name="polyester fibre",
+            uncertainty=Uncertainty(type="normal", params={"loc": 2.0, "scale": 0.5}),
+        )
+    message = str(caught.value)
+    assert "exchange polyester fibre (cotton yarn) " in message
+    assert "is 1.0 and its normal is centred on 2.0; centre it on 1.0" in message
+
+
+def test_a_new_amount_moves_the_exchanges_distribution_with_it(
+    product_system: ProductSystem,
+) -> None:
+    sewing = product_system.process("tshirt").exchanges[2]
+    out, exchange = patch_exchange(product_system, sewing.id, amount=0.6, clear=["formula"])
+    assert exchange.amount == 0.6 and exchange.uncertainty is not None
+    assert exchange.uncertainty.params == {
+        "loc": pytest.approx(math.log(0.6)),
+        "scale": 0.2,
+    }
+    _, unchanged = patch_exchange(out, sewing.id, comment="checked")
+    assert unchanged.uncertainty.params["loc"] == pytest.approx(math.log(0.6))
+
+
+def test_a_distribution_on_an_exchange_reading_an_uncertain_parameter_is_refused(
+    product_system: ProductSystem,
+) -> None:
+    uncertain = set_parameter_space(
+        product_system,
+        parameters=[
+            Parameter(
+                name="organic_share",
+                value=1.0,
+                uncertainty=Uncertainty(type="normal", params={"loc": 1.0, "scale": 0.1}),
+            )
+        ],
+    )
+    organic = next(
+        e for e in uncertain.process("fabric").exchanges if e.name == "organic cotton yarn"
+    )
+    with pytest.raises(Invalid) as caught:
+        patch_exchange(
+            uncertain,
+            organic.id,
+            uncertainty=Uncertainty(type="normal", params={"loc": 1.1, "scale": 0.1}),
+        )
+    message = str(caught.value)
+    assert f"exchange organic cotton yarn (cotton fabric) {organic.id}" in message
+    assert "reads the uncertain parameters ['organic_share']" in message
+    assert "an amount takes one spread: remove one of them" in message
+
+    fabric_input = product_system.process("tshirt").exchanges[1]
+    through, _ = patch_exchange(product_system, fabric_input.id, formula="fibre_mass")
+    spread = set_parameter_space(
+        through,
+        parameters=[
+            Parameter(
+                name="waste_rate",
+                value=0.1,
+                uncertainty=Uncertainty(type="normal", params={"loc": 0.1, "scale": 0.01}),
+            )
+        ],
+    )
+    with pytest.raises(Invalid) as caught:
+        patch_exchange(
+            spread,
+            fabric_input.id,
+            uncertainty=Uncertainty(type="normal", params={"loc": 0.22, "scale": 0.01}),
+        )
+    assert "reads the uncertain parameters ['waste_rate']" in str(caught.value)
+
+
+def test_a_distribution_on_a_parameter_an_uncertain_exchange_reads_is_refused(
+    product_system: ProductSystem,
+) -> None:
+    sewing = product_system.process("tshirt").exchanges[2]
+    with pytest.raises(Invalid) as caught:
+        set_parameter_space(
+            product_system,
+            parameters=[
+                Parameter(
+                    name="elec_per_kg",
+                    value=1.5,
+                    uncertainty=Uncertainty(type="normal", params={"loc": 1.5, "scale": 0.1}),
+                )
+            ],
+        )
+    message = str(caught.value)
+    assert f"exchange sewing electricity (cotton t-shirt, assembled) {sewing.id}" in message
+    assert "reads the uncertain parameters ['elec_per_kg']" in message
+
+
+def test_a_case_a_parameters_distribution_cannot_follow_is_refused(
+    product_system: ProductSystem,
+) -> None:
+    centred_on_zero = Uncertainty(type="normal", params={"loc": 0.0, "scale": 0.5})
+    spread = set_parameter_space(
+        product_system,
+        parameters=[Parameter(name="organic_share", value=0.0, uncertainty=centred_on_zero)],
+    )
+    with pytest.raises(Invalid) as caught:
+        set_parameter_space(spread, cases=[Case(name="half", values={"organic_share": 0.5})])
+    message = str(caught.value)
+    assert "'organic_share'" in message and "case 'half'" in message
+
+    cased = set_parameter_space(
+        product_system, cases=[Case(name="half", values={"organic_share": 0.5})]
+    )
+    with pytest.raises(Invalid) as caught:
+        set_parameter_space(
+            cased,
+            parameters=[Parameter(name="organic_share", value=0.0, uncertainty=centred_on_zero)],
+        )
+    message = str(caught.value)
+    assert "'organic_share'" in message and "case 'half'" in message

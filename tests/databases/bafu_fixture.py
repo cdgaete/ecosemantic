@@ -14,7 +14,9 @@ The test package's scores, in the terms a workbook holds them, worked out by han
 - `treatment` produces -1 kg of scrap for each kg it treats, so the core's -0.3 per unit is
   compared as 0.3.
 
-`Total [CO2-eq]` sums the method's two categories."""
+`Total [CO2-eq]` is the method's weighting set summed: each category weighted at 0.5 for climate
+change and 0.2 for water use, so a kilogram of `elec` totals `0.5 / 3.6` and a `widget` totals
+`0.5 * 3.8533 + 0.2 * 0.02`."""
 
 from __future__ import annotations
 
@@ -27,6 +29,7 @@ from pathlib import Path
 import xlsxwriter
 
 from ecosemantic.databases.bafu.profile import Column, Pack, Profile, Total
+from tests.openlca_fixture import WEIGHTS, WEIGHTS_SET
 
 DIRECTORY = "Synthetic results"
 BOOK = "synthetic results.xlsx"
@@ -40,6 +43,7 @@ FIRST_ROW = 2
 METHOD = "fixture method"
 CLIMATE = "GWP [kg CO2-eq]"
 WATER = "Water [m3]"
+LAND = "Land use [m2*a]"
 TOTAL = "Total [CO2-eq]"
 ELEC_LABEL = "elec production - GLO"
 STEEL_LABEL = "steel production - GLO"
@@ -51,47 +55,74 @@ FUEL_OIL_CLIMATE = 1.5 + 3.0 / 3.6
 TREATMENT_CLIMATE = 0.3
 WIDGET_CLIMATE = 0.1 + 0.5 * STEEL_CLIMATE + FUEL_OIL_CLIMATE + 0.1 * TREATMENT_CLIMATE
 WIDGET_WATER = 0.02
+WIDGET_LAND = 0.02
+
+
+def _total(climate: float, water: float) -> float:
+    """The weighted total of a row whose climate change and water use scores are given."""
+    return WEIGHTS["climate change"] * climate + WEIGHTS["water use"] * water
+
 
 Row = tuple[str, str, dict[str, float]]
 
 
-def workbook_rows() -> list[Row]:
+def workbook_rows(land: bool = False) -> list[Row]:
     """The workbook's rows: each process its label, the unit its column D names, and its scores in
-    the workbook's terms."""
-    return [
-        (ELEC_LABEL, "MJ", {CLIMATE: ELEC_CLIMATE, WATER: 0.0, TOTAL: ELEC_CLIMATE}),
-        (STEEL_LABEL, "kg", {CLIMATE: STEEL_CLIMATE, WATER: 0.0, TOTAL: STEEL_CLIMATE}),
+    the workbook's terms, with a land-use cell on the widget's row when `land` asks for one."""
+    rows = [
+        (ELEC_LABEL, "MJ", {CLIMATE: ELEC_CLIMATE, WATER: 0.0, TOTAL: _total(ELEC_CLIMATE, 0.0)}),
+        (
+            STEEL_LABEL,
+            "kg",
+            {CLIMATE: STEEL_CLIMATE, WATER: 0.0, TOTAL: _total(STEEL_CLIMATE, 0.0)},
+        ),
         (
             WIDGET_LABEL,
             "unit",
             {
                 CLIMATE: WIDGET_CLIMATE,
                 WATER: WIDGET_WATER,
-                TOTAL: WIDGET_CLIMATE + WIDGET_WATER,
+                TOTAL: _total(WIDGET_CLIMATE, WIDGET_WATER),
             },
         ),
-        (TREATMENT_LABEL, "kg", {CLIMATE: TREATMENT_CLIMATE, WATER: 0.0, TOTAL: TREATMENT_CLIMATE}),
+        (
+            TREATMENT_LABEL,
+            "kg",
+            {CLIMATE: TREATMENT_CLIMATE, WATER: 0.0, TOTAL: _total(TREATMENT_CLIMATE, 0.0)},
+        ),
     ]
+    if land:
+        rows[2][2][LAND] = WIDGET_LAND
+    return rows
 
 
 def fixture_profile(
-    *, tolerance: float = 1e-6, differences: str = "differences-fixture.csv"
+    *,
+    tolerance: float = 1e-6,
+    differences: str = "differences-fixture.csv",
+    weighting_set: str = WEIGHTS_SET,
+    land: bool = False,
 ) -> Profile:
-    """A release whose columns map the test package's two categories and whose total sums them."""
+    """A release whose columns map the test package's two categories, its total the package's
+    weighting set, and, with `land`, a third category the set leaves out."""
     digest = hashlib.sha256(b"a synthetic pack").hexdigest()
+    columns = [
+        Column(header=CLIMATE, method=METHOD, category="climate change"),
+        Column(header=WATER, method=METHOD, category="water use"),
+    ]
+    if land:
+        columns.append(Column(header=LAND, method=METHOD, category="land use"))
     return Profile(
         version="fixture-v1",
         server="https://example.invalid",
         citation="a synthetic release",
         inventory=Pack(pack="fixture", version=1, format="openLCA zolca", sha256=digest),
         results=Pack(pack="fixture results", version=1, format="excel", sha256=digest),
-        columns=(
-            Column(header=CLIMATE, method=METHOD, category="climate change"),
-            Column(header=WATER, method=METHOD, category="water use"),
-        ),
-        total=Total(header=TOTAL, method=METHOD),
+        columns=tuple(columns),
+        total=Total(header=TOTAL, method=METHOD, weighting_set=weighting_set),
         unlinked="unlinked-fixture.csv",
         differences=differences,
+        revision=1,
         tolerance=tolerance,
     )
 

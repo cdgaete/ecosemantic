@@ -11,6 +11,7 @@ import tempfile
 import zipfile
 from collections.abc import Awaitable, Callable, Iterator
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
@@ -25,10 +26,12 @@ from ecosemantic.errors import (
     error_payload,
     error_status,
 )
-from ecosemantic.model.entities import Actor
+from ecosemantic.model.entities import Actor, ProductSystem
 from ecosemantic.package.package import unzip_package
+from ecosemantic.tables.folder import folder_name
 
 Handler = Callable[[Request], Awaitable[Response]]
+DownloadContent = Literal["impact", "contributions", "inventory", "tables", "openlca"]
 UPLOAD_BYTES = 100_000_000
 UNPACKED_BYTES = 1_000_000_000
 UNPACKED_ENTRIES = 100_000
@@ -47,6 +50,17 @@ def error_response(exc: EcoSemanticError) -> JSONResponse:
 def created(made: BaseModel) -> JSONResponse:
     """What a write made, as the 201 that answers it."""
     return JSONResponse(made.model_dump(mode="json"), status_code=201)
+
+
+class Unchanged(BaseModel):
+    """A return that left the stored state as it stood."""
+
+    message: str
+
+
+def unchanged(message: str) -> JSONResponse:
+    """A return that wrote nothing, as the 200 that answers it with the words that say so."""
+    return JSONResponse(Unchanged(message=message).model_dump(mode="json"))
 
 
 class ToolRefused(Exception):
@@ -134,6 +148,11 @@ async def uploaded(request: Request, field: str, carries: str, work: Path) -> tu
     unpacked = work / "unpacked"
     await asyncio.to_thread(unzip_package, zipped, unpacked)
     return unpacked, Actor(kind="person", name=str(form.get("actor", "")))
+
+
+def download_name(system: ProductSystem, content: DownloadContent) -> str:
+    """The file name a download takes: the system's folder name and the content it carries."""
+    return f"{folder_name(system)}-{content}.zip"
 
 
 def sent(zipped: Path, work: Path, filename: str) -> FileResponse:

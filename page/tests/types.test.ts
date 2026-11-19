@@ -16,6 +16,8 @@ import type {
   Database,
   DatabaseSummary,
   DemandItem,
+  Drawn,
+  DrawnCount,
   ElementaryFlow,
   ElementaryFlowHit,
   ElementaryFlowRef,
@@ -30,15 +32,18 @@ import type {
   InventoryListing,
   InventoryRow,
   LinkedProcessRef,
+  ListedDatabase,
   Listing,
   LogEntry,
   Method,
   MethodCategory,
   MethodFamily,
+  MethodListing,
   MonteCarloCategory,
   MonteCarloConfig,
   MonteCarloResult,
   MonteCarloSummary,
+  MonteCarloTotal,
   Outcome,
   Override,
   Page,
@@ -60,12 +65,15 @@ import type {
   SystemRead,
   SystemRef,
   Term,
+  Total,
   TreeNode,
   Uncertainty,
   ValidationCase,
   ValidationIssue,
   ValidationReport,
   VariantScores,
+  WeightingFactor,
+  WeightingSet,
 } from '@/api/types'
 import databases from './fixtures/databases.json'
 import vocabularyImpactMethods from './fixtures/vocabulary_impact_methods.json'
@@ -112,7 +120,10 @@ const DATABASE_KEYS = {
   version: true,
   system_model: true,
   fingerprint: true,
+  revision: true,
 } satisfies Record<keyof Database, true>
+
+const LISTED_DATABASE_KEYS = { ...DATABASE_KEYS, processes: true } satisfies Record<keyof ListedDatabase, true>
 
 const BACKGROUND_REF_KEYS = { kind: true, database: true, id: true } satisfies Record<keyof BackgroundRef, true>
 const FOREGROUND_REF_KEYS = { kind: true, code: true } satisfies Record<keyof ForegroundRef, true>
@@ -160,9 +171,9 @@ const PRODUCT_SYSTEM_KEYS = {
   hash: true,
 } satisfies Record<keyof ProductSystem, true>
 
-const PARAMETER_KEYS = { name: true, value: true, formula: true, unit: true, description: true } satisfies Record<keyof Parameter, true>
+const PARAMETER_KEYS = { name: true, value: true, formula: true, unit: true, description: true, uncertainty: true } satisfies Record<keyof Parameter, true>
 const CASE_KEYS = { name: true, description: true, values: true } satisfies Record<keyof Case, true>
-const EXCHANGE_OVERRIDE_KEYS = { kind: true, exchange_id: true, amount: true, multiplier: true, input: true } satisfies Record<keyof ExchangeOverride, true>
+const EXCHANGE_OVERRIDE_KEYS = { kind: true, exchange_id: true, amount: true, multiplier: true, input: true, name: true } satisfies Record<keyof ExchangeOverride, true>
 const PARAMETER_OVERRIDE_KEYS = { kind: true, name: true, value: true } satisfies Record<keyof ParameterOverride, true>
 const SCENARIO_KEYS = { name: true, description: true, overrides: true, base_hash: true } satisfies Record<keyof Scenario, true>
 
@@ -208,6 +219,7 @@ const SYSTEM_CARD_KEYS = {
 
 const ANSWER_KEYS = { value: true, hint: true, view_url: true } satisfies Record<keyof Answer<unknown>, true>
 const LISTING_KEYS = { items: true, has_more: true, next_cursor: true, hint: true, view_url: true } satisfies Record<keyof Listing<unknown>, true>
+const METHOD_LISTING_KEYS = { ...LISTING_KEYS, weighting_sets: true } satisfies Record<keyof MethodListing, true>
 const INVENTORY_LISTING_KEYS = { ...LISTING_KEYS, database: true, credit_loops: true, linked_credit_loops: true, treatments_run_backwards: true, floor: true, dropped: true } satisfies Record<keyof InventoryListing, true>
 const SYSTEM_READ_KEYS = { value: true, hint: true, view_url: true, open_requests: true } satisfies Record<keyof SystemRead, true>
 
@@ -223,13 +235,19 @@ const METHOD_KEYS = {
 
 const SCORE_KEYS = { value: true, unit: true, method_id: true } satisfies Record<keyof Score, true>
 
-const VARIANT_SCORES_KEYS = { name: true, scores: true, deltas: true, credit_loops: true, linked_credit_loops: true, treatments_run_backwards: true, uncertainty: true, paired_deltas: true } satisfies Record<keyof VariantScores, true>
+const VARIANT_SCORES_KEYS = { name: true, scores: true, deltas: true, totals: true, total_deltas: true, credit_loops: true, linked_credit_loops: true, treatments_run_backwards: true, uncertainty: true, paired_deltas: true } satisfies Record<keyof VariantScores, true>
 const PAIRED_DELTA_KEYS = { delta_abs: true, delta_pct: true, delta_ci95: true } satisfies Record<keyof PairedDelta, true>
+const DRAWN_COUNT_KEYS = { there: true, carried: true, drawn: true, held: true } satisfies Record<keyof DrawnCount, true>
+const DRAWN_KEYS = { parameters: true, foreground: true, background: true } satisfies Record<keyof Drawn, true>
 const MONTE_CARLO_SUMMARY_KEYS = { n: true, mean: true, median: true, median_ci95: true, percentiles: true, rel_se: true } satisfies Record<keyof MonteCarloSummary, true>
 const MONTE_CARLO_CATEGORY_KEYS = { method_id: true, summary: true, samples: true, histogram: true } satisfies Record<keyof MonteCarloCategory, true>
-const MONTE_CARLO_RESULT_KEYS = { database: true, n: true, stopped: true, gating_method: true, scope: true, normals_at_amount: true, credit_loops: true, dropped_draws: true, dropped_loops: true, dropped_background: true, linked_credit_loops: true, dropped_linked_loops: true, categories: true } satisfies Record<keyof MonteCarloResult, true>
+const MONTE_CARLO_TOTAL_KEYS = { impact_method: true, weighting_set: true, position: true, unit: true, categories: true, normalised_by_zero: true, summary: true, samples: true, histogram: true, reason: true, value_choices: true } satisfies Record<keyof MonteCarloTotal, true>
+const TOTAL_KEYS = { impact_method: true, weighting_set: true, position: true, unit: true, value: true, categories: true, normalised_by_zero: true, reason: true, value_choices: true } satisfies Record<keyof Total, true>
+const WEIGHTING_FACTOR_KEYS = { method_id: true, normalisation: true, weighting: true } satisfies Record<keyof WeightingFactor, true>
+const WEIGHTING_SET_KEYS = { impact_method: true, name: true, unit: true, factors: true } satisfies Record<keyof WeightingSet, true>
+const MONTE_CARLO_RESULT_KEYS = { database: true, n: true, stopped: true, gating_method: true, constant: true, indistinguishable_from_zero: true, scope: true, drawn: true, credit_loops: true, dropped_draws: true, dropped_loops: true, dropped_background: true, linked_credit_loops: true, dropped_linked_loops: true, categories: true, totals: true } satisfies Record<keyof MonteCarloResult, true>
 
-const IMPACT_RESULT_KEYS = { product_system: true, database: true, methods: true, scores: true, demand: true, credit_loops: true, linked_credit_loops: true, links_behind: true, treatments_run_backwards: true, variants: true, uncertainty: true } satisfies Record<keyof ImpactResult, true>
+const IMPACT_RESULT_KEYS = { product_system: true, database: true, methods: true, scores: true, demand: true, totals: true, credit_loops: true, linked_credit_loops: true, links_behind: true, treatments_run_backwards: true, variants: true, uncertainty: true } satisfies Record<keyof ImpactResult, true>
 
 const MONTE_CARLO_CONFIG_KEYS = { n_min: true, n_max: true, rel_se_target: true, seed: true, scope: true, n: true } satisfies Record<keyof MonteCarloConfig, true>
 const DEMAND_ITEM_KEYS = { ref: true, amount: true } satisfies Record<keyof DemandItem, true>
@@ -240,6 +258,7 @@ const RUN_STATE_KEYS = {
   at_hash: true,
   demand: true,
   methods: true,
+  weighting_sets: true,
   config: true,
   treatments_run_backwards: true,
   status: true,
@@ -325,6 +344,7 @@ const ELEMENTARY_FLOW_KEYS = {
   flow_type: true,
   side: true,
   cas_number: true,
+  cas_as_published: true,
   synonyms: true,
 } satisfies Record<keyof ElementaryFlow, true>
 
@@ -377,6 +397,7 @@ const ELEMENTARY_FLOW_HIT_KEYS = {
   unit: true,
   flow_type: true,
   cas_number: true,
+  cas_as_published: true,
 } satisfies Record<keyof ElementaryFlowHit, true>
 
 const BACKGROUND_EXCHANGE_KEYS = {
@@ -386,6 +407,7 @@ const BACKGROUND_EXCHANGE_KEYS = {
   reference: true,
   flow: true,
   supplier: true,
+  supplier_location: true,
   amount: true,
   unit: true,
   cut_off: true,
@@ -403,7 +425,13 @@ const BACKGROUND_PROCESS_KEYS = {
   exchanges: true,
 } satisfies Record<keyof BackgroundProcess, true>
 
-const PAGE_KEYS = { items: true, has_more: true, next_cursor: true } satisfies Record<keyof Page<unknown>, true>
+const PAGE_KEYS = {
+  items: true,
+  has_more: true,
+  next_cursor: true,
+  total: true,
+  previous_cursor: true,
+} satisfies Record<keyof Page<unknown>, true>
 
 const DATABASE_SUMMARY_KEYS = {
   processes: true,
@@ -494,8 +522,23 @@ function expectClassificationNodeKeys(node: ClassificationNode): void {
   node.children.forEach(expectClassificationNodeKeys)
 }
 
+function expectWeightingSetKeys(set: WeightingSet): void {
+  expectKeys(set, WEIGHTING_SET_KEYS)
+  set.factors.forEach((factor) => expectKeys(factor, WEIGHTING_FACTOR_KEYS))
+}
+
+function expectTotalKeys(total: Total): void {
+  expectKeys(total, TOTAL_KEYS)
+}
+
+function expectMonteCarloTotalKeys(total: MonteCarloTotal): void {
+  expectKeys(total, MONTE_CARLO_TOTAL_KEYS)
+  if (total.summary) expectKeys(total.summary, MONTE_CARLO_SUMMARY_KEYS)
+}
+
 function expectRunStateKeys(run: RunState, keys: Record<string, true> = RUN_STATE_KEYS): void {
   expectKeys(run, keys)
+  run.weighting_sets.forEach(expectWeightingSetKeys)
   expectKeys(run.progress, RUN_PROGRESS_KEYS)
   expectKeys(run.config, MONTE_CARLO_CONFIG_KEYS)
   run.demand.forEach((item) => {
@@ -508,21 +551,28 @@ function expectRunStateKeys(run: RunState, keys: Record<string, true> = RUN_STAT
 function expectRunKeys(run: Run): void {
   expectRunStateKeys(run, RUN_KEYS)
   if (run.result) {
-    expectKeys(run.result, MONTE_CARLO_RESULT_KEYS)
-    expect(run.methods.map((method) => method.id)).toContain(run.result.gating_method)
-    run.result.categories.forEach((category) => {
+    const result = run.result
+    const ids = run.methods.map((method) => method.id)
+    expectKeys(result, MONTE_CARLO_RESULT_KEYS)
+    expectKeys(result.drawn, DRAWN_KEYS)
+    for (const count of [result.drawn.parameters, result.drawn.foreground, result.drawn.background]) expectKeys(count, DRAWN_COUNT_KEYS)
+    // a run of a stated count names no category as holding it
+    if (result.gating_method !== null) expect(ids).toContain(result.gating_method)
+    for (const id of [...result.constant, ...result.indistinguishable_from_zero]) expect(ids).toContain(id)
+    result.categories.forEach((category) => {
       expectKeys(category, MONTE_CARLO_CATEGORY_KEYS)
       expect(category.histogram).toBeNull()
-      expect(run.methods.map((method) => method.id)).toContain(category.method_id)
+      expect(ids).toContain(category.method_id)
     })
+    result.totals.forEach(expectMonteCarloTotalKeys)
   }
 }
 
-const typedDatabases = databases as Answer<Database[]>
+const typedDatabases = databases as Answer<ListedDatabase[]>
 const typedVocabularyImpactMethods = vocabularyImpactMethods as Answer<Term[]>
 const typedVocabularyCompartments = vocabularyCompartments as Answer<Term[]>
 const typedSearchProcesses = searchProcesses as Listing<ProcessHit>
-const typedSearchMethods = searchMethods as Listing<Method>
+const typedSearchMethods = searchMethods as MethodListing
 const typedSearchElementaryFlows = searchElementaryFlows as Listing<ElementaryFlowHit>
 const typedElementaryFlow = elementaryFlowFixture as Answer<ElementaryFlow>
 const typedSystems = systems as Answer<SystemCard[]>
@@ -570,7 +620,7 @@ describe('recorded responses', () => {
 describe('recorded response keys match the types field for field', () => {
   it('databases', () => {
     expectKeys(typedDatabases, ANSWER_KEYS)
-    typedDatabases.value.forEach((d) => expectKeys(d, DATABASE_KEYS))
+    typedDatabases.value.forEach((d) => expectKeys(d, LISTED_DATABASE_KEYS))
   })
 
   it('vocabulary', () => {
@@ -586,8 +636,10 @@ describe('recorded response keys match the types field for field', () => {
       expectKeys(hit, PROCESS_HIT_KEYS)
       expectRefKeys(hit.ref)
     })
-    expectKeys(typedSearchMethods, LISTING_KEYS)
+    expectKeys(typedSearchMethods, METHOD_LISTING_KEYS)
     typedSearchMethods.items.forEach((method) => expectKeys(method, METHOD_KEYS))
+    const families = [...new Set(typedSearchMethods.items.map((method) => method.impact_method))].sort()
+    expect(Object.keys(typedSearchMethods.weighting_sets).sort()).toEqual(families)
     expectKeys(typedSearchElementaryFlows, LISTING_KEYS)
     typedSearchElementaryFlows.items.forEach((hit) => {
       expectKeys(hit, ELEMENTARY_FLOW_HIT_KEYS)
@@ -674,6 +726,7 @@ describe('recorded response keys match the types field for field', () => {
     expectKeys(typedImpact.value, IMPACT_RESULT_KEYS)
     typedImpact.value.methods.forEach((method) => expectKeys(method, METHOD_KEYS))
     typedImpact.value.scores.forEach((score) => expectScoreKeys(score, typedImpact.value.methods))
+    typedImpact.value.totals.forEach(expectTotalKeys)
     expect(typedImpact.value.variants).toEqual([])
     expect(typedImpact.value.uncertainty).toBeNull()
   })
@@ -687,6 +740,7 @@ describe('recorded response keys match the types field for field', () => {
     typedImpactMonteCarlo.value.variants.forEach((variant) => {
       expectKeys(variant, VARIANT_SCORES_KEYS)
       variant.scores.forEach((score) => expectScoreKeys(score, typedImpactMonteCarlo.value.methods))
+      variant.totals.forEach(expectTotalKeys)
       expect(variant.paired_deltas).toHaveLength(variant.scores.length)
       variant.paired_deltas?.forEach((paired) => expectKeys(paired, PAIRED_DELTA_KEYS))
       expect(variant.uncertainty).not.toBeNull()
@@ -699,7 +753,9 @@ describe('recorded response keys match the types field for field', () => {
     expect(uncertainty).not.toBeNull()
     if (uncertainty) {
       expectKeys(uncertainty, MONTE_CARLO_RESULT_KEYS)
-      expect(typedImpactMonteCarlo.value.methods.map((method) => method.id)).toContain(uncertainty.gating_method)
+      const ids = typedImpactMonteCarlo.value.methods.map((method) => method.id)
+      if (uncertainty.gating_method !== null) expect(ids).toContain(uncertainty.gating_method)
+      for (const id of [...uncertainty.constant, ...uncertainty.indistinguishable_from_zero]) expect(ids).toContain(id)
       uncertainty.categories.forEach((category) => {
         expectKeys(category, MONTE_CARLO_CATEGORY_KEYS)
         expect(category.histogram).toBeNull()

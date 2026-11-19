@@ -16,8 +16,17 @@ from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import DELETE, READ, WRITE
 from ecosemantic.mcp.envelopes import Answer, Written, as_uuid, bound, boundary, serialised
 from ecosemantic.mcp.linking import refuse_dropped_cases
+from ecosemantic.mcp.modelling import resolved_input
 from ecosemantic.mcp.requests import answer_write
-from ecosemantic.model.entities import Case, Override, Parameter, ProductSystem, Scenario
+from ecosemantic.model.entities import (
+    Case,
+    ExchangeOverride,
+    Override,
+    Parameter,
+    ProductSystem,
+    Scenario,
+)
+from ecosemantic.model.refs import BackgroundRef
 
 
 class ParameterSpace(BaseModel):
@@ -75,6 +84,22 @@ async def set_parameters(
     return await answer_write(context, space, entry, stored, changed)
 
 
+async def _resolved_swaps(
+    context: ServerContext, system: ProductSystem, overrides: list[Override]
+) -> list[Override]:
+    """The overrides with each background swap resolved against the exchange it changes: the
+    supplier's unit must be the exchange's, and the exchange takes the name given or the
+    supplier's reference product."""
+    resolved: list[Override] = []
+    for override in overrides:
+        if isinstance(override, ExchangeOverride) and isinstance(override.input, BackgroundRef):
+            _, exchange = system.exchange(override.exchange_id)
+            _, name = await resolved_input(context, override.input, exchange.unit, override.name)
+            override = override.model_copy(update={"name": name})
+        resolved.append(override)
+    return resolved
+
+
 async def create_scenario(
     context: ServerContext,
     product_system_id: str,
@@ -84,7 +109,10 @@ async def create_scenario(
 ) -> Written[Scenario]:
     stored = await context.storage.get_product_system(as_uuid(product_system_id))
     changed, scenario = add_scenario(
-        stored, name=name, description=description, overrides=overrides
+        stored,
+        name=name,
+        description=description,
+        overrides=await _resolved_swaps(context, stored, overrides),
     )
     entry = await context.storage.put_product_system(
         changed, context.acting(), f"created scenario {name}"
@@ -132,9 +160,14 @@ def register(server: FastMCP, context: ServerContext) -> None:
         description=(
             "Write the parameter space in one call: parameters replaced whole by name, one "
             "of value or formula each; cases replaced whole by name, each a set of values "
-            "over literal parameters; and names to delete. A parameter a formula or a case "
-            "uses cannot be deleted, nor can a case another system's link names. Exchange "
-            "formulas are re-evaluated after the write."
+            "over literal parameters; and names to delete. A literal parameter takes an "
+            "uncertainty of the kinds an exchange takes, centred on its value within a "
+            "relative 1e-9; a formula parameter takes none, its spread following from what "
+            "it reads. Refused: a distribution on an exchange whose formula reads an "
+            "uncertain parameter, a distribution on a parameter an uncertain exchange reads, "
+            "and a case value the parameter's distribution cannot follow. A parameter a "
+            "formula or a case uses cannot be deleted, nor can a case another system's link "
+            "names. Exchange formulas are re-evaluated after the write."
         ),
     )(boundary(serialised(context.lock)(bound(set_parameters, context))))
     server.tool(
@@ -148,9 +181,13 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "and base_hash is never the system's hash. Any later edit leaves the scenario "
             "behind until rebase_scenario moves it. An input swap applies to a product "
             "exchange and names a background dataset or a foreground process, never a linked "
-            "system. A scenario is immutable; delete and create to change it. calculate_impact "
-            'takes it as a variant. Example: {"product_system_id": "…", "name": "half power", '
-            '"overrides": [{"kind": "exchange", "exchange_id": "…", "multiplier": 0.5}]}.'
+            "system, and the exchange takes the supplier's name: the one the override gives, "
+            "or the supplier's reference product. A background supplier in another unit than "
+            "the exchange is refused. A scenario is immutable; delete and create to change "
+            "it. calculate_impact takes it as a variant. Example: "
+            '{"product_system_id": "…", '
+            '"name": "half power", "overrides": [{"kind": "exchange", "exchange_id": "…", '
+            '"multiplier": 0.5}]}.'
         ),
     )(boundary(serialised(context.lock)(bound(create_scenario, context))))
     server.tool(

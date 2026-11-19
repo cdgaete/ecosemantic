@@ -7,13 +7,14 @@
       "elementary_flows": "fixture-biosphere",
       "fingerprint": "ab4a4851ae4bc8a41d356d0da3b12a8727e59dcd7f46776f7016caa670b616d9",
       "name": "fixture",
+      "revision": null,
       "scheme": "olca",
       "system_model": "unit process",
       "version": "1"
     },
     "description": "",
     "hash": "f91e47f3ae08c28e8c522a058e430636b15174362a6981b055c38026a107c05d",
-    "id": "c5bd37b7-f847-4161-87e7-6505a2e76d11",
+    "id": "b7f31920-33c5-4e54-bfa5-c05a2479dc66",
     "name": "bottle",
     "notes": "",
     "parameters": [],
@@ -26,7 +27,7 @@
             "amount": 1.0,
             "comment": null,
             "formula": null,
-            "id": "30b0fe3c-3355-4c98-98f1-cfd9581e2726",
+            "id": "fe0fa9fd-5485-4f02-9c38-066394248ed5",
             "input": null,
             "name": "bottle",
             "type": "production",
@@ -37,7 +38,7 @@
             "amount": 0.6,
             "comment": null,
             "formula": null,
-            "id": "77a7d6cc-d1a4-4d07-bc59-dc159741f812",
+            "id": "83a0b3c9-fe45-458d-af5f-0f274210f630",
             "input": {
               "database": "fixture",
               "id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c",
@@ -49,7 +50,7 @@
             "unit": "kilogram"
           }
         ],
-        "id": "aad541d0-4cc5-4fab-b265-66caaeb8901d",
+        "id": "9d9bff0b-a369-432f-bee5-e09865a1455d",
         "location": "GLO",
         "metadata": {
           "hierarchy_level": null,

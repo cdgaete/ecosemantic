@@ -7,6 +7,7 @@ import json
 import math
 import shutil
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 import independent_scores
@@ -47,6 +48,9 @@ from tests.databases.uslci_fixture import (
 )
 
 VERSION = "1.2026-09.0"
+
+NOW = datetime(2026, 1, 1, tzinfo=UTC)
+
 WIDGET = CODES["widget"]
 CLIMATE = "climate change"
 
@@ -66,7 +70,15 @@ class Prepared:
 def prepared(tmp_path: Path) -> Prepared:
     inventory = write_inventory(tmp_path / INVENTORY_NAME)
     method = write_method(tmp_path / METHOD_NAME)
-    built = build(inventory, (method,), version=VERSION, out_dir=tmp_path / "out")
+    built = build(
+        inventory,
+        (method,),
+        version=VERSION,
+        revision=1,
+        corrections=(),
+        now=NOW,
+        out_dir=tmp_path / "out",
+    )
     left_out = built.bundle.with_name(f"left-out-{VERSION}.csv")
     independent = tmp_path / "independent.csv"
     assert (
@@ -165,14 +177,14 @@ def test_one_more_unlinked_input_than_the_list_is_named(prepared: Prepared, tmp_
 
 
 def test_a_product_declared_in_litres_is_converted_to_its_reference_unit() -> None:
-    key = (CODES["distillery"], "IPCC GWP", CLIMATE)
+    key = (CODES["distillery"], "IPCC GWP", CLIMATE, CLIMATE)
     converted, mismatches = _converted({key: 1.0}, {key: (1000.0, "m3")}, {key[0]: "litre"})
     assert converted == {key: 1000.0}
     assert mismatches == []
 
 
 def test_a_declared_unit_of_another_quantity_is_named() -> None:
-    key = (CODES["distillery"], "IPCC GWP", CLIMATE)
+    key = (CODES["distillery"], "IPCC GWP", CLIMATE, CLIMATE)
     converted, mismatches = _converted({key: 1.0}, {key: (1.0, "kg")}, {key[0]: "litre"})
     assert converted == {}
     assert mismatches == [
@@ -393,6 +405,8 @@ def test_record_writes_the_lists_the_tolerance_and_the_validated_block(
         "bridged",
         "unlinked",
         "left_out",
+        "revision",
+        "corrections",
         "tolerance",
         "validated",
     ]

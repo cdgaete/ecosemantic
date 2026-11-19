@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactFlow, ReactFlowProvider, type Node } from '@xyflow/react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useMemo } from 'react'
@@ -5,8 +6,9 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import type { Process, ProductSystem } from '@/api/types'
 import { LinkedMenuItems, ProcessMenuItems } from '@/editors/graph/CardMenu'
 import { clearArea, toolbarFor, TOOLBAR_OFFSET } from '@/editors/graph/layout'
+import { LinkedNode } from '@/editors/graph/LinkedNode'
 import { ProcessNode } from '@/editors/graph/ProcessNode'
-import type { ProcessNodeData } from '@/editors/graph/build'
+import type { LinkedNodeData, ProcessNodeData } from '@/editors/graph/build'
 import { paths } from '@/lib/paths'
 import { useRequestDialog } from '@/requests/useRequestDialog'
 import { useUi } from '@/store/ui'
@@ -108,19 +110,31 @@ const PLACEMENT = placementsFor(PRODUCT).find((p) => p.code === process.code)!
 const CARD_SIZE = { width: GEOMETRY.width, height: PLACEMENT.height }
 const NODE_TYPES = { process: ProcessNode }
 
-function Canvas({ at, selected = true }: { at: { x: number; y: number }; selected?: boolean }) {
+const OTHER = PRODUCT.processes.find((p) => p.code !== process.code)!
+const OTHER_PLACEMENT = placementsFor(PRODUCT).find((p) => p.code === OTHER.code)!
+const OTHER_AT = { x: 40, y: 420 }
+
+function Canvas({ at, clicked = null }: { at: { x: number; y: number }; clicked?: string | null }) {
   const nodes = useMemo<Node<ProcessNodeData, 'process'>[]>(
     () => [
       {
         id: process.code,
         type: 'process',
         position: at,
-        selected,
+        selected: clicked === process.code,
         measured: CARD_SIZE,
         data: { process, reference: false, hot: false, hotExchanges: [], outline: null, systemId: PRODUCT.id, placement: PLACEMENT, card: GEOMETRY },
       },
+      {
+        id: OTHER.code,
+        type: 'process',
+        position: OTHER_AT,
+        selected: clicked === OTHER.code,
+        measured: { width: GEOMETRY.width, height: OTHER_PLACEMENT.height },
+        data: { process: OTHER, reference: false, hot: false, hotExchanges: [], outline: null, systemId: PRODUCT.id, placement: OTHER_PLACEMENT, card: GEOMETRY },
+      },
     ],
-    [at, selected],
+    [at, clicked],
   )
   return (
     <MemoryRouter>
@@ -151,13 +165,14 @@ describe("the card toolbar's place on the canvas", () => {
     canvasSize.width = 1024
     canvasSize.height = 768
     useClearance.setState({ clearance: CLEARANCE })
+    useUi.setState({ chosenProcess: process.id })
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
   })
 
-  it('shifts the selected card\'s toolbar into the clear area the store and the canvas size give it', async () => {
+  it('shifts the chosen card\'s toolbar into the clear area the store and the canvas size give it', async () => {
     measuringRow()
     render(<Canvas at={AT} />)
     const bar = await screen.findByRole('toolbar', { name: 'Card' })
@@ -208,14 +223,58 @@ describe("the card toolbar's place on the canvas", () => {
     await waitFor(() => expect(bar.parentElement?.style.transform).toBe(`translate(${tight.x}px, ${tight.y + CARD_SIZE.height + TOOLBAR_OFFSET}px) translate(0%, 0%)`))
   })
 
-  it('places the toolbar of a card selected after the canvas drew it', async () => {
+  it('places the toolbar of a card chosen after the canvas drew it', async () => {
     measuringRow()
-    const view = render(<Canvas at={AT} selected={false} />)
+    useUi.setState({ chosenProcess: null })
+    render(<Canvas at={AT} />)
     expect(screen.queryByRole('toolbar', { name: 'Card' })).not.toBeInTheDocument()
-    view.rerender(<Canvas at={AT} selected />)
+    act(() => useUi.getState().chooseProcess(process.id))
     const bar = await screen.findByRole('toolbar', { name: 'Card' })
     const placed = placedFor(AT, CLEARANCE, NATURAL.height)
     expect(bar.style.width).toBe('')
     expect(bar.parentElement?.style.translate).toBe(`${placed.left - AT.x}px 0px`)
+  })
+
+  it('draws the toolbar on the chosen card, not on the card whose click chose another', async () => {
+    measuringRow()
+    useUi.setState({ chosenProcess: OTHER.id })
+    render(<Canvas at={AT} clicked={process.code} />)
+    const bars = await screen.findAllByRole('toolbar', { name: 'Card' })
+    expect(bars).toHaveLength(1)
+    expect(bars[0].parentElement?.style.transform).toContain(`translate(${OTHER_AT.x}px,`)
+    act(() => useUi.getState().chooseProcess(process.id))
+    await waitFor(() => expect(screen.getByRole('toolbar', { name: 'Card' }).parentElement?.style.transform).toContain(`translate(${AT.x}px,`))
+    expect(screen.getAllByRole('toolbar', { name: 'Card' })).toHaveLength(1)
+  })
+
+  it('draws no toolbar while no process is chosen, whatever card a click selected', () => {
+    useUi.setState({ chosenProcess: null })
+    render(<Canvas at={AT} clicked={process.code} />)
+    expect(screen.queryByRole('toolbar', { name: 'Card' })).not.toBeInTheDocument()
+  })
+
+  it('draws the menu of a linked system a click selected, and none while a process is chosen', async () => {
+    measuringRow()
+    useUi.setState({ chosenProcess: null })
+    const linked: Node<LinkedNodeData, 'linked'> = {
+      id: node,
+      type: 'linked',
+      position: AT,
+      selected: true,
+      measured: CARD_SIZE,
+      data: { productSystemId: part.id, atHash: null, case: null, placement: PLACEMENT, card: GEOMETRY },
+    }
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <ReactFlowProvider>
+            <ReactFlow nodes={[linked]} nodeTypes={{ linked: LinkedNode }} proOptions={{ hideAttribution: true }} />
+          </ReactFlowProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    expect(await screen.findByRole('toolbar', { name: 'Card' })).toBeInTheDocument()
+    act(() => useUi.getState().chooseProcess(process.id))
+    await waitFor(() => expect(screen.queryByRole('toolbar', { name: 'Card' })).not.toBeInTheDocument())
   })
 })

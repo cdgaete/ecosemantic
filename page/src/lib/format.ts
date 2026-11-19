@@ -1,4 +1,8 @@
-import type { Cut, Method } from '@/api/types'
+import type { Cut, Database, Method } from '@/api/types'
+
+export function formatRelease(database: Database): string {
+  return database.revision === null ? database.version : `${database.version} · revision ${database.revision}`
+}
 
 export function formatAmount(value: number): string {
   const magnitude = Math.abs(value)
@@ -9,19 +13,20 @@ export function formatAmount(value: number): string {
   return value.toExponential(2)
 }
 
-export function formatShare(fraction: number): string {
-  return `${(100 * fraction).toFixed(1)} %`
+export function formatShare(fraction: number | null): string {
+  return fraction === null ? '–' : `${(100 * fraction).toFixed(1)} %`
 }
 
 export function cutNotice(cut: Cut | null): string | null {
   if (cut === null) return null
   const items = (count: number) => (count === 1 ? '1 item' : `${count} items`)
   const cutoff = `the ${formatShare(cut.cutoff)} cut-off`
+  const together = (share: number | null) => (share === null ? 'together no share of a total of 0' : `together ${formatShare(share)} of the total`)
   const said: string[] = []
-  if (cut.below > 0) said.push(`${items(cut.below)} under ${cutoff} ${cut.below === 1 ? 'is' : 'are'} not shown, together ${formatShare(cut.share)} of the total.`)
+  if (cut.below > 0) said.push(`${items(cut.below)} under ${cutoff} ${cut.below === 1 ? 'is' : 'are'} not shown, ${together(cut.share)}.`)
   if (cut.unlisted > 0)
     said.push(
-      `${items(cut.unlisted)} that ${cut.unlisted === 1 ? 'reaches' : 'reach'} ${cutoff} ${cut.unlisted === 1 ? 'is' : 'are'} past the end of the list, together ${formatShare(cut.unlisted_share)} of the total.`,
+      `${items(cut.unlisted)} that ${cut.unlisted === 1 ? 'reaches' : 'reach'} ${cutoff} ${cut.unlisted === 1 ? 'is' : 'are'} past the end of the list, ${together(cut.unlisted_share)}.`,
     )
   return said.length === 0 ? null : said.join(' ')
 }
@@ -29,6 +34,10 @@ export function cutNotice(cut: Cut | null): string | null {
 export function shortHash(hash: string | null): string {
   if (hash === null) return ''
   return `${hash.slice(0, 6)}…${hash.slice(-4)}`
+}
+
+export function shortId(id: string): string {
+  return id.slice(0, 8)
 }
 
 export function creditLoopNote(codes: string[], variant?: string): string {
@@ -41,14 +50,30 @@ export function backwardsTreatmentNote(named: string, variant?: string): string 
   return variant === undefined ? sent : `In ${variant}, ${sent}`
 }
 
+export function indicatorLabel(method: Method): string {
+  return method.indicator === method.impact_category ? '' : method.indicator
+}
+
 export function categoryLabel(method: Method): string {
-  return method.indicator ? `${method.impact_category} · ${method.indicator}` : method.impact_category
+  return [method.impact_category, indicatorLabel(method)].filter(Boolean).join(' · ')
+}
+
+export function methodLabel(method: Method): string {
+  return [method.impact_method, categoryLabel(method)].filter(Boolean).join(' › ')
 }
 
 export function methodById(methods: Method[], id: string): Method {
   const found = methods.find((method) => method.id === id)
   if (found === undefined) throw new Error(`No method ${id} is listed here.`)
   return found
+}
+
+export function weightingSetName(total: { weighting_set: string | null; position: number }): string {
+  return total.weighting_set ?? `Unnamed set ${total.position + 1}`
+}
+
+export function formatUnit(unit: string | null): string {
+  return unit ?? 'no unit stated'
 }
 
 export function formatAgo(instant: string, now: Date = new Date()): string {

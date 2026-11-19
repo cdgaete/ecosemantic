@@ -15,7 +15,7 @@ from ecosemantic.databases.ecoinvent.profile import Profile, pinned
 from ecosemantic.databases.ecoinvent.release import SystemModel
 from ecosemantic.databases.ecoinvent.setup import Prepared
 from ecosemantic.databases.ecoinvent.validate import Validation
-from ecosemantic.errors import Unavailable
+from ecosemantic.errors import Invalid, Unavailable
 from ecosemantic.installs import sources
 from ecosemantic.installs.sources import database_of, install_source
 from ecosemantic.installs.supervisor import LocalInstaller
@@ -87,6 +87,57 @@ def test_install_source_installs_the_fixture_package_and_answers_its_summary(
     assert [row["flow"] for row in summary["cut_off"]] == ["imported part"]
     assert summary["cut_off"][0]["reason"] == "its provider is not in the package"
     assert (served_build(Path(str(summary["directory"]))) / "catalog.duckdb").is_file()
+
+
+def test_an_install_reports_the_cas_values_it_set_aside(tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    data.mkdir()
+    draft = InstallDraft(
+        source="openlca",
+        actor=AGENT,
+        version="1",
+        system_model="unit process",
+        package=str(
+            build_package(
+                tmp_path / "cas.zip",
+                cas={"co2": "000124-38-9", "ch4": "n.a.", "water": "7732190"},
+            )
+        ),
+        name=NAME,
+        drop_unlinked=True,
+    )
+
+    summary = install_source(data, draft, None, _quiet)
+
+    assert summary["cas_set_aside"] == 2
+
+
+def test_an_unknown_compartment_refuses_a_persons_package(tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    data.mkdir()
+    draft = InstallDraft(
+        source="openlca",
+        actor=AGENT,
+        version="1",
+        system_model="unit process",
+        package=str(
+            build_package(
+                tmp_path / "social.zip",
+                extra_flows={
+                    "land": ("Land use, social", "Elementary flows/Social issues/unspecified"),
+                    "noise": ("Noise, social", "Elementary flows/Social issues/unspecified"),
+                },
+            )
+        ),
+        name=NAME,
+        drop_unlinked=True,
+    )
+
+    with pytest.raises(Invalid) as raised:
+        install_source(data, draft, None, _quiet)
+
+    assert "compartment 'Social issues/unspecified' (2 rows)" in str(raised.value)
+    assert not (data / "databases").exists()
 
 
 def test_install_source_reports_installing_last(tmp_path: Path) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 
@@ -7,12 +8,18 @@ import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.exceptions import ToolError
 
+from ecosemantic.backends.native.install import install
 from ecosemantic.local import build_context
 from ecosemantic.mcp import discovery
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.discovery import NO_DATABASE
 from ecosemantic.mcp.server import build_server
-from tests.fixture_data import CODES, FIXTURE_DB, FLOW_IDS
+from ecosemantic.model.entities import method_id
+from ecosemantic.package.background import read_background
+from ecosemantic.ports.types import WeightingFactor, WeightingSet
+from tests.engine_fixture import fixture_bundle
+from tests.fixture_data import CODES, FIXTURE_DB, FLOW_IDS, GWP
+from tests.memory_background import MemoryInventory
 
 
 @pytest.fixture(scope="module")
@@ -40,6 +47,33 @@ async def test_list_databases(server: FastMCP) -> None:
         out = (await client.call_tool("list_databases", {})).structured_content
         assert FIXTURE_DB in [d["name"] for d in out["value"]]
         assert out["hint"] is None
+
+
+async def test_list_databases_answers_the_revision_an_install_was_made_at(tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    data.mkdir()
+    systems = tmp_path / "systems"
+    systems.mkdir()
+    sources = tmp_path / "sources"
+    sources.mkdir()
+    bundle = fixture_bundle(sources)
+    install(
+        data,
+        read_background(bundle, FIXTURE_DB, foreground=frozenset()),
+        bundle,
+        version="1",
+        system_model="unit process",
+        revision=2,
+    )
+    context = build_context(data, systems)
+    try:
+        built = build_server()
+        discovery.register(built, context)
+        async with Client(built) as client:
+            out = (await client.call_tool("list_databases", {})).structured_content
+    finally:
+        context.close()
+    assert [(d["name"], d["revision"]) for d in out["value"]] == [(FIXTURE_DB, 2)]
 
 
 async def test_list_databases_on_an_empty_engine_points_to_the_sources(
@@ -95,8 +129,23 @@ async def test_get_background_process_and_flow(server: FastMCP) -> None:
                 {"database": FIXTURE_DB, "flow_id": FLOW_IDS["water_in"]},
             )
         ).structured_content["value"]
-        # a bundle files a natural resource under openLCA's "Resource"
-        assert flow["compartment"] == "Resource"
+        assert flow["compartment"] == "natural resource"
+
+
+async def test_get_background_process_names_each_supplier_s_location(server: FastMCP) -> None:
+    async with Client(server) as client:
+        steel = (
+            await client.call_tool(
+                "get_background_process",
+                {"database": FIXTURE_DB, "process_id": CODES["steel"], "exchanges": True},
+            )
+        ).structured_content["value"]
+    assert [(e["type"], e["supplier"], e["supplier_location"]) for e in steel["exchanges"]] == [
+        ("product", None, None),
+        ("product", "electricity production", "GLO"),
+        ("elementary", None, None),
+        ("elementary", None, None),
+    ]
 
 
 async def test_list_vocabulary_answers_the_four_original_kinds(server: FastMCP) -> None:
@@ -111,7 +160,7 @@ async def test_list_vocabulary_answers_the_four_original_kinds(server: FastMCP) 
             "kilowatt hour",
             "ton kilometer",
         ]
-        assert [t["value"] for t in await kind("locations")] == ["GLO"]
+        assert [(t["value"], t["detail"]) for t in await kind("locations")] == [("GLO", "Global")]
         air = next(t for t in await kind("compartments") if t["value"] == "air")
         assert air["detail"] == "3 flows"
         # a bundle's category name "climate change > GWP100" holds the indicator after " > "
@@ -331,3 +380,39 @@ async def test_search_tools_refuse_a_query_of_no_term_with_a_filter(server: Fast
             payload = json.loads(str(caught.value))
             assert payload["error"] == "invalid"
             assert "a search needs at least one term" in payload["message"]
+
+
+async def test_a_familys_weighting_sets_are_named(context: ServerContext) -> None:
+    gwp = method_id(" > ".join(GWP))
+    inventory = MemoryInventory(
+        weighting_sets=[
+            WeightingSet(
+                impact_method="gwp",
+                name="weighted",
+                unit="Pt",
+                factors=[WeightingFactor(method_id=gwp, normalisation=None, weighting=2.0)],
+            ),
+            WeightingSet(
+                impact_method="gwp",
+                name=None,
+                unit=None,
+                factors=[WeightingFactor(method_id=gwp, normalisation=None, weighting=1.0)],
+            ),
+        ]
+    )
+    built = build_server()
+    discovery.register(built, dataclasses.replace(context, inventory=inventory))
+    async with Client(built) as client:
+        vocabulary = (
+            await client.call_tool(
+                "list_vocabulary", {"database": FIXTURE_DB, "kind": "impact_methods"}
+            )
+        ).structured_content["value"]
+        hits = (
+            await client.call_tool("search_methods", {"database": FIXTURE_DB, "query": "fixture"})
+        ).structured_content
+    assert [(term["value"], term["detail"]) for term in vocabulary] == [
+        ("gwp", "1 method; weighting sets: weighted; an unnamed set"),
+        ("water", "1 method"),
+    ]
+    assert hits["weighting_sets"] == {"gwp": ["weighted", None], "water": []}

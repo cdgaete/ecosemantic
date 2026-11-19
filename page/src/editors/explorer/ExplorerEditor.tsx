@@ -2,14 +2,14 @@ import { useEffect } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 import { NoEditor } from '@/editors/NoEditor'
 import { useAddress, type Patch } from '@/lib/address'
-import { paths, type ExplorerSection } from '@/lib/paths'
+import { paths, type ExplorerSection, type SearchKind } from '@/lib/paths'
 import { useEditorTab } from '@/window/useEditorTab'
 import { DatasetsSection } from './DatasetsSection'
 import { FlowsSection } from './FlowsSection'
 import { ListSection } from './ListSection'
 import { MethodsSection } from './MethodsSection'
 import { SectionBar } from './SectionBar'
-import { isSection, TITLES } from './sections'
+import { isSection, SEARCHED_SECTIONS, TITLES } from './sections'
 
 interface Place {
   section: ExplorerSection
@@ -17,10 +17,8 @@ interface Place {
   searching: boolean
 }
 
-const SEARCHED_SECTIONS: Record<string, ExplorerSection> = {
-  processes: 'datasets',
-  'elementary-flows': 'flows',
-  methods: 'methods',
+function isSearchKind(value: string): value is SearchKind {
+  return Object.hasOwn(SEARCHED_SECTIONS, value)
 }
 
 function placeOf(rest: string): Place | null {
@@ -29,8 +27,8 @@ function placeOf(rest: string): Place | null {
   if (head === '') return { section: 'datasets', item: '', searching: false }
   if (head === 'processes') return { section: 'datasets', item: tail.join('/'), searching: false }
   if (head === 'search') {
-    const section = SEARCHED_SECTIONS[tail[0] ?? '']
-    return section === undefined ? null : { section, item: '', searching: true }
+    const kind = tail[0] ?? ''
+    return isSearchKind(kind) ? { section: SEARCHED_SECTIONS[kind], item: '', searching: true } : null
   }
   return isSection(head) ? { section: head, item: tail.join('/'), searching: false } : null
 }

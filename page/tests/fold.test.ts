@@ -1,35 +1,44 @@
-import { folded } from '@/activity/fold'
-import type { Call } from '@/api/types'
+import { folded, foldedLine } from '@/activity/fold'
+import type { Call, CallOutcome, Effect } from '@/api/types'
 import trail from './fixtures/trail.json'
 
 const base = trail.value[0] as unknown as Call
-const quiet = (tool: string, n: number): Call => ({ ...base, id: `${tool}-${n}`, tool, outcome: 'ok', summary: null, error: null })
-const searched = (n: number): Call => ({
-  ...base,
-  id: `search-${n}`,
-  tool: 'search_processes',
-  summary: { count: 2, more: false, noun: 'found', items: [{ label: 'hit', detail: null, kind: 'background', database: 'db', ref: 'r' }], scores: [], demand: null },
-})
+
+function call(tool: string, effect: Effect, n: number, outcome: CallOutcome = 'ok'): Call {
+  return { ...base, id: `${tool}-${n}`, tool, effect, outcome, summary: null, error: null }
+}
+
+const shape = (part: { kind: 'write'; call: Call } | { kind: 'reads'; calls: Call[] }): string =>
+  part.kind === 'write' ? part.call.tool : `reads ${part.calls.length}`
 
 describe('folded', () => {
-  it('folds three or more consecutive quiet calls of one tool into one run', () => {
-    const parts = folded([quiet('arrange_graph', 1), quiet('arrange_graph', 2), quiet('arrange_graph', 3)])
-    expect(parts).toEqual([{ kind: 'run', tool: 'arrange_graph', calls: expect.any(Array), at: 0 }])
-  })
-
-  it('leaves two alone', () => {
-    expect(folded([quiet('graph_layout', 1), quiet('graph_layout', 2)]).map((p) => p.kind)).toEqual(['call', 'call'])
-  })
-
-  it('keeps a call with candidates, or a failed one, out of any run, and counts positions in the trail', () => {
-    const calls = [quiet('arrange_graph', 1), quiet('arrange_graph', 2), quiet('arrange_graph', 3), searched(1), { ...quiet('arrange_graph', 4), outcome: 'error' as const }, quiet('arrange_graph', 5)]
+  it('a write stands on its own and the reads between two writes fold into one part', () => {
+    const calls = [call('create_exchange', 'write', 1), call('search_processes', 'read', 2), call('get_background_process', 'read', 3), call('update_exchange', 'write', 4)]
     const parts = folded(calls)
-    expect(parts.map((p) => (p.kind === 'run' ? `run@${p.at}` : `call@${p.at}`))).toEqual(['run@0', 'call@3', 'call@4', 'call@5'])
+    expect(parts.map(shape)).toEqual(['create_exchange', 'reads 2', 'update_exchange'])
+    expect(parts.map((part) => part.at)).toEqual([0, 1, 3])
   })
 
-  it('leaves another tool between two runs out of them', () => {
-    const calls = [quiet('arrange_graph', 1), quiet('arrange_graph', 2), quiet('arrange_graph', 3), quiet('graph_layout', 4), quiet('arrange_graph', 5), quiet('arrange_graph', 6), quiet('arrange_graph', 7)]
-    const parts = folded(calls)
-    expect(parts.map((p) => (p.kind === 'run' ? `${p.tool}@${p.at}` : `call@${p.at}`))).toEqual(['arrange_graph@0', 'call@3', 'arrange_graph@4'])
+  it('a run of one read folds', () => {
+    const parts = folded([call('create_exchange', 'write', 1), call('search_processes', 'read', 2), call('update_exchange', 'write', 3)])
+    expect(parts.map(shape)).toEqual(['create_exchange', 'reads 1', 'update_exchange'])
+    expect(parts[1].at).toBe(1)
+  })
+
+  it('the folded line counts each tool in the order it was first called', () => {
+    const calls = [call('calculate_impact', 'compute', 1), call('list_requests', 'read', 2), call('calculate_impact', 'compute', 3), call('calculate_impact', 'compute', 4)]
+    expect(foldedLine(calls)).toBe('calculate_impact ×3 · list_requests')
+  })
+
+  it('a failed read is counted in its folded line', () => {
+    const calls = [call('search_processes', 'read', 1), call('search_processes', 'read', 2), call('search_processes', 'read', 3, 'error'), call('search_processes', 'read', 4)]
+    expect(foldedLine(calls)).toBe('search_processes ×4, 1 failed')
+    expect(foldedLine([call('search_processes', 'read', 5, 'error')])).toBe('search_processes, 1 failed')
+  })
+
+  it('a delete stands on its own', () => {
+    const parts = folded([call('search_processes', 'read', 1), call('delete_exchange', 'delete', 2), call('search_methods', 'read', 3)])
+    expect(parts.map(shape)).toEqual(['reads 1', 'delete_exchange', 'reads 1'])
+    expect(parts.map((part) => part.at)).toEqual([0, 1, 2])
   })
 })

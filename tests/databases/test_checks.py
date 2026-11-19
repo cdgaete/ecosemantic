@@ -4,6 +4,7 @@ every technosphere row a dataset of it."""
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,9 @@ from tests.databases.uslci_fixture import (
 )
 
 VERSION = "1.2026-09.0"
+
+NOW = datetime(2026, 1, 1, tzinfo=UTC)
+
 ABSENT = "a-flow-and-a-dataset-the-import-lacks"
 
 
@@ -27,7 +31,15 @@ def imported(tmp_path: Path) -> Import:
     """The fixture's release built into a bundle and read back by the core's importer."""
     inventory = write_inventory(tmp_path / INVENTORY_NAME)
     method = write_method(tmp_path / METHOD_NAME)
-    built = build(inventory, (method,), version=VERSION, out_dir=tmp_path / "out")
+    built = build(
+        inventory,
+        (method,),
+        version=VERSION,
+        revision=1,
+        corrections=(),
+        now=NOW,
+        out_dir=tmp_path / "out",
+    )
     return read_background(built.bundle, built.bundle.stem, foreground=frozenset())
 
 

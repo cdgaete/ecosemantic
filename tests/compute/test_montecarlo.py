@@ -5,16 +5,20 @@ import math
 import pytest
 
 from ecosemantic.compute.montecarlo import (
+    Holding,
+    Standing,
+    constant,
     median_ranks,
     paired_delta,
     paired_samples,
     should_stop,
+    standing,
     summarize_samples,
-    worst_rel_se,
 )
 from ecosemantic.errors import Invalid
 from ecosemantic.model.entities import Method
 from ecosemantic.ports.types import MonteCarloCategory, MonteCarloResult
+from tests.conftest import drawn_counts
 from tests.fixture_data import FIXTURE_DATABASE
 
 Z95 = 1.959963984540054
@@ -101,25 +105,91 @@ def test_summary_rejects_empty() -> None:
         summarize_samples([])
 
 
+TIGHT = [1.0 + 0.01 * (i % 3) for i in range(30)]
+# thirty draws in six symmetric triples about 0: its median's interval holds 0
+ABOUT_ZERO = [-3.0, -2.0, -1.0, 1.0, 2.0, 3.0] * 5
+
+
 def test_stop_rule_gates_on_the_worst_category() -> None:
     tight = [1.0, 1.01, 0.99, 1.0, 1.02, 0.98]
     loose = [1.0, 2.0, 0.5, 1.5, 0.7, 1.8]
-    _, gating = worst_rel_se([tight, loose])
-    assert gating == 1
-    assert should_stop([tight, tight], n_min=6, tau=0.05)
-    assert not should_stop([tight, loose], n_min=6, tau=0.05)
-    assert not should_stop([tight, tight], n_min=10, tau=0.05)
+    met = standing([tight, loose])
+    assert met.worst == 1
+    assert not should_stop(met, 6, 6, 0.05)
+    assert should_stop(standing([tight, tight]), 6, 6, 0.05)
+    assert not should_stop(standing([tight, tight]), 5, 6, 0.05)
 
 
-def test_the_stop_rule_waits_for_six_samples_and_for_a_median_other_than_zero() -> None:
-    assert not should_stop([[1.0] * 5], n_min=1, tau=0.05)
-    assert should_stop([[1.0] * 6], n_min=1, tau=0.05)
-    centred = [-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0]
-    assert worst_rel_se([[1.0] * 7, centred]) == (None, 1)
+def test_a_category_below_six_draws_is_unmeasured() -> None:
+    met = standing([[1.0, 2.0, 0.5, 1.5, 0.7]])
+    assert met.unmeasured == [0] and met.worst_rel_se is None and met.worst is None
+    assert not should_stop(met, 5, 6, 0.05)
 
 
 def test_the_stop_rule_stops_through_a_heavy_tail() -> None:
-    assert should_stop([HEAVY_TAIL], n_min=30, tau=0.05)
+    assert should_stop(standing([HEAVY_TAIL]), 200, 30, 0.05)
+
+
+def test_a_constant_category_counts_as_met() -> None:
+    met = standing([[2.0] * 30, TIGHT])
+    assert met.constant == [0] and met.near_zero == [] and met.unmeasured == []
+    assert met.worst == 1 and met.worst_rel_se is not None
+    assert should_stop(met, 30, 6, 0.05)
+
+
+def test_draws_equal_within_1e_12_are_constant() -> None:
+    assert constant([1.0, 1.0 + 1e-13] * 3)
+    assert not constant([1.0, 1.0 + 1e-11])
+    assert constant([0.0] * 30)
+
+
+def test_a_median_indistinguishable_from_zero_is_left_out_and_named() -> None:
+    met = standing([TIGHT, ABOUT_ZERO])
+    assert met.near_zero == [1] and met.constant == []
+    assert met.worst == 0 and met.worst_rel_se is not None
+    assert should_stop(met, 30, 6, 0.05)
+
+
+def test_a_category_returns_to_the_rule_when_its_interval_leaves_zero() -> None:
+    prefix = [-3.0, -2.0, -1.0, 1.0, 2.0, 3.0, -3.0, -2.0, -1.0, 1.0]
+    assert standing([prefix]).near_zero == [0]
+    later = prefix + [5.0 + 0.01 * (i % 3) for i in range(390)]
+    met = standing([later])
+    assert met.near_zero == [] and met.unmeasured == []
+    assert met.worst == 0 and met.worst_rel_se is not None
+    assert should_stop(met, 400, 6, 0.05)
+
+
+def test_a_run_with_nothing_to_measure_stops_at_n_min() -> None:
+    five = standing([[0.0] * 5, [-3.0, -2.0, -1.0, 1.0, 2.0]])
+    # a median's interval needs six draws, so the second is unmeasured at five
+    assert five.constant == [0] and five.near_zero == [] and five.unmeasured == [1]
+    assert not should_stop(five, 5, 6, 0.05)
+    met = standing([[0.0] * 6, [-3.0, -2.0, -1.0, 1.0, 2.0, 3.0]])
+    assert met.constant == [0] and met.near_zero == [1] and met.unmeasured == []
+    assert met.worst_rel_se is None and met.worst is None
+    assert should_stop(met, 6, 6, 0.05)
+
+
+def _check(worst: int | None, error: float | None) -> Standing:
+    """A check of the stop rule as a run makes it: one category measured, or none."""
+    return Standing(worst_rel_se=error, worst=worst, constant=[], near_zero=[], unmeasured=[])
+
+
+def test_the_category_that_held_the_run_longest() -> None:
+    holding = Holding()
+    for draw in range(1, 101):
+        if draw <= 50:
+            holding.observe(_check(1, 0.3), 0.05)
+        elif draw <= 80:
+            holding.observe(_check(0, 0.2), 0.05)
+        else:
+            holding.observe(_check(0, 0.01), 0.05)
+    assert holding.longest() == 0
+    never = Holding()
+    for _ in range(10):
+        never.observe(_check(0, 0.01), 0.05)
+    assert never.longest() is None
 
 
 def test_paired_delta_is_the_median_of_the_draw_by_draw_differences() -> None:
@@ -137,14 +207,16 @@ def test_paired_delta_is_the_median_of_the_draw_by_draw_differences() -> None:
 
 
 def _sampled(samples: list[float], dropped: list[int]) -> MonteCarloResult:
-    method = Method.of(("db", "IPCC", "climate change"), "kg CO2-Eq")
+    method = Method.of(("db", "IPCC", "climate change", "climate change"), "kg CO2-Eq")
     return MonteCarloResult(
         database=FIXTURE_DATABASE,
         n=len(samples),
         stopped="fixed",
-        gating_method=method.id,
+        gating_method=None,
+        constant=[],
+        indistinguishable_from_zero=[],
         scope="full",
-        normals_at_amount=0,
+        drawn=drawn_counts(),
         credit_loops=[],
         dropped_draws=dropped,
         dropped_loops=[["widget"]] if dropped else [],

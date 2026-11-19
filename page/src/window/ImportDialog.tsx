@@ -43,7 +43,7 @@ export function ImportDialog({ systemId, format, onClose }: { systemId: string; 
         </label>
         {format === 'openlca' ? (
           <label className="flex flex-col gap-1 text-xs">
-            Exported at entry (optional)
+            Number of the system's last entry (optional)
             <input className="rounded-sm border bg-background px-1.5 py-1" inputMode="numeric" value={atEntry} onChange={(e) => setAtEntry(e.target.value.trim())} />
           </label>
         ) : null}
@@ -72,7 +72,8 @@ export function ImportDialog({ systemId, format, onClose }: { systemId: string; 
             </tbody>
           </table>
         ) : null}
-        {sent.data ? <p className="text-xs text-success">Imported as entry #{sent.data.seq}</p> : null}
+        {sent.data && 'message' in sent.data ? <p className="text-xs text-muted-foreground">{sent.data.message}</p> : null}
+        {sent.data && 'seq' in sent.data ? <p className="text-xs text-success">Imported as entry #{sent.data.seq}</p> : null}
         <div className="flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={onClose}>
             Close

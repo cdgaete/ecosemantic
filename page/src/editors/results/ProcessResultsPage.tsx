@@ -15,7 +15,7 @@ export function ProcessResultsPage({ result }: { result: Result }) {
   const { id, params, system, impact } = result
   const scores = impact.data?.value.scores ?? []
   const methods = impact.data?.value.methods ?? []
-  const { chosen, choose } = useCategory(scores)
+  const { chosen, choose } = useCategory(scores, id, (category) => category.value)
   const [cutoff, setCutoff] = useState(1)
   const parts = useContributions(id, result.hash, { by: 'process', method_id: chosen?.method_id, top_n: 50, cutoff: cutoff / 100, demand: demandOf(params!, result.root) }, chosen !== undefined && !result.stale)
   const answer = parts.data?.value
@@ -33,9 +33,9 @@ export function ProcessResultsPage({ result }: { result: Result }) {
   if (total !== undefined) {
     if (cut !== null) {
       const rest = cut.below_score + cut.unlisted_score
-      summary.push({ key: 'rest', cells: { share: formatShare(total.value === 0 ? 0 : rest / total.value), process: 'Rest', score: formatAmount(rest) } })
+      summary.push({ key: 'rest', cells: { share: formatShare(total.value === 0 ? null : rest / total.value), process: 'Rest', score: formatAmount(rest) } })
     }
-    summary.push({ key: 'total', className: 'font-medium', cells: { share: formatShare(1), process: 'Total', score: formatAmount(total.value) } })
+    summary.push({ key: 'total', className: 'font-medium', cells: { share: formatShare(total.value === 0 ? null : 1), process: 'Total', score: formatAmount(total.value) } })
   }
   const cutNoticeText = cutNotice(cut)
   return (

@@ -1,4 +1,4 @@
-import { useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { hashKey, partialMatchKey, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
 import { create } from 'zustand'
 import { useUi } from '@/store/ui'
@@ -49,6 +49,22 @@ let shared: Shared | null = null
 
 export const WAIT_DEADLINE = 3000
 
+const pending = new Map<QueryClient, Map<string, readonly unknown[]>>()
+let frame: number | null = null
+
+export function gathered(queryKeys: readonly (readonly unknown[])[]): (readonly unknown[])[] {
+  const distinct = queryKeys.filter((queryKey, at) => queryKeys.findIndex((other) => hashKey(other) === hashKey(queryKey)) === at)
+  return distinct.filter((queryKey) => !distinct.some((other) => hashKey(other) !== hashKey(queryKey) && partialMatchKey(queryKey, other)))
+}
+
+function flush(): void {
+  frame = null
+  const batches = [...pending]
+  pending.clear()
+  for (const [client, keys] of batches)
+    gathered([...keys.values()]).forEach((queryKey) => void client.invalidateQueries({ queryKey }))
+}
+
 export function openStreams(): number {
   return shared === null ? 0 : 1
 }
@@ -60,7 +76,10 @@ export function watchWaiting(): void {
 }
 
 function invalidate(client: QueryClient, ...queryKeys: (readonly unknown[])[]): void {
-  queryKeys.forEach((queryKey) => void client.invalidateQueries({ queryKey }))
+  const held = pending.get(client) ?? new Map<string, readonly unknown[]>()
+  queryKeys.forEach((queryKey) => held.set(hashKey(queryKey), queryKey))
+  pending.set(client, held)
+  if (frame === null) frame = requestAnimationFrame(flush)
 }
 
 function withoutLatest(systemId: string): Record<string, LogEntry> {
@@ -105,6 +124,7 @@ function forProcess(client: QueryClient, event: StreamEvent): void {
     invalidate(client, keys.installs)
     if (event.install?.status === 'done') invalidate(client, keys.databases)
   } else if (event.kind === 'entry' || event.kind === 'deleted') invalidate(client, keys.systems)
+  else if (event.kind === 'request' || event.kind === 'resolution') invalidate(client, keys.home)
 }
 
 function openShared(client: QueryClient): EventStream {

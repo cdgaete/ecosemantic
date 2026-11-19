@@ -146,6 +146,13 @@ _DEFAULTS: dict[str, object] = {
     "extra_category": False,
     "cancelling_factor": False,
     "overview_missing": False,
+    "one_shortname_two_names": False,
+}
+
+GEOGRAPHIES: dict[str, str] = {
+    "GLO": "Global",
+    "NA": "North America",
+    "RER": "Europe",
 }
 
 
@@ -386,6 +393,7 @@ def build_release(root: Path, **overrides: object) -> Release:
     extra_category = bool(settings["extra_category"])
     cancelling_factor = bool(settings["cancelling_factor"])
     overview_missing = bool(settings["overview_missing"])
+    one_shortname_two_names = bool(settings["one_shortname_two_names"])
 
     root.mkdir(parents=True, exist_ok=True)
 
@@ -420,6 +428,11 @@ def build_release(root: Path, **overrides: object) -> Release:
     datasets = ecospold / "datasets"
     for dataset in catalogue:
         _write_dataset(datasets / f"{dataset.native}.spold", dataset)
+    _write_geographies(
+        ecospold / "MasterData" / "Geographies.xml",
+        tuple(dataset.geography for dataset in catalogue),
+        one_shortname_two_names,
+    )
 
     lcia = root / "lcia.xlsx"
     _write_lcia(lcia, extra_factor_row, extra_category, cancelling_factor)
@@ -497,6 +510,22 @@ def _write_intermediate_masterdata(path: Path, steel_unit: str) -> None:
         )
         _localised(exchange, "name", name)
         _localised(exchange, "unitName", unit)
+    _write_xml(path, root)
+
+
+def _write_geographies(path: Path, shortnames: tuple[str, ...], two_names: bool) -> None:
+    root = ET.Element(f"{{{NS}}}validGeographies")
+    named = [(shortname, GEOGRAPHIES[shortname]) for shortname in dict.fromkeys(shortnames)]
+    if two_names:
+        named.append(("NA", "Northern Appalachia"))
+    for index, (shortname, name) in enumerate(named):
+        geography = ET.SubElement(
+            root,
+            f"{{{NS}}}geography",
+            {"id": f"00000050-0000-4000-8000-0000000000{index:02d}"},
+        )
+        _localised(geography, "name", name)
+        _localised(geography, "shortname", shortname)
     _write_xml(path, root)
 
 

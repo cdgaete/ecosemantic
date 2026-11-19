@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,7 @@ from ecosemantic.databases.bafu.profile import Profile
 from ecosemantic.databases.zolca.export import write
 from ecosemantic.errors import Conflict, NotSupported
 from ecosemantic.package.background import Import, read_background
+from ecosemantic.package.manifest import read_manifest
 from tests.databases.bafu.test_download import (
     INVENTORY_UUID,
     StubNexus,
@@ -25,6 +27,8 @@ from tests.databases.bafu.test_download import (
 from tests.databases.zolca.fixture import FIXTURES
 
 ZOLCA = FIXTURES / "openlca.zip"
+
+NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _session(server: StubNexus) -> type:
@@ -49,7 +53,7 @@ def _profile_pinning_the_fixture() -> Profile:
 
 
 def test_a_build_writes_the_bundle_its_export_writes(tmp_path: Path) -> None:
-    found = build(ZOLCA, version="probe", out_dir=tmp_path)
+    found = build(ZOLCA, version="probe", revision=1, corrections=(), now=NOW, out_dir=tmp_path)
     direct = write.export(ZOLCA, tmp_path / "direct.zip")
 
     assert found.bundle == tmp_path / "bafu-probe.zip"
@@ -70,19 +74,20 @@ def test_the_build_reads_its_bundle_back_under_the_releases_name(
         return read_background(path, name, foreground=foreground)
 
     monkeypatch.setattr(build_module, "read_background", recorded)
-    found = build(ZOLCA, version="2026-v1", out_dir=tmp_path)
+    found = build(ZOLCA, version="2026-v1", revision=1, corrections=(), now=NOW, out_dir=tmp_path)
 
     assert [(path.name, name, foreground) for path, name, foreground in read] == [
-        (".bafu-2026-v1.staging.zip", "bafu-2026-v1", frozenset())
+        (".bafu-2026-v1.revised.zip", "bafu-2026-v1", frozenset())
     ]
     assert found.bundle == tmp_path / "bafu-2026-v1.zip"
+    assert read_manifest(found.bundle).revision == 1
 
 
 def test_a_second_build_into_the_same_directory_is_a_conflict(tmp_path: Path) -> None:
-    built = build(ZOLCA, version="probe", out_dir=tmp_path)
+    built = build(ZOLCA, version="probe", revision=1, corrections=(), now=NOW, out_dir=tmp_path)
 
     with pytest.raises(Conflict):
-        build(ZOLCA, version="probe", out_dir=tmp_path)
+        build(ZOLCA, version="probe", revision=1, corrections=(), now=NOW, out_dir=tmp_path)
 
     assert built.bundle.exists()
 
@@ -95,7 +100,7 @@ def test_a_bundle_the_core_refuses_leaves_nothing_behind(
 
     monkeypatch.setattr(build_module, "read_background", refuses)
     with pytest.raises(NotSupported):
-        build(ZOLCA, version="probe", out_dir=tmp_path)
+        build(ZOLCA, version="probe", revision=1, corrections=(), now=NOW, out_dir=tmp_path)
 
     assert list(tmp_path.iterdir()) == []
 

@@ -7,6 +7,7 @@ import json
 import zipfile
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
@@ -14,7 +15,7 @@ from lca_data_interface import NexusSession
 
 from ecosemantic.databases.bafu.build import build
 from ecosemantic.databases.bafu.download import Downloads, Nexus, download
-from ecosemantic.databases.bafu.profile import Profile, recorded
+from ecosemantic.databases.bafu.profile import RELEASES, Profile, recorded
 from ecosemantic.databases.lists import (
     distinct_unlinked,
     process_ids,
@@ -22,6 +23,7 @@ from ecosemantic.databases.lists import (
     unlinked_mismatches,
 )
 from ecosemantic.databases.prepared import PreparedRelease
+from ecosemantic.databases.revision import listed_corrections
 from ecosemantic.errors import Invalid
 from ecosemantic.ports.types import Account, InstallProgress, Reporter
 
@@ -118,7 +120,14 @@ def prepare(profile: Profile, nexus: Nexus, work: Path, report: Reporter) -> Pre
         )
     )
     report(InstallProgress(step="building"))
-    built = build(fetched.inventory, version=profile.version, out_dir=work)
+    built = build(
+        fetched.inventory,
+        version=profile.version,
+        out_dir=work,
+        revision=profile.revision,
+        corrections=listed_corrections(RELEASES, profile.corrections),
+        now=datetime.now(UTC),
+    )
     report(InstallProgress(step="checking"))
     found = distinct_unlinked(built.imported, top_categories(built.bundle))
     mismatches = unlinked_mismatches(

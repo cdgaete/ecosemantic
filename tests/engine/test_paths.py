@@ -116,7 +116,7 @@ def test_a_background_credit_is_a_child_with_a_negative_score() -> None:
         version="1",
         system_model="unit process",
     )
-    gwp = Method.of(("small", "gwp", "climate change > GWP100"), "kg CO2-Eq")
+    gwp = Method.of(("small", "gwp", "climate change", "GWP100"), "kg CO2-Eq")
     background = Background.compile(
         database,
         activities=["mill", "energy"],

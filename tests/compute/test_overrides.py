@@ -1,19 +1,23 @@
 from __future__ import annotations
 
+import math
 import uuid
 
 import pytest
 
-from ecosemantic.compute.edits import patch_product_system
+from ecosemantic.compute.draws import ParameterDraws
+from ecosemantic.compute.edits import patch_product_system, set_parameter_space
 from ecosemantic.compute.overrides import apply_case, apply_scenario, apply_variant, case_pin
 from ecosemantic.errors import Invalid, NotFound, StaleScenario
 from ecosemantic.model.canonical import base_pin, content_hash, stale
 from ecosemantic.model.entities import (
     Case,
     ExchangeOverride,
+    Parameter,
     ParameterOverride,
     ProductSystem,
     Scenario,
+    Uncertainty,
 )
 from ecosemantic.model.refs import BackgroundRef, ForegroundRef
 from ecosemantic.model.validation import validate
@@ -56,11 +60,29 @@ def test_scenario_swaps_an_input_to_an_ordinary_foreground_process(
             ExchangeOverride(
                 exchange_id=product_system.process("fabric").exchanges[1].id,
                 input=ForegroundRef(code="organic_yarn"),
+                name="organic cotton yarn",
             )
         ],
     )
     out = apply_scenario(product_system, scenario)
-    assert out.process("fabric").exchanges[1].input == ForegroundRef(code="organic_yarn")
+    swapped = out.process("fabric").exchanges[1]
+    assert swapped.input == ForegroundRef(code="organic_yarn")
+    assert swapped.name == "organic cotton yarn"
+
+
+def test_an_input_swap_without_a_name_is_refused_when_the_scenario_applies(
+    product_system: ProductSystem,
+) -> None:
+    exchange_id = product_system.process("fabric").exchanges[1].id
+    scenario = Scenario(
+        name="unnamed",
+        overrides=[
+            ExchangeOverride(exchange_id=exchange_id, input=ForegroundRef(code="organic_yarn"))
+        ],
+    )
+    with pytest.raises(Invalid, match="'unnamed'.*'cotton yarn'") as caught:
+        apply_scenario(product_system, scenario)
+    assert "name" in str(caught.value)
 
 
 def test_scenario_rejects_bad_targets(product_system: ProductSystem) -> None:
@@ -115,7 +137,9 @@ def test_scenario_swap_to_a_missing_foreground_process_is_refused(
     product_system: ProductSystem,
 ) -> None:
     exchange_id = product_system.process("fabric").exchanges[1].id
-    ghost = ExchangeOverride(exchange_id=exchange_id, input=ForegroundRef(code="ghost"))
+    ghost = ExchangeOverride(
+        exchange_id=exchange_id, input=ForegroundRef(code="ghost"), name="ghost yarn"
+    )
     with pytest.raises(NotFound):
         apply_scenario(product_system, Scenario(name="ghost", overrides=[ghost]))
 
@@ -220,3 +244,92 @@ def test_validation_and_apply_variant_agree_on_a_scenario_s_currency(
     assert "scenario_behind" in {e.code for e in report.errors}
     with pytest.raises(StaleScenario):
         apply_variant(moved, scenario.name)
+
+
+def test_a_case_moves_a_parameters_distribution_onto_its_value(
+    product_system: ProductSystem,
+) -> None:
+    spread = set_parameter_space(
+        product_system,
+        parameters=[
+            Parameter(
+                name="organic_share",
+                value=0.5,
+                uncertainty=Uncertainty(
+                    type="lognormal", params={"loc": math.log(0.5), "scale": 0.2}
+                ),
+            )
+        ],
+    )
+    out = apply_case(spread, Case(name="quarter", values={"organic_share": 0.25}))
+    parameter = out.parameter("organic_share")
+    assert parameter.value == 0.25 and parameter.uncertainty is not None
+    assert parameter.uncertainty.params == {"loc": pytest.approx(math.log(0.25)), "scale": 0.2}
+
+
+def test_a_case_at_0_leaves_the_parameter_no_distribution(product_system: ProductSystem) -> None:
+    spread = set_parameter_space(
+        product_system,
+        parameters=[
+            Parameter(
+                name="organic_share",
+                value=0.5,
+                uncertainty=Uncertainty(type="normal", params={"loc": 0.5, "scale": 0.1}),
+            )
+        ],
+    )
+    out = apply_case(spread, Case(name="none", values={"organic_share": 0.0}))
+    assert out.parameter("organic_share").value == 0.0
+    assert out.parameter("organic_share").uncertainty is None
+
+
+def test_a_case_at_0_keeps_a_distribution_centred_on_0(product_system: ProductSystem) -> None:
+    spread = set_parameter_space(
+        product_system,
+        parameters=[
+            Parameter(
+                name="organic_share",
+                value=0.0,
+                uncertainty=Uncertainty(type="normal", params={"loc": 0.0, "scale": 0.1}),
+            )
+        ],
+    )
+    out = apply_case(spread, Case(name="none", values={"organic_share": 0.0}))
+    assert out.parameter("organic_share").value == 0.0
+    assert (
+        out.parameter("organic_share").uncertainty == spread.parameter("organic_share").uncertainty
+    )
+
+
+def test_a_scenario_multiplying_a_parameter_driven_exchange_keeps_its_spread(
+    product_system: ProductSystem,
+) -> None:
+    system = set_parameter_space(
+        product_system,
+        parameters=[
+            Parameter(
+                name="organic_share",
+                value=0.5,
+                uncertainty=Uncertainty(
+                    type="lognormal", params={"loc": math.log(0.5), "scale": 0.2}
+                ),
+            )
+        ],
+    )
+    organic = system.process("fabric").exchanges[5]
+    scenario = Scenario(
+        name="more organic",
+        overrides=[ExchangeOverride(exchange_id=organic.id, multiplier=2.0)],
+    )
+    varied = apply_scenario(system, scenario)
+    doubled = varied.process("fabric").exchanges[5]
+    assert doubled.formula == "(1.1 * organic_share) * 2.0"
+    assert doubled.amount == pytest.approx(1.1)
+    base_draws = ParameterDraws([system], seed=5)
+    varied_draws = ParameterDraws([varied], seed=5)
+    at = (system.id.int, organic.id.int)
+    base = [base_draws.amounts(k)[at] for k in range(20)]
+    scaled = [varied_draws.amounts(k)[at] for k in range(20)]
+    assert len(set(base)) == 20
+    # the parameter is drawn from the same stream, so the variant scales every draw by two
+    assert scaled == pytest.approx([2.0 * value for value in base], rel=1e-12)

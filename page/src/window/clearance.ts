@@ -41,11 +41,12 @@ function sideOf(element: HTMLElement): Side {
   return named
 }
 
-export function useIslandClearance(frame: RefObject<HTMLElement | null>, layout: string): void {
+/** Measures the islands of the frame into the clearance; a held frame measures nothing and keeps the clearance it had. */
+export function useIslandClearance(frame: RefObject<HTMLElement | null>, layout: string, held = false): void {
   const setClearance = useClearance((s) => s.setClearance)
   useEffect(() => {
     const host = frame.current
-    if (host === null) return
+    if (host === null || held) return
     const islands = Array.from(host.querySelectorAll<HTMLElement>('[data-clear]')).map((element) => ({ side: sideOf(element), element }))
     const measure = () =>
       setClearance(
@@ -59,5 +60,5 @@ export function useIslandClearance(frame: RefObject<HTMLElement | null>, layout:
     observer.observe(host)
     for (const island of islands) observer.observe(island.element)
     return () => observer.disconnect()
-  }, [frame, layout, setClearance])
+  }, [frame, layout, held, setClearance])
 }

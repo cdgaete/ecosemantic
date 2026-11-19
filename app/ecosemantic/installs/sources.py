@@ -106,7 +106,8 @@ def _installed_summary(
 ) -> dict[str, JsonValue]:
     """The document an install answers: what it wrote, the inputs it cut off from the calculation
     because no dataset in the release provides them, which the catalog lists with their reason,
-    and the factors of each category the import set apart by naming a location."""
+    the factors of each category the import set apart by naming a location, and how many flows
+    carried text that is no CAS number."""
     return {
         "database": installed.database.name,
         "elementary_flows": installed.database.elementary_flows,
@@ -117,18 +118,24 @@ def _installed_summary(
         "cut_off": cut_off,
         "directory": str(installed.directory),
         "set_apart": [
-            {"method": method.key[1], "category": method.key[2], "factors": method.set_apart}
+            {
+                "method": method.key[1],
+                "category": method.key[2],
+                "indicator": method.key[3],
+                "factors": method.set_apart,
+            }
             for method in imported.methods
             if method.set_apart
         ],
+        "cas_set_aside": imported.cas_set_aside,
     }
 
 
 def _installed_release(
-    data_dir: Path, prepared: PreparedRelease, version: str, replace: bool
+    data_dir: Path, prepared: PreparedRelease, version: str, revision: int, replace: bool
 ) -> dict[str, JsonValue]:
-    """Install a prepared release of unit processes and answer the summary with the inputs it cuts
-    off."""
+    """Install a prepared release of unit processes at the revision its profile names, and answer
+    the summary with the inputs it cuts off."""
     installed = install(
         data_dir,
         prepared.imported,
@@ -137,6 +144,7 @@ def _installed_release(
         system_model=UNIT_PROCESS,
         replace=replace,
         dropped=prepared.dropped,
+        revision=revision,
     )
     cut_off = [dataclasses.asdict(row) for row in prepared.unlinked]
     return _installed_summary(prepared.imported, installed, cut_off)
@@ -170,7 +178,9 @@ def _uslci(data_dir: Path, draft: InstallDraft, report: Reporter) -> dict[str, J
     with tempfile.TemporaryDirectory(prefix="ecosemantic-uslci-") as directory:
         prepared = prepare_uslci(profile, commons(profile.server), Path(directory), report)
         report(InstallProgress(step="installing"))
-        summary = _installed_release(data_dir, prepared, profile.version, draft.replace)
+        summary = _installed_release(
+            data_dir, prepared, profile.version, profile.revision, draft.replace
+        )
     summary["sources"] = [
         {"repository": pin.repository, "release": pin.release, "commit": pin.commit}
         for pin in prepared.pins
@@ -191,7 +201,9 @@ def _bafu(
         with tempfile.TemporaryDirectory(prefix="ecosemantic-bafu-") as directory:
             prepared = prepare_bafu(profile, nexus, Path(directory), report)
             report(InstallProgress(step="installing"))
-            summary = _installed_release(data_dir, prepared, profile.version, draft.replace)
+            summary = _installed_release(
+                data_dir, prepared, profile.version, profile.revision, draft.replace
+            )
     summary["licence"] = str(prepared.licence)
     summary["citation"] = prepared.citation
     summary["not_applied"] = dataclasses.asdict(prepared.not_applied)
@@ -224,5 +236,6 @@ def _ecoinvent(
             version=profile.version,
             system_model=profile.system_model,
             replace=draft.replace,
+            revision=profile.revision,
         )
     return _installed_summary(prepared.imported, installed, [])

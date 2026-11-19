@@ -24,7 +24,7 @@ _ACTIVITY_FIELDS = (
     "metadata",
 )
 _EXCHANGE_FIELDS = ("type", "name", "amount", "unit", "input", "formula", "comment", "uncertainty")
-_PARAMETER_FIELDS = ("value", "formula", "unit", "description")
+_PARAMETER_FIELDS = ("value", "formula", "unit", "description", "uncertainty")
 _PROJECT_FIELDS = ("name", "description", "notes", "database", "reference_process")
 
 
@@ -133,6 +133,14 @@ def diff_product_systems(before: ProductSystem | None, after: ProductSystem) -> 
         ("description", "overrides", "base_hash"),
     )
     return changes
+
+
+def changes_nothing(before: ProductSystem, after: ProductSystem) -> bool:
+    """Whether two states of a product system are one document in every field but its hash: a
+    return that meets the stored state as it stands writes no entry."""
+    return before.model_dump(mode="json", exclude={"hash"}) == after.model_dump(
+        mode="json", exclude={"hash"}
+    )
 
 
 def next_entry(

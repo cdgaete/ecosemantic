@@ -18,12 +18,16 @@ from fastmcp.exceptions import ToolError
 
 from ecosemantic.compute.parameters import materialize
 from ecosemantic.local import build_context
+from ecosemantic.mcp.calculation import demand_of
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.server import build_server
+from ecosemantic.model.canonical import content_hash
 from ecosemantic.model.entities import Method, ProductSystem, method_id
 from ecosemantic.model.refs import DemandItem
+from ecosemantic.package.resolver import InventoryResolver
 from ecosemantic.ports.run import RunLauncher, RunPort
 from ecosemantic.ports.types import (
+    VALUE_CHOICES,
     MonteCarloCategory,
     MonteCarloConfig,
     MonteCarloResult,
@@ -32,12 +36,15 @@ from ecosemantic.ports.types import (
     RunDraft,
     RunPatch,
     System,
+    WeightingFactor,
+    WeightingSet,
 )
-from tests.conftest import fixture_system
-from tests.fixture_data import CODES, FIXTURE_DATABASE, GWP
+from tests.conftest import drawn_counts, fixture_system
+from tests.fixture_data import CODES, FIXTURE_DATABASE, GWP, WATER
 from tests.memory_background import MemoryInventory
 
 GWP_ID = method_id(" > ".join(GWP))
+WATER_ID = method_id(" > ".join(WATER))
 
 
 async def finished(
@@ -468,9 +475,11 @@ def recorded_run(stored: ProductSystem, method: Method) -> Run:
             database=FIXTURE_DATABASE,
             n=3,
             stopped="fixed",
-            gating_method=method.id,
+            gating_method=None,
+            constant=[],
+            indistinguishable_from_zero=[],
             scope="full",
-            normals_at_amount=0,
+            drawn=drawn_counts(),
             credit_loops=[],
             dropped_draws=[],
             dropped_loops=[],
@@ -521,4 +530,76 @@ async def test_a_finished_run_names_each_category_by_the_id_of_one_of_its_method
     ids = [method["id"] for method in run["methods"]]
     assert ids == [GWP_ID]
     assert [category["method_id"] for category in run["result"]["categories"]] == ids
-    assert run["result"]["gating_method"] in ids
+    assert run["result"]["gating_method"] is None
+
+
+async def test_the_progress_reports_the_worst_measured_error(
+    context: ServerContext, fixture_system_stored: ProductSystem
+) -> None:
+    methods = await context.inventory.list_methods(fixture_system_stored.database.name, None)
+    assert {method.id for method in methods} == {GWP_ID, WATER_ID}
+    posted = await context.runs.post_run(
+        RunDraft(
+            product_system_id=fixture_system_stored.id,
+            at_hash=content_hash(fixture_system_stored),
+            demand=demand_of(fixture_system_stored, None),
+            methods=methods,
+            config=MonteCarloConfig(n_min=6, n_max=60, rel_se_target=1e-9, seed=12345),
+        )
+    )
+    await asyncio.to_thread(context.launcher.start, posted.id)
+    seen: list[tuple[int, float | None]] = []
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        reading = await context.runs.get_run(posted.id)
+        seen.append((reading.progress.iterations, reading.progress.worst_rel_se))
+        if not reading.open:
+            break
+        await asyncio.sleep(0.05)
+    done = await context.runs.get_run(posted.id)
+    assert done.status == "done" and done.result is not None
+    # the widget's water score is 0 in every draw, so no draw measures the water category
+    assert done.result.constant == [WATER_ID]
+    assert [iterations for iterations, _ in seen if iterations >= 6]
+    assert all(error is not None for iterations, error in seen if iterations >= 6)
+
+
+FAMILY_SETS = [
+    WeightingSet(
+        impact_method="gwp",
+        name="weighted",
+        unit="Pt",
+        factors=[WeightingFactor(method_id=GWP_ID, normalisation=None, weighting=2.0)],
+    ),
+    WeightingSet(
+        impact_method="gwp",
+        name=None,
+        unit=None,
+        factors=[WeightingFactor(method_id=GWP_ID, normalisation=None, weighting=1.0)],
+    ),
+]
+
+
+async def test_a_run_on_a_family_answers_one_total_per_set(
+    context: ServerContext, fixture_system_stored: ProductSystem
+) -> None:
+    inventory = MemoryInventory(weighting_sets=FAMILY_SETS)
+    bound = dataclasses.replace(context, inventory=inventory, resolver=InventoryResolver(inventory))
+    async with Client(build_server(bound)) as client:
+        started = await client.call_tool(
+            "start_monte_carlo",
+            {
+                "product_system_id": str(fixture_system_stored.id),
+                "impact_method": "gwp",
+                "monte_carlo": {"n": 3, "n_min": 1, "seed": 12345},
+            },
+        )
+        done = await finished(client, started.structured_content["value"]["id"], samples=True)
+    totals = done["result"]["totals"]
+    assert [(total["weighting_set"], total["position"]) for total in totals] == [
+        ("weighted", 0),
+        (None, 1),
+    ]
+    assert [total["summary"]["n"] for total in totals] == [3, 3]
+    assert [total["value_choices"] for total in totals] == [VALUE_CHOICES, VALUE_CHOICES]
+    assert totals[0]["samples"] == pytest.approx([2.0 * draw for draw in totals[1]["samples"]])

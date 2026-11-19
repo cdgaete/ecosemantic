@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+import math
 import shutil
+import uuid
 from pathlib import Path
 
 import pytest
 
+from ecosemantic.backends.filesystem.storage import FilesystemStorage
 from ecosemantic.errors import Conflict, Invalid, NotFound
 from ecosemantic.model.canonical import content_hash
-from ecosemantic.model.entities import Actor, ProductSystem
+from ecosemantic.model.entities import Actor, ProductSystem, Uncertainty
 from ecosemantic.model.refs import BackgroundRef
 from ecosemantic.package.package import (
     read_package,
@@ -20,6 +23,7 @@ from ecosemantic.package.package import (
 )
 from ecosemantic.package.sidecar import SIDECAR_DIR
 from tests.dict_resolver import DictResolver
+from tests.package.test_jsonld_write import bounded
 
 AGENT = Actor(kind="agent", id="claude")
 PERSON = Actor(kind="person", name="reviewer")
@@ -175,6 +179,91 @@ def test_a_return_naming_no_state_is_invalid_and_one_never_reached_is_refused(
     path.write_text(json.dumps(document), encoding="utf-8")
     with pytest.raises(Conflict, match="never reached entry #2 at"):
         write_returned(exported, retained, PERSON, resolver)
+
+
+def _export(
+    product_system: ProductSystem, resolver: DictResolver, tmp_path: Path
+) -> tuple[Path, Path]:
+    """A retained package and the openLCA export taken from it at entry 1."""
+    retained = tmp_path / "retained"
+    write_package(product_system, retained, AGENT, "created", resolver)
+    exported = tmp_path / "exported"
+    shutil.copytree(retained, exported)
+    shutil.rmtree(exported / SIDECAR_DIR)
+    return retained, exported
+
+
+def _parameter_file(exported: Path, product_system: ProductSystem, name: str) -> Path:
+    return exported / "parameters" / f"{uuid.uuid5(product_system.id, name)}.json"
+
+
+def test_a_parameters_distribution_survives_an_openlca_package_round_trip(
+    product_system: ProductSystem, resolver: DictResolver, tmp_path: Path
+) -> None:
+    system = bounded(product_system)
+    write_package(system, tmp_path, AGENT, "created", resolver)
+    back, _ = read_package(tmp_path)
+    assert back.parameter("waste_rate").uncertainty == system.parameter("waste_rate").uncertainty
+    assert back.parameter("waste_rate").uncertainty.bounds() == (0.05, 0.2)
+    assert content_hash(back) == content_hash(system)
+
+
+async def test_an_exchanges_bounds_survive_a_store_round_trip(
+    product_system: ProductSystem, resolver: DictResolver, tmp_path: Path
+) -> None:
+    storage = FilesystemStorage(tmp_path / "systems", resolver)
+    system = bounded(product_system)
+    await storage.put_product_system(system, AGENT, "created")
+    back = await storage.get_product_system(system.id)
+    sewing = back.process("tshirt").exchanges[2]
+    assert sewing.uncertainty == system.process("tshirt").exchanges[2].uncertainty
+    assert sewing.uncertainty.bounds() == (0.2, 0.45)
+    assert back.parameter("waste_rate").uncertainty.bounds() == (0.05, 0.2)
+
+
+def test_an_openlca_return_breaking_one_spread_per_amount_is_refused(
+    product_system: ProductSystem, resolver: DictResolver, tmp_path: Path
+) -> None:
+    retained, exported = _export(product_system, resolver, tmp_path)
+    path = _parameter_file(exported, product_system, "fabric_mass")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["uncertainty"] = {
+        "distributionType": "LOG_NORMAL_DISTRIBUTION",
+        "geomMean": 0.2,
+        "geomSd": 1.2,
+    }
+    path.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(Invalid, match="an amount takes one spread"):
+        write_returned(exported, retained, PERSON, resolver)
+    assert len(read_package(retained)[1]) == 1
+
+
+def test_an_openlca_return_keeping_an_off_centre_distribution_it_does_not_change_is_taken(
+    product_system: ProductSystem, resolver: DictResolver, tmp_path: Path
+) -> None:
+    off_centre = product_system.model_copy(deep=True)
+    off_centre.process("tshirt").exchanges[3].uncertainty = Uncertainty(
+        type="lognormal", params={"loc": math.log(0.0005) - 1e-5, "scale": 0.3}
+    )
+    retained, exported = _export(off_centre, resolver, tmp_path)
+    assert write_returned(exported, retained, PERSON, resolver) is None
+    transport = read_package(retained)[0].process("tshirt").exchanges[3]
+    assert transport.uncertainty == off_centre.process("tshirt").exchanges[3].uncertainty
+    assert transport.uncertainty.centre() == pytest.approx(0.0005 * math.exp(-1e-5))
+
+
+def test_an_openlca_return_moving_an_amount_off_its_distribution_is_refused(
+    product_system: ProductSystem, resolver: DictResolver, tmp_path: Path
+) -> None:
+    retained, exported = _export(product_system, resolver, tmp_path)
+    path = exported / "processes" / f"{product_system.process('tshirt').id}.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    transport = next(e for e in data["exchanges"] if e["internalId"] == 4)
+    transport["amount"] = 0.0006
+    path.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(Invalid, match="is 0.0006 and its lognormal is centred on"):
+        write_returned(exported, retained, PERSON, resolver)
+    assert len(read_package(retained)[1]) == 1
 
 
 def test_zip_and_unzip_round_trip(

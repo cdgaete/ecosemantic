@@ -1,4 +1,5 @@
 import { useLocation, useSearchParams } from 'react-router-dom'
+import { useUi } from '@/store/ui'
 
 export type Patch = Record<string, string | undefined>
 
@@ -30,11 +31,23 @@ export function useAddress(): Address {
   }
 }
 
-export function useCategory<T extends { method_id: string }>(categories: T[]): { chosen: T | undefined; choose: (id: string) => void } {
+export function useCategory<T extends { method_id: string }>(
+  categories: T[],
+  systemId: string,
+  score?: (category: T) => number,
+): { chosen: T | undefined; choose: (id: string) => void } {
   const address = useAddress()
+  const remembered = useUi((state) => state.resultCategories[systemId])
+  const remember = useUi((state) => state.setResultCategory)
   const named = address.read('category')
-  return {
-    chosen: categories.find((c) => c.method_id === named) ?? categories[0],
-    choose: (id) => address.write({ category: id }),
+  const chosen =
+    categories.find((category) => category.method_id === named) ??
+    categories.find((category) => category.method_id === remembered) ??
+    (score === undefined ? undefined : categories.find((category) => score(category) !== 0)) ??
+    categories[0]
+  const choose = (id: string) => {
+    address.write({ category: id })
+    remember(systemId, id)
   }
+  return { chosen, choose }
 }

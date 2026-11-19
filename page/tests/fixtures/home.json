@@ -1,0 +1,337 @@
+{
+  "hint": null,
+  "value": [
+    {
+      "last": {
+        "actor": {
+          "id": "mcp",
+          "kind": "agent",
+          "name": null
+        },
+        "base_hash": null,
+        "changes": [
+          {
+            "after": null,
+            "before": null,
+            "entity": "product_system",
+            "field": null,
+            "id": "9636d8de-03e7-51d5-9f1a-02ca5de97e82",
+            "op": "add"
+          }
+        ],
+        "message": "created",
+        "result_hash": "a15e917754d84a373d3576e6cd5da2c1559930e73f87bdaf236049959c1d47a8",
+        "seq": 1,
+        "source": "mcp",
+        "timestamp": "2026-11-19T15:55:50.183746Z"
+      },
+      "open_requests": 0,
+      "processes": 1,
+      "system": {
+        "database": "fixture",
+        "description": "",
+        "hash": "a15e917754d84a373d3576e6cd5da2c1559930e73f87bdaf236049959c1d47a8",
+        "id": "9636d8de-03e7-51d5-9f1a-02ca5de97e82",
+        "name": "unfinished",
+        "view_url": null
+      },
+      "unvalidated": null,
+      "validation": {
+        "cases": [
+          {
+            "detail": null,
+            "id": "database_build",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "links_current",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "links_resolve",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "loops_deliver",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "no_dangling_references",
+            "passed": true
+          },
+          {
+            "detail": "unfinished names no reference process",
+            "id": "reference_process_set",
+            "passed": false
+          },
+          {
+            "detail": null,
+            "id": "same_database",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "scenarios_current",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "treatments_take_waste",
+            "passed": true
+          }
+        ],
+        "errors": [
+          {
+            "case": "reference_process_set",
+            "code": "reference_process_missing",
+            "message": "unfinished names no reference process",
+            "process_codes": [],
+            "suggestion": "set reference_process to 'stub'"
+          }
+        ],
+        "is_valid": false,
+        "roots": [
+          "stub"
+        ],
+        "target": null
+      }
+    },
+    {
+      "last": {
+        "actor": {
+          "id": "fixture-agent",
+          "kind": "agent",
+          "name": "fixture-agent"
+        },
+        "base_hash": "07a6bf4ddc0b9dd36be657b755ddd13e908b50af2fb6538e4ed633217c07be59",
+        "changes": [
+          {
+            "after": 0.6,
+            "before": 0.5,
+            "entity": "exchange",
+            "field": "amount",
+            "id": "83a0b3c9-fe45-458d-af5f-0f274210f630",
+            "op": "update"
+          }
+        ],
+        "message": "updated exchange steel (bottle) 83a0b3c9-fe45-458d-af5f-0f274210f630",
+        "result_hash": "f91e47f3ae08c28e8c522a058e430636b15174362a6981b055c38026a107c05d",
+        "seq": 5,
+        "source": "mcp",
+        "timestamp": "2026-11-19T15:55:50.732755Z"
+      },
+      "open_requests": 0,
+      "processes": 1,
+      "system": {
+        "database": "fixture",
+        "description": "",
+        "hash": "f91e47f3ae08c28e8c522a058e430636b15174362a6981b055c38026a107c05d",
+        "id": "b7f31920-33c5-4e54-bfa5-c05a2479dc66",
+        "name": "bottle",
+        "view_url": null
+      },
+      "unvalidated": null,
+      "validation": {
+        "cases": [
+          {
+            "detail": null,
+            "id": "database_build",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "links_current",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "links_resolve",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "loops_deliver",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "no_dangling_references",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "no_islands",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "production_amount_nonzero",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "reference_process_set",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "same_database",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "scenarios_current",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "target_has_exchanges",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "target_has_production",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "target_has_technosphere_input",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "treatments_take_waste",
+            "passed": true
+          }
+        ],
+        "errors": [],
+        "is_valid": true,
+        "roots": [
+          "bottle"
+        ],
+        "target": "bottle"
+      }
+    },
+    {
+      "last": {
+        "actor": {
+          "id": "mcp",
+          "kind": "agent",
+          "name": null
+        },
+        "base_hash": null,
+        "changes": [
+          {
+            "after": null,
+            "before": null,
+            "entity": "product_system",
+            "field": null,
+            "id": "bb309f67-e625-53b4-8e7c-3062610d2de0",
+            "op": "add"
+          }
+        ],
+        "message": "created",
+        "result_hash": "5e7cbc6616a342f77bae99b02dae520bc6d6861274530f8845675868ac9e7630",
+        "seq": 1,
+        "source": "mcp",
+        "timestamp": "2026-11-19T15:55:50.164281Z"
+      },
+      "open_requests": 1,
+      "processes": 2,
+      "system": {
+        "database": "fixture",
+        "description": "",
+        "hash": "5e7cbc6616a342f77bae99b02dae520bc6d6861274530f8845675868ac9e7630",
+        "id": "bb309f67-e625-53b4-8e7c-3062610d2de0",
+        "name": "widget",
+        "view_url": null
+      },
+      "unvalidated": null,
+      "validation": {
+        "cases": [
+          {
+            "detail": null,
+            "id": "database_build",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "links_current",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "links_resolve",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "loops_deliver",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "no_dangling_references",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "no_islands",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "production_amount_nonzero",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "reference_process_set",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "same_database",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "scenarios_current",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "target_has_exchanges",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "target_has_production",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "target_has_technosphere_input",
+            "passed": true
+          },
+          {
+            "detail": null,
+            "id": "treatments_take_waste",
+            "passed": true
+          }
+        ],
+        "errors": [],
+        "is_valid": true,
+        "roots": [
+          "widget"
+        ],
+        "target": "widget"
+      }
+    }
+  ],
+  "view_url": null
+}

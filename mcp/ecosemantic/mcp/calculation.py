@@ -19,6 +19,7 @@ from ecosemantic.compute.results import (
     PinBehind,
     VariantScores,
 )
+from ecosemantic.compute.totals import total_deltas, totals_of, with_totals
 from ecosemantic.errors import Invalid, NotFound, StaleScenario
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import COMPUTE, READ
@@ -51,12 +52,15 @@ from ecosemantic.ports.types import (
     N_MIN,
     N_MIN_HELP,
     Decomposition,
+    InventoryOrder,
     InventoryRow,
     Limit,
     LinkedLoop,
     MonteCarloConfig,
     Page,
+    Side,
     System,
+    WeightingSet,
     page_start,
 )
 
@@ -87,19 +91,28 @@ class InventoryListing(Listing[InventoryRow]):
 
 
 def inventory_page(
-    rows: list[InventoryRow], compartment: str | None, query: str | None, limit: int, offset: int
+    rows: list[InventoryRow],
+    side: Side | None,
+    order: InventoryOrder,
+    compartment: str | None,
+    query: str | None,
+    limit: int,
+    offset: int,
 ) -> Page[InventoryRow]:
-    """The rows that pass the filters, in compartment then name order, from the offset."""
+    """The rows of one side, or of both with inputs first, that pass the filters, from the offset:
+    by compartment, name and flow id, or by falling magnitude of the amount and then name."""
     terms = [t.lower() for t in (query or "").split()]
-    kept = sorted(
-        (
-            r
-            for r in rows
-            if (compartment is None or r.compartment == compartment)
-            and all(t in r.name.lower() for t in terms)
-        ),
-        key=lambda r: (r.compartment, r.name, r.flow.id),
-    )
+    kept = [
+        r
+        for r in rows
+        if (side is None or r.side == side)
+        and (compartment is None or r.compartment == compartment)
+        and all(t in r.name.lower() for t in terms)
+    ]
+    if order == "compartment":
+        kept.sort(key=lambda r: (r.side == "output", r.compartment, r.name, r.flow.id))
+    else:
+        kept.sort(key=lambda r: (r.side == "output", -abs(r.amount), r.name))
     return Page.at_offset(kept[offset : offset + limit], len(kept) > offset + limit, offset, limit)
 
 
@@ -156,20 +169,28 @@ async def impact_of(
     monte_carlo: MonteCarloConfig | None = None,
     linked: dict[uuid.UUID, ProductSystem] | None = None,
     treatments: frozenset[BackgroundRef] | None = None,
+    weightings: Sequence[WeightingSet] = (),
 ) -> ImpactResult:
     """The scores of a materialised product system and of each named variant against them, for
     the demand as the port takes it: the one given, or a unit of the base's reference process,
     which the answer carries. The uncertainty of both is scored when a Monte Carlo block is
     given. `linked` holds every system the base reaches through its links, each at its pin and
     materialised; given the background's `treatments`, the base and each variant name every
-    exchange sending a positive amount to one."""
+    exchange sending a positive amount to one. Each weighting set among `weightings` gives one
+    total over the scores, both for the base and for each variant, and over the draws of a Monte
+    Carlo block; each variant also answers how far each of its totals moved from the base's."""
     linked = linked or {}
     inside = linked_credit_loops(linked.values())
     items = demand_of(base, demand)
     system = System.of(base, linked)
     scores = await calculation.scores(system, items, methods)
+    base_totals = totals_of(weightings, methods, scores)
     uncertainty = (
-        await calculation.monte_carlo(system, items, methods, monte_carlo)
+        with_totals(
+            await calculation.monte_carlo(system, items, methods, monte_carlo),
+            weightings,
+            methods,
+        )
         if monte_carlo is not None
         else None
     )
@@ -179,6 +200,7 @@ async def impact_of(
         methods=methods,
         scores=scores,
         demand=items,
+        totals=base_totals,
         credit_loops=credit_loops(base),
         linked_credit_loops=inside,
         uncertainty=uncertainty,
@@ -189,11 +211,14 @@ async def impact_of(
         varied_system = System.of(varied, linked)
         varied_items = demand_of(varied, demand)
         varied_scores = await calculation.scores(varied_system, varied_items, methods)
+        varied_totals = totals_of(weightings, methods, varied_scores)
         varied_mc = None
         paired = None
         if monte_carlo is not None and uncertainty is not None:
-            varied_mc = await calculation.monte_carlo(
-                varied_system, varied_items, methods, monte_carlo
+            varied_mc = with_totals(
+                await calculation.monte_carlo(varied_system, varied_items, methods, monte_carlo),
+                weightings,
+                methods,
             )
             paired = [
                 paired_delta(*paired_samples(uncertainty, varied_mc, c))
@@ -205,6 +230,8 @@ async def impact_of(
                 name=name,
                 scores=varied_scores,
                 deltas=deltas,
+                totals=varied_totals,
+                total_deltas=total_deltas(base_totals, varied_totals),
                 credit_loops=credit_loops(varied),
                 linked_credit_loops=inside,
                 treatments_run_backwards=named_backwards(varied, linked, treatments),
@@ -274,13 +301,19 @@ async def calculate_impact(
     samples: bool = False,
 ) -> Answer[ImpactResult]:
     """The characterised impact of a stored product system, its uncertainty and each variant's
-    answered without the draws unless `samples` asks for them."""
+    answered without the draws unless `samples` asks for them, with one total per weighting set of
+    a family the caller names whole."""
     stored = await context.storage.get_product_system(as_uuid(product_system_id))
     await refuse_stale(context, stored, variants or ())
     linked = await linked_documents(stored, context.storage.get_version)
     base = materialize(stored)
     methods, hint = await methods_for(
         context.inventory, stored.database.name, method_id, impact_method
+    )
+    weightings = (
+        await context.inventory.weighting_sets(stored.database.name, impact_method)
+        if impact_method is not None
+        else []
     )
     result = await impact_of(
         context.calculation,
@@ -291,6 +324,7 @@ async def calculate_impact(
         monte_carlo=monte_carlo,
         linked=linked,
         treatments=await treatments_of(context.inventory, base, linked),
+        weightings=weightings,
     )
     result.links_behind = [
         PinBehind(product_system_id=p.ref.product_system_id, name=p.name, at_hash=pinned(p.ref))
@@ -432,6 +466,8 @@ async def calculate_inventory(
     context: ServerContext,
     product_system_id: str,
     demand: list[DemandItem] | None = None,
+    side: Side | None = None,
+    order: InventoryOrder = "compartment",
     compartment: str | None = None,
     query: str | None = None,
     limit: Limit = 100,
@@ -443,13 +479,13 @@ async def calculate_inventory(
     items = demand_of(base, demand)
     treatments = await treatments_of(context.inventory, base, linked)
     result, rows = await inventory_of(context.calculation, treatments, base, linked, items)
-    page = inventory_page(rows, compartment, query, limit, page_start(cursor, limit))
+    page = inventory_page(rows, side, order, compartment, query, limit, page_start(cursor, limit))
     out = listing(page)
-    if not page.items:
+    if not page.items and inventory_page(rows, side, order, None, None, 1, 0).items:
         held = {c.name for c in await context.inventory.list_compartments(base.database.name)}
         filters = {"compartment": compartment}
         words = bool(applied_filters(filters)) and bool(
-            inventory_page(rows, None, query, 1, 0).items
+            inventory_page(rows, side, order, None, query, 1, 0).items
         )
         out = listing(
             page,
@@ -483,7 +519,8 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "search_methods, or one impact_method to score all of its categories. Add "
             "variants to compare scenarios or cases against the base under one seed: each "
             "variant answers its point scores and its deltas, its score less the base's, "
-            "method by method. A monte_carlo block adds uncertainty and takes at most "
+            "method by method, and total_deltas holds how far each total of its weighting "
+            "sets moved from the base's. A monte_carlo block adds uncertainty and takes at most "
             f"{MAX_ITERATIONS} draws; start_monte_carlo runs up to {MAX_DRAWS} outside the "
             "call. Under that block a "
             "pair is the base's and the variant's draws at one position, over the first "
@@ -513,7 +550,8 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "list leaves out: below, the parts under the cut-off, and unlisted, the parts that "
             "reach it past top_n, each counted, with share and unlisted_share the total of their "
             "magnitudes and below_score and unlisted_score the signed total of their scores, so "
-            "the rows listed plus these two make the total. "
+            "the rows listed plus these two make the total. Every fraction and share is none "
+            "where the total is 0, which nothing is a share of. "
             "method names the method once and total names it by method_id. Example: "
             '{"product_system_id": '
             '"…", "by": "path", "method_id": "m_…", "max_level": 4}.'
@@ -526,9 +564,12 @@ def register(server: FastMCP, context: ServerContext) -> None:
         tags={COMPUTE},
         description=(
             "The life cycle inventory: every elementary flow the demand draws or emits, "
-            "with the foreground process that dominates each row. Rows are ordered by "
-            "compartment then name and paged; filter by compartment or by words in the "
-            "flow name. contribution_analysis by='flow' ranks them by characterised score."
+            "with the foreground process that dominates each row. side='input' or "
+            "side='output' names one side of the process; without one each row carries its "
+            "side and inputs come first. Rows are ordered by compartment then name, or by "
+            "order='amount' by falling magnitude, and paged; filter by compartment or by "
+            "words in the flow name. contribution_analysis by='flow' ranks them by "
+            "characterised score."
         ),
         app=panel("inventory"),
     )(boundary(bound(calculate_inventory, context)))

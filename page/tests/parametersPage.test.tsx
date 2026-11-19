@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react'
+import { api } from '@/api/client'
 import { ParametersPage } from '@/editors/system/ParametersPage'
 import type { SystemView } from '@/editors/system/SystemEditor'
 import type { Answer, ParameterSpace, ProductSystem, ValidationReport } from '@/api/types'
@@ -16,7 +17,7 @@ vi.mock('@/api/client', async (importOriginal) => {
 })
 
 const doc = system.value as ProductSystem
-const view: SystemView = { id: doc.id, system: doc, openRequests: 0, version: null }
+const view: SystemView = { id: doc.id, system: doc, openRequests: 0, version: null, state: null }
 
 async function cases(columns: string[]): Promise<HTMLElement> {
   renderAt('/', <ParametersPage view={view} />)
@@ -43,8 +44,8 @@ describe('parameters page', () => {
     const answer: Answer<ParameterSpace> = {
       value: {
         parameters: [
-          { name: 'mass', value: 1, formula: null, unit: 'kg', description: '' },
-          { name: 'rate', value: 0.1, formula: null, unit: '', description: '' },
+          { name: 'mass', value: 1, formula: null, unit: 'kg', description: '', uncertainty: null },
+          { name: 'rate', value: 0.1, formula: null, unit: '', description: '', uncertainty: null },
         ],
         values: { mass: 1, rate: 0.1 },
         cases: [
@@ -86,6 +87,37 @@ describe('parameters page', () => {
     expect(await within(section).findByText('behind the base: rebase_scenario')).toBeInTheDocument()
   })
 
+  it('names the supplier a scenario swaps in as the scenario records it', async () => {
+    served.value = parameters
+    served.validation = validation
+    const widget = doc.processes.find((p) => p.code === 'widget')!
+    const frame = widget.exchanges.find((e) => e.name === 'frame')!
+    const swapped: ProductSystem = {
+      ...doc,
+      scenarios: [
+        {
+          name: 'light',
+          description: '',
+          base_hash: null,
+          overrides: [
+            {
+              kind: 'exchange',
+              exchange_id: frame.id,
+              amount: null,
+              multiplier: null,
+              input: { kind: 'foreground', code: 'frame_light' },
+              name: 'light frame',
+            },
+          ],
+        },
+      ],
+    }
+    renderAt('/', <ParametersPage view={{ ...view, system: swapped }} />)
+    const section = (await screen.findByText('Scenarios')).closest('section')!
+    expect(within(section).getByText('frame on widget assembly: input light frame')).toBeInTheDocument()
+    expect(within(section).queryByText(/frame_light/)).toBeNull()
+  })
+
   it('marks nothing while every scenario is current', async () => {
     served.value = parameters
     served.validation = validation
@@ -123,6 +155,38 @@ describe('parameters page', () => {
     expect(folded.map((el) => el.textContent?.trim())).toEqual(['Description: frame per widget'])
   })
 
+  it('reads a literal parameter’s distribution beside its value', async () => {
+    const answer: Answer<ParameterSpace> = {
+      value: {
+        parameters: [
+          {
+            name: 'transport_km',
+            value: 175,
+            formula: null,
+            unit: 'km',
+            description: '',
+            uncertainty: { type: 'uniform', params: { minimum: 50, maximum: 300 } },
+          },
+          { name: 'mass', value: 1, formula: null, unit: 'kg', description: '', uncertainty: null },
+        ],
+        values: { transport_km: 175, mass: 1 },
+        cases: [],
+        matrix: { cases: [], rows: [] },
+      },
+      hint: null,
+      view_url: null,
+    }
+    served.value = answer
+    served.validation = validation
+    renderAt('/', <ParametersPage view={view} />)
+    const section = (await screen.findByText('Input parameters')).closest('section')!
+    const spread = (await within(section).findByText('transport_km')).closest('tr')!
+    expect(within(spread).getByText('uniform, 50 to 300 km')).toBeInTheDocument()
+    expect(within(spread).getByText('175')).toBeInTheDocument()
+    const plain = (await within(section).findByText('mass')).closest('tr')!
+    expect(within(plain).getByText('none')).toBeInTheDocument()
+  })
+
   it('shows each derived parameter with the value it evaluates to', async () => {
     const answer = parameters as Answer<ParameterSpace>
     const derived = answer.value.parameters.find((p) => p.formula !== null)!
@@ -132,5 +196,13 @@ describe('parameters page', () => {
     const section = (await screen.findByText('Dependent parameters')).closest('section')!
     const row = (await within(section).findByText(derived.name)).closest('tr')!
     expect(within(row).getAllByRole('cell').map((c) => c.textContent)).toContain(formatAmount(answer.value.values[derived.name]))
+  })
+
+  it('names the state it reads the parameters under and asks them with it', async () => {
+    served.value = parameters
+    served.validation = validation
+    renderAt('/', <ParametersPage view={{ ...view, state: { kind: 'case', name: 'heavy' } }} />)
+    expect(await screen.findByText('Under case heavy')).toBeInTheDocument()
+    expect(vi.mocked(api.parameters).mock.calls.at(-1)?.[2]).toBe('heavy')
   })
 })

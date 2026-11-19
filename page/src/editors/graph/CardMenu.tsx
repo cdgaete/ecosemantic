@@ -12,7 +12,8 @@ import { clearArea, TOOLBAR_OFFSET, toolbarFor, type Size } from './layout'
 
 const ITEM = 'nodrag nopan whitespace-nowrap rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors duration-150 hover:bg-foreground/8 hover:text-foreground'
 
-export function CardToolbar({ size, children }: { size: Size; children: ReactNode }) {
+/** A card's menu, drawn while the card is the one shown: the process chosen, or the linked system a click selected. */
+export function CardToolbar({ size, shown, children }: { size: Size; shown: boolean; children: ReactNode }) {
   const [row, setRow] = useState<HTMLDivElement | null>(null)
   const [natural, setNatural] = useState<Size | null>(null)
   const [rowHeight, setRowHeight] = useState<number | null>(null)
@@ -49,6 +50,7 @@ export function CardToolbar({ size, children }: { size: Size; children: ReactNod
   }, [row, rowHeight, placed?.width])
   return (
     <NodeToolbar
+      isVisible={shown}
       position={placed?.side === 'bottom' ? Position.Bottom : Position.Top}
       align="start"
       offset={TOOLBAR_OFFSET}

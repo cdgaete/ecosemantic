@@ -7,7 +7,7 @@ from typing import Protocol, runtime_checkable
 from pydantic import BaseModel, computed_field, model_validator
 
 from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef
-from ecosemantic.ports.types import FlowType, Side, flow_side
+from ecosemantic.ports.types import CompartmentName, FlowType, Side, flow_side
 
 
 class BackgroundInfo(BaseModel):
@@ -19,7 +19,7 @@ class BackgroundInfo(BaseModel):
 
 class FlowInfo(BaseModel):
     name: str
-    compartment: str
+    compartment: CompartmentName
     sub_compartment: str | None
     unit: str
     flow_type: FlowType

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -77,11 +78,13 @@ class BaseMethod:
 
 @dataclass(frozen=True)
 class BaseRows:
-    """Everything a base bundle holds, before openLCA ids are derived."""
+    """Everything a base bundle holds, before openLCA ids are derived: its datasets, the location
+    name of each code they are located at, its flows and its methods."""
 
     datasets: tuple[BaseDataset, ...]
     flows: tuple[BaseFlow, ...]
     methods: tuple[BaseMethod, ...]
+    locations: Mapping[str, str]
 
 
 @dataclass(frozen=True)
@@ -213,7 +216,13 @@ class _Builder:
     def processes(self) -> list[o.Process]:
         out = []
         for dataset in self.rows.datasets:
-            location, entity = location_entity(dataset.location)
+            name = self.rows.locations.get(dataset.location)
+            if name is None:
+                raise Invalid(
+                    f"{dataset.native!r} is located at {dataset.location!r}, which the release "
+                    "names no location"
+                )
+            location, entity = location_entity(dataset.location, name)
             self.locations.setdefault(entity.id, entity)
             exchanges = [
                 self._exchange(n, exchange, dataset)

@@ -118,7 +118,7 @@ def test_a_label_the_background_does_not_hold_is_not_found_naming_who_asked() ->
 
 def test_a_method_the_background_lacks_is_not_found() -> None:
     background = small(["mill", "energy"], ["mill", "energy"], [1.0, 1.0], [False, False])
-    other = Method.of(("small", "water", "water use > m3"), "m3")
+    other = Method.of(("small", "water", "water use", "m3"), "m3")
     with pytest.raises(NotFound, match="water use > m3"):
         background.positions([SMALL_GWP, other])
 

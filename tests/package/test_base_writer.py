@@ -8,7 +8,7 @@ import olca_schema as o
 import pytest
 from olca_schema.zipio import ZipReader
 
-from ecosemantic.errors import Conflict, NotSupported
+from ecosemantic.errors import Conflict, Invalid, NotSupported
 from ecosemantic.model.entities import Uncertainty
 from ecosemantic.model.refs import olca_process_id
 from ecosemantic.package.background import read_background
@@ -89,7 +89,12 @@ def _rows(unit: str = "kilogram") -> BaseRows:
             factors=((CO2, 1.0),),
         ),
     )
-    return BaseRows(datasets=(steel, elec), flows=flows, methods=methods)
+    return BaseRows(
+        datasets=(steel, elec),
+        flows=flows,
+        methods=methods,
+        locations={"NA": "Namibia", "GLO": "Global"},
+    )
 
 
 def test_rows_write_an_bundle_the_core_installs_whole(tmp_path: Path) -> None:
@@ -105,8 +110,8 @@ def test_rows_write_an_bundle_the_core_installs_whole(tmp_path: Path) -> None:
     imported = read_background(written.bundle, "db", foreground=frozenset())
     assert imported.unlinked == []
     ore = next(f for f in imported.flows.values() if f["name"] == "Iron")
-    # ecoinvent's "natural resource" files under openLCA's "Resource"
-    assert ore["categories"] == ("Resource", "in ground") and ore["type"] == "natural resource"
+    assert (ore["compartment"], ore["sub_compartment"]) == ("natural resource", "in ground")
+    assert ore["type"] == "natural resource"
     steel = next(d for d in imported.datasets.values() if d["name"] == "steel production")
     assert steel["location"] == "NA"
 
@@ -164,7 +169,12 @@ def test_a_comment_and_classifications_are_written_to_the_process(tmp_path: Path
     )
     bare = replace(elec, comment=None, classifications=())
     written = write_base_bundle(
-        BaseRows(datasets=(described, bare), flows=rows.flows, methods=rows.methods),
+        BaseRows(
+            datasets=(described, bare),
+            flows=rows.flows,
+            methods=rows.methods,
+            locations=rows.locations,
+        ),
         scheme="ecoinvent",
         name="db",
         version="1",
@@ -181,3 +191,41 @@ def test_a_comment_and_classifications_are_written_to_the_process(tmp_path: Path
     ]
     plain = processes[olca_process_id("ecoinvent", ELEC)]
     assert plain.description is None and plain.tags is None
+
+
+def test_a_base_bundle_names_each_location_as_its_rows_name_it(tmp_path: Path) -> None:
+    written = write_base_bundle(
+        _rows(),
+        scheme="ecoinvent",
+        name="db",
+        version="1",
+        destination=tmp_path / "db.zip",
+        now=NOW,
+    )
+    with ZipReader(str(written.bundle)) as reader:
+        locations = {(location.code, location.name) for location in reader.read_each(o.Location)}
+    assert locations == {("NA", "Namibia"), ("GLO", "Global")}
+    imported = read_background(written.bundle, "db", foreground=frozenset())
+    assert imported.locations == {"GLO": "Global", "NA": "Namibia"}
+
+
+def test_a_dataset_at_a_location_the_rows_do_not_name_refuses_the_write(tmp_path: Path) -> None:
+    rows = _rows()
+    steel, elec = rows.datasets
+    unnamed = replace(steel, location="RER")
+    with pytest.raises(Invalid) as caught:
+        write_base_bundle(
+            BaseRows(
+                datasets=(unnamed, elec),
+                flows=rows.flows,
+                methods=rows.methods,
+                locations=rows.locations,
+            ),
+            scheme="ecoinvent",
+            name="db",
+            version="1",
+            destination=tmp_path / "db.zip",
+            now=NOW,
+        )
+    assert f"{STEEL!r} is located at 'RER'" in str(caught.value)
+    assert list(tmp_path.iterdir()) == []

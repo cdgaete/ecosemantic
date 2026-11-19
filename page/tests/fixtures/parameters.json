@@ -28,6 +28,7 @@
         "description": "frame per widget",
         "formula": null,
         "name": "frame_mass",
+        "uncertainty": null,
         "unit": "kilogram",
         "value": 0.25
       },
@@ -35,6 +36,7 @@
         "description": "",
         "formula": "frame_mass * 2.4",
         "name": "frame_steel",
+        "uncertainty": null,
         "unit": "kilogram",
         "value": null
       }

@@ -23,7 +23,7 @@ export function GeneralInformationPage({ view }: { view: SystemView }) {
   const key = (s: string) => `system:${id}:${s}`
   return (
     <>
-      <EditorHeader icon="system" page="General information" entity={system.name} />
+      <EditorHeader icon="system" page="General information" entity={system.name} state={view.state} />
       <Section title="General information" sectionKey={key('general')} actions={view.version ? undefined : <RequestAction systemId={id} entity="product_system" entityId={system.id} />}>
         <FieldGrid
           rows={[

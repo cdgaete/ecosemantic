@@ -133,11 +133,11 @@ beforeEach(() => {
   readSearchMethods.mockReset().mockResolvedValue(methodsPage)
 })
 
-it('drops the cursor when the compartment filter changes after paging with More', async () => {
+it('drops the cursor when the compartment filter changes after paging to the next page', async () => {
   renderAt('/databases/fixture/search/elementary-flows?q=flow', <Screens />)
   const rows = await listing('Elementary flows')
   await waitFor(() => expect(rows.getByText('Carbon dioxide, fossil')).toBeInTheDocument())
-  fireEvent.click(await rows.findByRole('button', { name: 'More…' }))
+  fireEvent.click(await rows.findByRole('button', { name: 'Next page' }))
   await waitFor(() => expect(readSearchFlows.mock.calls.at(-1)?.[1].cursor).toBe('cursor-1'))
   fireEvent.change(screen.getByLabelText('Compartment'), { target: { value: 'air' } })
   await waitFor(() => expect(readSearchFlows.mock.calls.at(-1)?.[1].compartment).toBe('air'))
@@ -211,11 +211,11 @@ it('keeps a long filter from widening the panel', async () => {
   expect(screen.getByLabelText('Filter the processes')).toHaveClass('min-w-0')
 })
 
-it('pages a method search with More, as the other searches page', async () => {
+it('pages a method search to its next page, as the other searches page', async () => {
   renderAt('/databases/fixture/search/methods?q=climate', <Screens />)
   const rows = await listing('Indicators')
   await waitFor(() => expect(rows.getByText('climate change')).toBeInTheDocument())
-  fireEvent.click(await rows.findByRole('button', { name: 'More…' }))
+  fireEvent.click(await rows.findByRole('button', { name: 'Next page' }))
   await waitFor(() => expect(readSearchMethods.mock.calls.at(-1)?.[1].cursor).toBe('m-cursor-1'))
 })
 
@@ -223,7 +223,7 @@ it("shows its pager, not the tool's cursor hint, when a search has more", async 
   readSearchProcesses.mockResolvedValue({ ...processesPage, hint: "more results; call again with cursor='proc-cursor-1'" })
   renderAt('/databases/fixture/search/processes?q=hinted', <Screens />)
   const rows = await listing('Processes')
-  await waitFor(() => expect(rows.getByRole('button', { name: 'More…' })).toBeInTheDocument())
+  await waitFor(() => expect(rows.getByRole('button', { name: 'Next page' })).toBeInTheDocument())
   expect(screen.queryByText(/call again with cursor/)).not.toBeInTheDocument()
 })
 
@@ -232,9 +232,9 @@ it('offers only the compartments a flow search filters by, not their sub-compart
   const select = await screen.findByLabelText('Compartment')
   await waitFor(() => expect(within(select).getByRole('option', { name: 'air' })).toBeInTheDocument())
   const options = within(select).getAllByRole('option').map((option) => option.textContent)
-  expect(options).toContain('Resource')
+  expect(options).toContain('natural resource')
   expect(options).not.toContain('air/urban air close to ground')
-  expect(options).not.toContain('Resource/in water')
+  expect(options).not.toContain('natural resource/in water')
 })
 
 it('names the whole-database search over the processes while the switch is on, and the node again when it is off', async () => {
@@ -259,4 +259,107 @@ it('names the whole-database search over the flows while the switch is on, and t
   fireEvent.click(rows.getByLabelText('Search the whole database'))
   await waitFor(() => expect(rows.getByRole('heading').textContent).toContain('air'))
   expect(rows.getByRole('heading').textContent).toContain('3')
+})
+
+it('each landing carries the whole-database search', async () => {
+  const landings = [
+    { path: '/databases/fixture/datasets', region: 'Processes', sentence: 'Choose a node of the classification to list its processes.' },
+    { path: '/databases/fixture/flows', region: 'Elementary flows', sentence: 'Choose a compartment to list its flows.' },
+    { path: '/databases/fixture/methods', region: 'Indicators', sentence: 'Choose a category of the impact methods to list its indicators.' },
+  ]
+  for (const landing of landings) {
+    const view = renderAt(landing.path, <Screens />)
+    const rows = await listing(landing.region)
+    const search = await rows.findByLabelText('Search the whole database')
+    expect(search).not.toBeChecked()
+    const sentence = rows.getByText(landing.sentence)
+    expect(search.compareDocumentPosition(sentence) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    view.unmount()
+  }
+})
+
+it('turning the whole-database search off with nothing chosen returns to the landing', async () => {
+  renderAt('/databases/fixture/search/processes', <Screens />)
+  const rows = await listing('Processes')
+  const search = await rows.findByLabelText('Search the whole database')
+  expect(search).toBeChecked()
+  fireEvent.click(search)
+  expect(await rows.findByText('Choose a node of the classification to list its processes.')).toBeInTheDocument()
+  expect(rows.getByLabelText('Search the whole database')).not.toBeChecked()
+})
+
+function Place() {
+  const location = useLocation()
+  return <output data-testid="place">{`${location.pathname}${location.search}`}</output>
+}
+
+const place = () => screen.getByTestId('place').textContent ?? ''
+
+const explorerAt = (path: string) =>
+  renderAt(
+    path,
+    <>
+      <Screens />
+      <Place />
+    </>,
+  )
+
+it('searches the datasets of the whole database from the section bar', async () => {
+  explorerAt('/databases/fixture/datasets')
+  const search = within(await screen.findByRole('search', { name: 'Search fixture' }))
+  expect(search.getByLabelText('Search in')).toHaveValue('datasets')
+  fireEvent.change(search.getByLabelText('Search the database'), { target: { value: 'steel' } })
+  await waitFor(() => expect(place()).toBe('/databases/fixture/datasets?whole=1&q=steel'))
+  await waitFor(() => expect(readSearchProcesses.mock.calls.at(-1)?.[1]).toMatchObject({ query: 'steel' }))
+  expect(await (await listing('Processes')).findByText('steel production')).toBeInTheDocument()
+})
+
+it('searches at once on Enter, without the pause', async () => {
+  explorerAt('/databases/fixture/datasets')
+  const search = within(await screen.findByRole('search', { name: 'Search fixture' }))
+  const field = search.getByLabelText('Search the database')
+  fireEvent.change(field, { target: { value: 'steel' } })
+  fireEvent.submit(field.closest('form') as HTMLFormElement)
+  expect(place()).toBe('/databases/fixture/datasets?whole=1&q=steel')
+})
+
+it('searches the elementary flows and the impact methods when the field is turned to them', async () => {
+  explorerAt('/databases/fixture/datasets')
+  const search = within(await screen.findByRole('search', { name: 'Search fixture' }))
+  fireEvent.change(search.getByLabelText('Search the database'), { target: { value: 'carbon' } })
+  fireEvent.change(search.getByLabelText('Search in'), { target: { value: 'flows' } })
+  await waitFor(() => expect(place()).toBe('/databases/fixture/flows?whole=1&q=carbon'))
+  await waitFor(() => expect(readSearchFlows.mock.calls.at(-1)?.[1]).toMatchObject({ query: 'carbon' }))
+  fireEvent.change(screen.getByLabelText('Search in'), { target: { value: 'methods' } })
+  await waitFor(() => expect(place()).toBe('/databases/fixture/methods?whole=1&q=carbon'))
+  await waitFor(() => expect(readSearchMethods.mock.calls.at(-1)?.[1]).toMatchObject({ query: 'carbon' }))
+})
+
+it('holds the query of the whole-database search its address names, and nothing under a node', async () => {
+  const searching = explorerAt('/databases/fixture/search/elementary-flows?q=flow')
+  const search = within(await screen.findByRole('search', { name: 'Search fixture' }))
+  await waitFor(() => expect(search.getByLabelText('Search the database')).toHaveValue('flow'))
+  expect(search.getByLabelText('Search in')).toHaveValue('flows')
+  searching.unmount()
+  explorerAt('/databases/fixture/flows?compartment=air&q=flow')
+  const listed = within(await screen.findByRole('search', { name: 'Search fixture' }))
+  expect(listed.getByLabelText('Search the database')).toHaveValue('')
+})
+
+it('searches the datasets from the units and the locations', async () => {
+  explorerAt('/databases/fixture/units')
+  const search = within(await screen.findByRole('search', { name: 'Search fixture' }))
+  expect(search.getByLabelText('Search in')).toHaveValue('datasets')
+  fireEvent.change(search.getByLabelText('Search the database'), { target: { value: 'steel' } })
+  await waitFor(() => expect(place()).toBe('/databases/fixture/datasets?whole=1&q=steel'))
+})
+
+it('closes the open item and drops the page when the section bar searches again, keeping the filters', async () => {
+  explorerAt('/databases/fixture/datasets?whole=1&q=old&location=GLO&cursor=proc-cursor-1&item=abc')
+  const search = within(await screen.findByRole('search', { name: 'Search fixture' }))
+  fireEvent.change(search.getByLabelText('Search the database'), { target: { value: 'steel' } })
+  await waitFor(() => expect(place()).toContain('q=steel'))
+  expect(place()).toContain('location=GLO')
+  expect(place()).not.toContain('cursor')
+  expect(place()).not.toContain('item')
 })

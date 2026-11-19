@@ -28,7 +28,9 @@
         "unit": "kilogram"
       }
     ],
-    "next_cursor": null
+    "next_cursor": null,
+    "previous_cursor": null,
+    "total": 2
   },
   "view_url": null
 }

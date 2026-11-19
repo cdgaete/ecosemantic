@@ -4,6 +4,14 @@ import { useUi, type InspectorMode } from '@/store/ui'
 import { useMinWidth } from './useMinWidth'
 
 export const NARROW_BELOW = 768
+export const NARROWEST = 320
+export const WIDEST_SHARE = 0.8
+export const KEY_STEP = 24
+
+/** The width a dragged inspector takes: whole pixels, no narrower than 320 px and no wider than four fifths of the window. */
+export function widthWithin(width: number, viewport: number): number {
+  return Math.round(Math.max(NARROWEST, Math.min(width, viewport * WIDEST_SHARE)))
+}
 
 function narrowAt(): boolean {
   return !window.matchMedia(`(min-width: ${NARROW_BELOW}px)`).matches
@@ -44,6 +52,13 @@ export function toggleInspector(): void {
   const state = useUi.getState()
   if (narrowAt()) state.setSheetOpen(!state.sheetOpen)
   else state.setInspector(state.inspector === 'closed' ? 'open' : 'closed')
+}
+
+/** Holds the inspector at a width a person gave it, out of the widened state; null returns it to its own width. */
+export function resizeInspector(width: number | null): void {
+  const state = useUi.getState()
+  state.setInspectorWidth(width === null ? null : widthWithin(width, window.innerWidth))
+  if (state.inspector === 'widened') state.setInspector('open')
 }
 
 export function toggleWidened(): void {

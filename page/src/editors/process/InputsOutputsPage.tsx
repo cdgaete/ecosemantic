@@ -11,7 +11,8 @@ import { RequestAction } from '@/requests/RequestAction'
 import { DataTable, type Column } from '@/window/DataTable'
 import { EditorHeader } from '@/window/EditorHeader'
 import { Section } from '@/window/Section'
-import { amountColumn, elementaryProvider, flowColumn, providerColumn, providerLink, unitColumn } from '../exchangeColumns'
+import type { CanvasVariant } from '@/window/useCanvasState'
+import { amountColumn, elementaryProvider, flowColumn, namedWithLocation, providerColumn, providerLink, unitColumn } from '../exchangeColumns'
 
 interface ProviderInfo {
   name: string
@@ -30,15 +31,15 @@ function provider(exchange: Exchange, systemId: string, system: ProductSystem, f
   }
   if (input.kind === 'background') {
     const found = providers[`${input.database}:${input.id}`]
-    const label = found ? (found.location ? `${found.name} · ${found.location}` : found.name) : exchange.name
-    return providerLink(paths.background(input.database, input.id), 'product', label)
+    const label = found ? namedWithLocation(found.name, found.location) : exchange.name
+    return providerLink(paths.dataset(systemId, input.database, input.id), 'product', label)
   }
   return elementaryProvider(flows[input.id])
 }
 
-export function InputsOutputsPage({ systemId, system, process }: { systemId: string; system: ProductSystem; process: Process }) {
+export function InputsOutputsPage({ systemId, system, process, state }: { systemId: string; system: ProductSystem; process: Process; state: CanvasVariant | null }) {
   const { flows, errors: flowErrors } = useFlowSides(process.exchanges)
-  const layout = useLayout(systemId, null)
+  const layout = useLayout(systemId, state?.name ?? null)
   const background = process.exchanges.filter((e) => e.input?.kind === 'background')
   const backgrounds = useQueries({
     queries: background.map((e) => {
@@ -59,7 +60,7 @@ export function InputsOutputsPage({ systemId, system, process }: { systemId: str
     amountColumn((e) => e.amount),
     unitColumn((e) => e.unit),
     { key: 'formula', header: 'Formula', render: (e) => (e.formula ? <code>{e.formula}</code> : '') },
-    { key: 'uncertainty', header: 'Uncertainty', render: (e) => describeUncertainty(e.uncertainty) },
+    { key: 'uncertainty', header: 'Uncertainty', render: (e) => describeUncertainty(e.uncertainty, e.unit) },
     providerColumn((e) => provider(e, systemId, system, flows, providers)),
     { key: 'description', header: 'Description', render: (e) => e.comment ?? '' },
     { key: 'request', header: '', render: (e) => <RequestAction systemId={systemId} entity="exchange" entityId={e.id} /> },
@@ -74,7 +75,7 @@ export function InputsOutputsPage({ systemId, system, process }: { systemId: str
   const rows = rowsOf(process, placement)
   return (
     <>
-      <EditorHeader icon="process" page="Inputs/Outputs" entity={process.name} />
+      <EditorHeader icon="process" page="Inputs/Outputs" entity={process.name} state={state} />
       {errors.length > 0 ? <p className="px-4 text-destructive">{errors.join('; ')}</p> : null}
       <Section title="Inputs" sectionKey={key('inputs')} actions={action}>
         <DataTable columns={columns} rows={rows.inputs} rowKey={(e) => e.id} rowClassName={rowClass} empty="No input." />

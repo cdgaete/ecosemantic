@@ -52,6 +52,7 @@ def test_the_shipped_profile_pins_the_2026_v1_packs_and_columns() -> None:
     )
     assert profile.total.header == "Total [UBP]"
     assert profile.total.method == "Ecological Scarcity 2021"
+    assert profile.total.weighting_set == "Total (water resources, evaporated; for BAFU database)"
     assert profile.tolerance == 1e-4
     assert profile.validated is not None
     assert profile.validated.processes == 11947

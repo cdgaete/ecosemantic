@@ -9,7 +9,13 @@ from typing import Protocol, runtime_checkable
 from ecosemantic.errors import Invalid
 from ecosemantic.model.entities import Method
 from ecosemantic.ports.terms import tokens
-from ecosemantic.ports.types import ElementaryFlowHit, FlowType, Page, ProcessHit
+from ecosemantic.ports.types import (
+    ElementaryFlowHit,
+    FlowType,
+    ListingOrder,
+    Page,
+    ProcessHit,
+)
 
 
 @dataclass(frozen=True)
@@ -79,6 +85,11 @@ def browsed(query: str, filtered: bool) -> list[Phrase] | None:
 
 @runtime_checkable
 class SearchPort(Protocol):
+    """Text search and browsing over one background database. A listing whose order is `name`
+    lists the rows the query and the filters match in the order of a listing with no term; an
+    item names the page that holds its row while no cursor is given; every listing answers the
+    number of rows it holds."""
+
     async def processes(
         self,
         database: str,
@@ -88,6 +99,8 @@ class SearchPort(Protocol):
         limit: int = 20,
         cursor: str | None = None,
         classifications: Sequence[str] | None = None,
+        order: ListingOrder = "relevance",
+        item: str | None = None,
     ) -> Page[ProcessHit]: ...
 
     async def elementary_flows(
@@ -100,6 +113,8 @@ class SearchPort(Protocol):
         unit: str | None = None,
         limit: int = 20,
         cursor: str | None = None,
+        order: ListingOrder = "relevance",
+        item: str | None = None,
     ) -> Page[ElementaryFlowHit]: ...
 
     async def methods(

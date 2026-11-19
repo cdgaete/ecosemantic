@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useSchemes, useTree } from '@/api/queries'
+import { useBackgroundProcess, useSchemes, useTree } from '@/api/queries'
 import type { ClassificationNode } from '@/api/types'
 import { useAddress } from '@/lib/address'
 import { useUi } from '@/store/ui'
@@ -42,11 +42,24 @@ export function DatasetsSection({ name }: { name: string }) {
   const nodes = tree.data?.value ?? []
   const nodeId = address.read('node')
   const wanted = address.read('value')
+  const whole = address.read('whole') === '1'
+  const process = useBackgroundProcess(name, item, item !== '')
   useEffect(() => {
     if (wanted === '' || nodeId !== '' || tree.data === undefined) return
     const found = findValue(tree.data.value, wanted)
     if (found !== null) address.write({ node: found.id, value: undefined })
   }, [wanted, nodeId, tree.data, address])
+  useEffect(() => {
+    if (item === '' || nodeId !== '' || wanted !== '' || whole || scheme === null || tree.data === undefined || process.data === undefined) return
+    const head = `${scheme}: `
+    const found =
+      process.data.value.classifications
+        .filter((stored) => stored.startsWith(head))
+        .map((stored) => findValue(tree.data.value, stored))
+        .find((node) => node !== null) ?? null
+    if (found === null) return
+    address.write({ node: found.id })
+  }, [item, nodeId, wanted, whole, scheme, tree.data, process.data, address])
   if (schemes.error) return <p className="p-3 text-destructive">{schemes.error.message}</p>
   if (schemes.data === undefined) return <p className="p-3 text-muted-foreground">Loading…</p>
   if (listed.length === 0) {

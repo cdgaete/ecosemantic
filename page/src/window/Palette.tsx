@@ -1,5 +1,6 @@
 import { Command } from 'cmdk'
-import { useSystem, useSystems } from '@/api/queries'
+import { useDatabases, useSystem, useSystems } from '@/api/queries'
+import { places } from '@/editors/explorer/sections'
 import { beginsAWord } from '@/lib/matching'
 import { distinguishingId, sharedNames } from '@/lib/names'
 import { paths } from '@/lib/paths'
@@ -26,6 +27,7 @@ export function Palette({ menus, go }: { menus: Menu[]; go: (path: string) => vo
   const setOpen = useUi((s) => s.setPaletteOpen)
   const systemId = useUi((s) => s.canvasSystemId)
   const systems = useSystems()
+  const databases = useDatabases()
   const system = useSystem(systemId ?? '', systemId !== null)
   const listed = systems.data?.value ?? []
   const shared = sharedNames(listed)
@@ -35,7 +37,7 @@ export function Palette({ menus, go }: { menus: Menu[]; go: (path: string) => vo
   }
   return (
     <Command.Dialog open={open} onOpenChange={setOpen} label="Command palette" loop filter={MATCHES_WORDS} overlayClassName="fixed inset-0 z-40 bg-black/40" contentClassName="fixed top-[18%] left-1/2 z-50 w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-2xl">
-      <Command.Input placeholder="Go to a process, a page or a command…" className="w-full border-b bg-transparent px-3 py-2.5 text-sm outline-none placeholder:text-muted-foreground" />
+      <Command.Input placeholder="Go to a process, a database, a page or a command…" className="w-full border-b bg-transparent px-3 py-2.5 text-sm outline-none placeholder:text-muted-foreground" />
       <Command.List className="max-h-[50vh] overflow-auto p-1 text-sm">
         <Command.Empty className="px-2 py-3 text-muted-foreground">Nothing matches.</Command.Empty>
         {systemId && system.data ? (
@@ -76,6 +78,20 @@ export function Palette({ menus, go }: { menus: Menu[]; go: (path: string) => vo
               </Command.Item>
             )
           })}
+        </Command.Group>
+        <Command.Group heading="Databases" className={GROUP}>
+          {(databases.data?.value ?? []).flatMap((database) => [
+            <Command.Item key={`database ${database.name}`} value={`database ${database.name}`} keywords={[database.name]} className={ITEM} onSelect={() => run(() => go(paths.explorer(database.name)))}>
+              <span className="min-w-0 break-words">{database.name}</span>
+            </Command.Item>,
+            ...places(database.name).map((place) => (
+              <Command.Item key={`place ${database.name} ${place.key}`} value={`place ${database.name} ${place.key}`} keywords={[database.name, place.title]} className={ITEM} onSelect={() => run(() => go(place.to))}>
+                <span className="min-w-0 break-words">
+                  {database.name} › {place.title}
+                </span>
+              </Command.Item>
+            )),
+          ])}
         </Command.Group>
         <Command.Group heading="Commands" className={GROUP}>
           {leaves(menus).map((leaf) =>

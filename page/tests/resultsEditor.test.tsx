@@ -129,13 +129,16 @@ it('opens a recorded calculation whose demand holds several items, and names eac
   vi.mocked(api.impact).mockResolvedValue(impact)
 })
 
-it('names the method of a category that has no indicator without a separator', async () => {
-  const bare = { ...firstMethodOf(impact.value), indicator: '' }
+it('names a method whose indicator is its category once, in the title', async () => {
+  const bare = { ...firstMethodOf(impact.value), indicator: firstMethodOf(impact.value).impact_category }
   vi.mocked(api.impact).mockResolvedValue({ ...impact, value: { ...impact.value, methods: [bare] } } as typeof impact)
   // an amount of its own keys a query no earlier test cached
   renderAt(`/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(bare.impact_method)}&amount=3`, <App router={false} />)
-  const row = (await screen.findByText(bare.impact_category)).closest('tr')!
-  expect(within(row).getByText(bare.impact_method, { selector: 'td' }).textContent).toBe(bare.impact_method)
+  const table = await screen.findByRole('table')
+  expect(within(table).queryByRole('columnheader', { name: 'Method' })).not.toBeInTheDocument()
+  expect(within(table).queryByRole('columnheader', { name: 'Indicator' })).not.toBeInTheDocument()
+  const row = (await within(table).findByText(bare.impact_category)).closest('tr')!
+  expect(within(row).queryByText(/·/)).not.toBeInTheDocument()
   vi.mocked(api.impact).mockResolvedValue(impact)
 })
 

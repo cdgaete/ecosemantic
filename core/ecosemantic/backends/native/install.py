@@ -22,7 +22,6 @@ from ecosemantic.backends.native.store import (
     FORMAT,
     Entry,
     install_lock,
-    migrate,
     point,
     remove_unnamed_builds,
     served_build,
@@ -81,12 +80,13 @@ def install(
     system_model: str,
     replace: bool = False,
     dropped: Sequence[Unlinked] = (),
+    revision: int | None = None,
 ) -> Installed:
     """Install the import under the data directory, its entry naming the fingerprint of the
-    background compiled from it; the records in `dropped` are listed in the catalog as exchanges
-    the install cut off and reach no background. Invalid while an input is unlinked, NotSupported
-    for an exchange or flow type the ports do not name, Conflict for a name that is installed
-    without replace."""
+    background compiled from it and the revision of the publisher's release the bundle is; the
+    records in `dropped` are listed in the catalog as exchanges the install cut off and reach no
+    background. Invalid while an input is unlinked, NotSupported for an exchange or flow type the
+    ports do not name, Conflict for a name that is installed without replace."""
     require_linked(imported)
     database = Database(
         name=imported.database,
@@ -94,10 +94,10 @@ def install(
         scheme="olca",
         version=version,
         system_model=system_model,
+        revision=revision,
     )
     rows = catalog_rows(imported, dropped)
     target = directory / DATABASES_DIR / slug(database.name, "-")
-    migrate(directory)
     digest = _keep(directory, bundle)
     build_id = uuid.uuid4().hex
     build = target / BUILDS_DIR / build_id

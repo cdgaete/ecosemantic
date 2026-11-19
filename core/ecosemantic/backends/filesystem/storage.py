@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import shutil
 import tempfile
+import threading
 import uuid
 from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
@@ -50,10 +51,23 @@ class FilesystemStorage:
     def __init__(self, root: Path, resolver: Resolver) -> None:
         self.root = root
         self.resolver = resolver
+        self._thread_locks: dict[str, threading.Lock] = {}
+        self._thread_locks_guard = threading.Lock()
 
-    def _lock(self, name: str) -> FileLock:
-        self.root.mkdir(parents=True, exist_ok=True)
-        return FileLock(self.root / f"{name}.lock")
+    def _thread_lock(self, name: str) -> threading.Lock:
+        with self._thread_locks_guard:
+            return self._thread_locks.setdefault(name, threading.Lock())
+
+    @contextmanager
+    def _locked(self, name: str) -> Iterator[FileLock]:
+        """The file lock of one product system, taken after that system's lock of this process:
+        a thread here waits on the thread lock and wakes when it is released, so only another
+        process's hold makes it poll the file."""
+        with self._thread_lock(name):
+            self.root.mkdir(parents=True, exist_ok=True)
+            lock = FileLock(self.root / f"{name}.lock")
+            with lock:
+                yield lock
 
     def _dir(self, product_system_id: uuid.UUID) -> Path:
         path = self.root / str(product_system_id)
@@ -66,7 +80,7 @@ class FilesystemStorage:
         """The folder of a stored product system under its lock; a system the store does not
         hold is refused before a lock is made for it, and again once the lock is held."""
         self._dir(product_system_id)
-        with self._lock(str(product_system_id)):
+        with self._locked(str(product_system_id)):
             yield self._dir(product_system_id)
 
     def sweep(self) -> None:
@@ -79,7 +93,7 @@ class FilesystemStorage:
         summaries = []
         for path in sorted(self.root.iterdir()):
             if (path / SIDECAR_DIR).is_dir():
-                with self._lock(path.name):
+                with self._locked(path.name):
                     summaries.append(ProductSystemSummary.of(read_sidecar(path).product_system))
         return summaries
 
@@ -104,15 +118,14 @@ class FilesystemStorage:
     ) -> LogEntry:
         root = self.root / str(product_system.id)
         linked = self._pinned(product_system)
-        with self._lock(str(product_system.id)):
+        with self._locked(str(product_system.id)):
             return write_package(
                 product_system, root, actor, message, self.resolver, source, linked=linked
             )
 
     def _delete(self, product_system_id: uuid.UUID) -> None:
         self._dir(product_system_id)
-        lock = self._lock(str(product_system_id))
-        with lock:
+        with self._locked(str(product_system_id)) as lock:
             shutil.rmtree(self._dir(product_system_id))
             forget(lock)
 
@@ -154,7 +167,7 @@ class FilesystemStorage:
         exported_root: Path,
         actor: Actor,
         at_entry: int | None,
-    ) -> LogEntry:
+    ) -> LogEntry | None:
         linked = self._pinned(self._read(product_system_id))
         with self._held(product_system_id) as root:
             return write_returned(
@@ -238,7 +251,7 @@ class FilesystemStorage:
         exported_root: Path,
         actor: Actor,
         at_entry: int | None = None,
-    ) -> LogEntry:
+    ) -> LogEntry | None:
         return await asyncio.to_thread(
             self._return, product_system_id, exported_root, actor, at_entry
         )
@@ -252,7 +265,7 @@ class FilesystemStorage:
             staged = Path(work) / "package"
             unzip_package(source, staged)
             system, _ = read_package(staged)
-            with self._lock(str(system.id)):
+            with self._locked(str(system.id)):
                 held = self.root / str(system.id)
                 if (held / SIDECAR_DIR).is_dir():
                     current = read_package(held)[0].hash

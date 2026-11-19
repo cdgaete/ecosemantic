@@ -4,6 +4,7 @@ import csv
 import dataclasses
 import io
 import json
+import uuid
 import zipfile
 from collections.abc import Iterator
 from pathlib import Path
@@ -14,10 +15,13 @@ from fastmcp import FastMCP
 from starlette.testclient import TestClient
 
 from ecosemantic.cli import main
+from ecosemantic.compute.edits import set_parameter_space
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.server import build_server
-from ecosemantic.model.entities import Method, ProductSystem, method_id
+from ecosemantic.model.entities import Method, Parameter, ProductSystem, method_id
+from ecosemantic.tables.folder import folder_name
 from ecosemantic.view.app import build_view
+from tests.conftest import frame_system
 from tests.fixture_data import CODES, GWP
 from tests.memory_background import MemoryInventory
 
@@ -52,6 +56,28 @@ def test_the_folder_downloads_as_a_zip(
     assert "inputs/cases.csv" in names
 
 
+def test_every_download_is_named_after_its_system(
+    client: TestClient, fixture_system_stored: ProductSystem
+) -> None:
+    folder = folder_name(fixture_system_stored)
+    base = f"/api/product-systems/{fixture_system_stored.id}"
+    downloads = {
+        "tables": client.get(f"{base}/tables.zip"),
+        "impact": client.post(f"{base}/impact.zip", json={"method_id": GWP_ID}),
+        "contributions": client.post(f"{base}/contributions.zip", json={"method_id": GWP_ID}),
+        "inventory": client.post(f"{base}/inventory.zip", json={}),
+        "openlca": client.get(f"{base}/package.zip"),
+    }
+    for content, response in downloads.items():
+        assert response.status_code == 200, (content, response.text)
+        assert response.headers["content-disposition"] == (
+            f'attachment; filename="{folder}-{content}.zip"'
+        )
+    # The tables zip packs the folder's entries at its root, where a return unpacks them.
+    entries = zipfile.ZipFile(io.BytesIO(downloads["tables"].content)).namelist()
+    assert "model.yaml" in entries
+
+
 def test_an_added_parameter_posts_back_and_the_log_names_the_channel(
     client: TestClient, fixture_system_stored: ProductSystem
 ) -> None:
@@ -71,6 +97,29 @@ def test_an_added_parameter_posts_back_and_the_log_names_the_channel(
     )
     assert response.status_code == 201
     assert response.json()["source"] == "tables"
+
+
+async def test_a_tables_return_that_changes_nothing_writes_no_entry(
+    client: TestClient, context: ServerContext
+) -> None:
+    frame = frame_system().model_copy(update={"id": uuid.uuid4()})
+    spaced = set_parameter_space(
+        frame, parameters=[Parameter(name="transport_km", value=120.0, unit="km")]
+    )
+    await context.storage.put_product_system(spaced, context.actor, "created")
+    base = f"/api/product-systems/{frame.id}"
+    downloaded = client.get(f"{base}/tables.zip").content
+    before = len(client.get(f"{base}/log").json()["value"])
+    response = client.post(
+        f"{base}/tables",
+        files={"tables": ("tables.zip", downloaded, "application/zip")},
+        data={"actor": "a person"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "message": "The returned folder changes nothing; no entry was written."
+    }
+    assert len(client.get(f"{base}/log").json()["value"]) == before
 
 
 def test_a_post_without_the_form_field_is_refused(

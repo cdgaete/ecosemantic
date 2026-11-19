@@ -78,11 +78,11 @@ class _Installed:
     factors and the method itself, its A and B matrices, and the calculation over it."""
 
     activities: dict[tuple[str, str, str], _Activity]
-    flows: dict[tuple[str, tuple[str, ...]], _Flow]
+    flows: dict[tuple[str, tuple[str, str | None]], _Flow]
     methods: dict[tuple[str, ...], dict[str, float]]
     method_of: dict[tuple[str, ...], Method]
     catalog: list[tuple[str, str, str]]
-    used_flows: list[tuple[str, tuple[str, ...]]]
+    used_flows: list[tuple[str, tuple[str, str | None]]]
     A: csr_matrix
     B: csr_matrix
     calculation: Calculation
@@ -256,15 +256,15 @@ def _installed(imported: Import, background: Background, calculation: Calculatio
         )
         catalog.append(key)
     used = np.diff(calculation.biosphere.indptr) > 0
-    flows: dict[tuple[str, tuple[str, ...]], _Flow] = {}
-    used_flows: list[tuple[str, tuple[str, ...]]] = []
+    flows: dict[tuple[str, tuple[str, str | None]], _Flow] = {}
+    used_flows: list[tuple[str, tuple[str, str | None]]] = []
     for (_, code), flow in imported.flows.items():
-        categories = tuple(str(category) for category in cast(tuple, flow["categories"]))
+        category = (str(flow["compartment"]), cast("str | None", flow["sub_compartment"]))
         at = background.position("flow", code)
         row = at if at is not None and bool(used[at]) else None
-        flows[(str(flow["name"]), categories)] = _Flow(code=code, unit=str(flow["unit"]), row=row)
+        flows[(str(flow["name"]), category)] = _Flow(code=code, unit=str(flow["unit"]), row=row)
         if row is not None:
-            used_flows.append((str(flow["name"]), categories))
+            used_flows.append((str(flow["name"]), category))
     factors = calculation.characterization
     labels = background.coords["flow"].labels
     methods: dict[tuple[str, ...], dict[str, float]] = {}
@@ -413,8 +413,7 @@ class _Comparison:
 
     def _map_flows(self) -> None:
         for position, (name, compartment, subcompartment, symbol) in enumerate(self.export.flows):
-            category = "Resource" if compartment == "natural resource" else compartment
-            found = self.installed.flows.get((name, (category, subcompartment)))
+            found = self.installed.flows.get((name, (compartment, subcompartment)))
             if found is None:
                 self.report.note(
                     f"matrix export flow {position} names no installed flow: "
@@ -445,10 +444,9 @@ class _Comparison:
                     f"installed dataset names no matrix export activity: "
                     f"{triple[0]} [{triple[1]}] {triple[2]}"
                 )
-        exported_flows: Counter[tuple[str, tuple[str, ...]]] = Counter()
+        exported_flows: Counter[tuple[str, tuple[str, str | None]]] = Counter()
         for name, compartment, subcompartment, _symbol in self.export.flows:
-            category = "Resource" if compartment == "natural resource" else compartment
-            exported_flows[(name, (category, subcompartment))] += 1
+            exported_flows[(name, (compartment, subcompartment))] += 1
         for key, count in (Counter(self.installed.used_flows) - exported_flows).items():
             for _ in range(count):
                 self.report.note(
@@ -457,7 +455,7 @@ class _Comparison:
 
     def _map_lcia(self) -> None:
         for position, (method, category, indicator, _symbol) in enumerate(self.export.lcia):
-            key = (self.name, method, f"{category} > {indicator}")
+            key = (self.name, method, category, indicator)
             found = self.installed.methods.get(key)
             if found is None:
                 self.report.note(
@@ -619,9 +617,9 @@ class _Comparison:
         scores = {_label(triple) for triple in self.export.cumulative_triples}
         referenced = matrix & scores
         self.report.unreferenced = sorted(
-            f"{key[1]} > {key[2]}"
+            f"{key[1]} > {key[2]} > {key[3]}"
             for key in self.installed.methods
-            if f"{key[1]} > {key[2]}" not in referenced
+            if f"{key[1]} > {key[2]} > {key[3]}" not in referenced
         )
 
 

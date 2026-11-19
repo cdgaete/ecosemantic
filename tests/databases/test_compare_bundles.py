@@ -26,7 +26,9 @@ NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 def _built(root: Path, **overrides: object) -> Path:
     release = build_release(root / "release", **overrides)
-    return build(release, default_profile(release), root / "out", NOW).bundle
+    return build(
+        release, default_profile(release), root / "out", NOW, revision=1, corrections=()
+    ).bundle
 
 
 def _change(entity: dict[str, object]) -> dict[str, object]:

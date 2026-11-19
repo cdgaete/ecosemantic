@@ -4,6 +4,7 @@ import asyncio
 import dataclasses
 import getpass
 import inspect
+import math
 import sys
 import time
 from collections.abc import Iterator
@@ -264,7 +265,7 @@ def test_a_handle_or_a_hit_stands_for_the_ref_it_carries(ws: Workspace) -> None:
         "product",
         amount=2.0,
         input=hit,
-        uncertainty={"type": "lognormal", "params": {"loc": 0.69, "scale": 0.1}},
+        uncertainty={"type": "lognormal", "params": {"loc": math.log(2.0), "scale": 0.1}},
     )
     assert isinstance(uncertain.value.uncertainty, Uncertainty)
 
@@ -388,6 +389,10 @@ def test_every_method_answers_on_the_fixture_database(
     folder = tmp_path / "tables"
     folder.mkdir()
     exported = ps.export_tables(folder).value
+    inputs = Path(exported.path) / "inputs" / "input_parameters.csv"
+    inputs.write_text(
+        inputs.read_text(encoding="utf-8").replace("mass,2.4", "mass,2.5"), encoding="utf-8"
+    )
     assert ws.import_tables(exported.path).value
 
     reviewer = build_context(bundle_dir, ws.context.systems_dir)

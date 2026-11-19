@@ -46,15 +46,33 @@ REQUIRED_PARAMS: dict[str, set[str]] = {
     "triangular": {"minimum", "loc", "maximum"},
 }
 _OPTIONAL_PARAMS: dict[str, set[str]] = {
-    "lognormal": {"negative"},
-    "normal": set(),
+    "lognormal": {"negative", "minimum", "maximum"},
+    "normal": {"minimum", "maximum"},
     "uniform": set(),
     "triangular": set(),
 }
 
 
+def takes(type: UncertaintyType) -> frozenset[str]:
+    """The params a distribution of this type carries."""
+    return frozenset(REQUIRED_PARAMS[type] | _OPTIONAL_PARAMS[type])
+
+
+def _scaled_bounds(low: float | None, high: float | None, factor: float) -> dict[str, float]:
+    """A distribution's bounds multiplied by a factor, the two swapped when it is negative so
+    that the lower one stays lower."""
+    if factor < 0:
+        low, high = high, low
+    return {
+        name: value * factor
+        for name, value in (("minimum", low), ("maximum", high))
+        if value is not None
+    }
+
+
 class Uncertainty(BaseModel):
-    """A distribution on an exchange amount, in stats_arrays field names."""
+    """A distribution on an exchange amount or a literal parameter's value, in stats_arrays field
+    names."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -64,7 +82,7 @@ class Uncertainty(BaseModel):
     @model_validator(mode="after")
     def _check_params(self) -> Uncertainty:
         required = REQUIRED_PARAMS[self.type]
-        allowed = required | _OPTIONAL_PARAMS[self.type]
+        allowed = takes(self.type)
         keys = set(self.params)
         if missing := required - keys:
             raise ValueError(f"{self.type} needs {sorted(missing)}")
@@ -77,34 +95,44 @@ class Uncertainty(BaseModel):
             raise ValueError("negative must be a boolean")
         if "scale" in required and self.params["scale"] <= 0:
             raise ValueError("scale must be > 0")
-        if "minimum" in required and not self.params["minimum"] < self.params["maximum"]:
+        low, high = self.bounds()
+        if low is not None and high is not None and not low < high:
             raise ValueError("minimum must be less than maximum")
-        if self.type == "triangular" and not (
-            self.params["minimum"] <= self.params["loc"] <= self.params["maximum"]
-        ):
-            raise ValueError("loc must lie between minimum and maximum")
+        centre = self.centre()
+        if (low is not None and centre < low) or (high is not None and centre > high):
+            stated = " to ".join(str(value) for value in (low, high) if value is not None)
+            raise ValueError(f"the distribution's centre {centre} lies outside its bounds {stated}")
         return self
 
     def scaled(self, factor: float) -> Uncertainty:
         """The distribution of the amount multiplied by a factor."""
         p = self.params
         magnitude = abs(factor)
+        low, high = self.bounds()
         params: dict[str, float | bool]
         if self.type == "lognormal":
             params = {"loc": float(p["loc"]) + math.log(magnitude), "scale": float(p["scale"])}
             if bool(p.get("negative", False)) != (factor < 0):
                 params["negative"] = True
+            params.update(_scaled_bounds(low, high, factor))
             return Uncertainty(type=self.type, params=params)
         if self.type == "normal":
             params = {"loc": float(p["loc"]) * factor, "scale": float(p["scale"]) * magnitude}
+            params.update(_scaled_bounds(low, high, factor))
             return Uncertainty(type=self.type, params=params)
-        low, high = float(p["minimum"]) * factor, float(p["maximum"]) * factor
-        if factor < 0:
-            low, high = high, low
-        params = {"minimum": low, "maximum": high}
+        params = dict(_scaled_bounds(low, high, factor))
         if self.type == "triangular":
             params["loc"] = float(p["loc"]) * factor
         return Uncertainty(type=self.type, params=params)
+
+    def bounds(self) -> tuple[float | None, float | None]:
+        """The bounds this distribution states, either of them None where it states none: a
+        uniform or a triangular states both, a lognormal or a normal each."""
+        low, high = self.params.get("minimum"), self.params.get("maximum")
+        return (
+            None if low is None else float(low),
+            None if high is None else float(high),
+        )
 
     def centre(self) -> float:
         """The amount the distribution is centred on: the lognormal's signed median, the normal's
@@ -208,6 +236,7 @@ class Parameter(BaseModel):
     formula: str | None = None
     unit: str = ""
     description: str = ""
+    uncertainty: Uncertainty | None = None
 
     @field_validator("name")
     @classmethod
@@ -220,6 +249,10 @@ class Parameter(BaseModel):
     def _value_xor_formula(self) -> Parameter:
         if (self.value is None) == (self.formula is None):
             raise ValueError("provide exactly one of value or formula")
+        if self.formula is not None and self.uncertainty is not None:
+            raise ValueError(
+                "a formula parameter takes no distribution: its spread follows from what it reads"
+            )
         return self
 
 
@@ -239,12 +272,15 @@ class ExchangeOverride(BaseModel):
     amount: float | None = Field(default=None, ge=0)
     multiplier: float | None = Field(default=None, ge=0)
     input: ProcessInput | None = None
+    name: str | None = None
 
     @model_validator(mode="after")
     def _one_action(self) -> ExchangeOverride:
         actions = [self.amount is not None, self.multiplier is not None, self.input is not None]
         if sum(actions) != 1:
             raise ValueError("set exactly one of amount, multiplier or input")
+        if self.name is not None and self.input is None:
+            raise ValueError("an exchange takes a name only when it swaps its input")
         return self
 
     @field_validator("input", mode="before")
@@ -317,23 +353,41 @@ class Method(BaseModel):
             raise ValueError("id must be method_id(spec)")
         return self
 
+    @model_validator(mode="after")
+    def _parts_are_named(self) -> Method:
+        blank = [
+            name
+            for name, part in (
+                ("impact_method", self.impact_method),
+                ("impact_category", self.impact_category),
+                ("indicator", self.indicator),
+            )
+            if not part.strip()
+        ]
+        if blank:
+            raise ValueError(f"a method names its {', '.join(blank)}")
+        return self
+
     @classmethod
     def of(cls, key: Sequence[str], unit: str) -> Method:
-        """The method a background database registers under a key: the database's prefix, then
-        the impact method, the category and the indicator, each blank where the key is shorter.
-        A bundle's three-part key names the category and the indicator in one name joined by
-        ` > `, as its writer joins them, and is split at the first."""
-        spec = " > ".join(key)
-        named = key[2].split(" > ", 1) if len(key) == 3 else key[2:]
-        parts = [*key[1:2], *named, "", "", ""]
+        """The method a background database registers under a key of four parts: the database's
+        prefix, then the impact method, the category and the indicator, none blank."""
+        parts = tuple(key)
+        if len(parts) != 4:
+            raise ValueError(
+                f"a method key names its database, family, category and indicator: {parts!r}"
+            )
+        if any(not part.strip() for part in parts):
+            raise ValueError(f"a method key holds no blank part: {parts!r}")
+        spec = " > ".join(parts)
         return cls(
             id=method_id(spec),
-            tuple=tuple(key),
+            tuple=parts,
             spec=spec,
             unit=unit,
-            impact_method=parts[0],
-            impact_category=parts[1],
-            indicator=parts[2],
+            impact_method=parts[1],
+            impact_category=parts[2],
+            indicator=parts[3],
         )
 
 

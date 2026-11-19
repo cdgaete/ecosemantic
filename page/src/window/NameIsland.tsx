@@ -1,31 +1,38 @@
+import { ArrowLeft } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { useLocation, useMatch } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { useServer, useSystem } from '@/api/queries'
-import { paths } from '@/lib/paths'
+import { Button } from '@/components/ui/button'
 import { AppLink } from '@/lib/router'
 import { cn } from '@/lib/utils'
-import { useUi } from '@/store/ui'
 import { RequestsBadge, ValidationBadge } from './Badges'
 import { NARROW_BELOW } from './inspector'
 import { LiveStatus } from './LiveStatus'
 import { pageTitle } from './pageTitle'
 import { PinChips } from './PinChips'
+import { useSheet, type SheetReturn } from './sheets'
 import { useMinWidth } from './useMinWidth'
 
-function PageName({ graph, narrow }: { graph: string | null; narrow: boolean }) {
+function BackButton({ back }: { back: SheetReturn }) {
+  return (
+    <Button asChild size="sm" className="h-7 shrink-0">
+      <AppLink to={back.to}>
+        <ArrowLeft /> {back.label}
+      </AppLink>
+    </Button>
+  )
+}
+
+function PageName({ back, narrow }: { back: SheetReturn | null; narrow: boolean }) {
   const { pathname } = useLocation()
   const title = pageTitle(pathname)
   return (
     <>
-      <div className={cn('flex min-w-0 items-center gap-2', narrow && 'flex-1')}>
+      <div className={cn('flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1', narrow && 'flex-1')}>
+        {back === null ? null : <BackButton back={back} />}
         <h1 className={cn('line-clamp-2 text-base font-semibold [overflow-wrap:anywhere]', narrow && 'min-w-0 flex-1')} title={title}>
           {title}
         </h1>
-        {graph === null ? null : (
-          <AppLink to={paths.system(graph)} className="shrink-0 self-start rounded-md px-2 py-0.5 text-xs text-accent hover:underline">
-            Graph
-          </AppLink>
-        )}
       </div>
       <PinChips />
     </>
@@ -33,8 +40,7 @@ function PageName({ graph, narrow }: { graph: string | null; narrow: boolean }) 
 }
 
 export function NameIsland({ menus, systemId }: { menus: ReactNode; systemId: string | null }) {
-  const explorer = useMatch('/databases/:name/*') !== null
-  const canvasSystemId = useUi((s) => s.canvasSystemId)
+  const back = useSheet()
   const read = useSystem(systemId ?? '', systemId !== null)
   const client = useServer().data?.client ?? null
   const name = read.data?.value.name ?? ''
@@ -44,20 +50,23 @@ export function NameIsland({ menus, systemId }: { menus: ReactNode; systemId: st
     <header
       data-clear="top"
       className={cn(
-        'col-start-2 row-start-1 min-w-0 rounded-xl border bg-chrome/95 shadow-lg',
+        'row-start-1 min-w-0 rounded-xl border bg-chrome/95 shadow-lg',
         narrow
-          ? 'flex flex-wrap items-center justify-self-stretch gap-x-3 gap-y-1 px-3 py-1'
-          : 'flex max-w-[min(560px,100%)] flex-col justify-self-start gap-1 px-3 pt-1 pb-2',
+          ? 'col-start-2 flex flex-wrap items-center justify-self-stretch gap-x-3 gap-y-1 px-3 py-1'
+          : 'col-start-1 flex max-w-[min(560px,100%)] flex-col justify-self-start gap-1 px-3 pt-1 pb-2',
       )}
     >
       {menus === null ? null : <div className="border-b pb-1">{menus}</div>}
       {systemId === null ? (
-        <PageName graph={explorer ? canvasSystemId : null} narrow={narrow} />
+        <PageName back={back} narrow={narrow} />
       ) : (
         <>
-          <h1 className={cn('line-clamp-2 text-base font-semibold [overflow-wrap:anywhere]', narrow && 'min-w-0 flex-1')} title={name}>
-            {name}
-          </h1>
+          <div className={cn('flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1', narrow && 'flex-1')}>
+            {back === null ? null : <BackButton back={back} />}
+            <h1 className={cn('line-clamp-2 text-base font-semibold [overflow-wrap:anywhere]', narrow && 'min-w-0 flex-1')} title={name}>
+              {name}
+            </h1>
+          </div>
           {narrow ? (
             <LiveStatus short />
           ) : (

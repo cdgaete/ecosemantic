@@ -30,7 +30,7 @@ vi.mock('@/api/client', async (importOriginal) => {
 })
 
 const doc = agentSystem.value as ProductSystem
-const view = { id: doc.id, system: doc, openRequests: 0, version: null }
+const view = { id: doc.id, system: doc, openRequests: 0, version: null, state: null }
 const entryButton = (seq: number) => screen.queryByText(`#${seq}`)?.closest('button') ?? null
 const entryOf = (seq: number) => screen.getByText(`#${seq}`).closest('li') as HTMLElement
 

@@ -112,7 +112,7 @@ describe('the page holds its stream', () => {
     expect(openStreams()).toBe(0)
   })
 
-  it('refreshes the installs, and the databases once an install is done', () => {
+  it('refreshes the installs, and the databases once an install is done', async () => {
     const client = new QueryClient()
     const spy = vi.spyOn(client, 'invalidateQueries')
     function Held() {
@@ -122,9 +122,11 @@ describe('the page holds its stream', () => {
     const view = render(createElement(QueryClientProvider, { client }, createElement(Held)))
     const source = FakeSource.instances[0]
     act(() => source.emit('install', { kind: 'install', product_system_id: null, install: { ...installs.value[0], status: 'running', open: true } }))
+    await act(() => new Promise(requestAnimationFrame))
     expect(spy).toHaveBeenCalledWith({ queryKey: keys.installs })
     expect(spy).not.toHaveBeenCalledWith({ queryKey: keys.databases })
     act(() => source.emit('install', { kind: 'install', product_system_id: null, install: { ...installs.value[0], status: 'done', open: false } }))
+    await act(() => new Promise(requestAnimationFrame))
     expect(spy).toHaveBeenCalledWith({ queryKey: keys.databases })
     view.unmount()
   })

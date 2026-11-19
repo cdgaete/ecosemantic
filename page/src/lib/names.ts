@@ -1,3 +1,4 @@
+import type { Entity, ProductSystem } from '@/api/types'
 import { shortHash } from './format'
 
 export function sharedNames(cards: { name: string }[]): Set<string> {
@@ -8,4 +9,20 @@ export function sharedNames(cards: { name: string }[]): Set<string> {
 
 export function distinguishingId(card: { id: string; name: string }, shared: Set<string>): string | null {
   return shared.has(card.name) ? shortHash(card.id) : null
+}
+
+export function entityKind(entity: Entity): string {
+  return entity.replaceAll('_', ' ')
+}
+
+export function entityName(system: ProductSystem, entity: Entity, id: string): string {
+  if (entity === 'product_system') return system.name
+  if (entity === 'process') return system.processes.find((process) => process.code === id || process.id === id)?.name ?? id
+  if (entity === 'exchange') {
+    for (const process of system.processes) {
+      const exchange = process.exchanges.find((e) => e.id === id)
+      if (exchange) return `${exchange.name} on ${process.name}`
+    }
+  }
+  return id
 }

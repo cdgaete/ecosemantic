@@ -3,7 +3,8 @@ import { renderAt } from './render'
 import { layoutAnswer } from './placements'
 import { App, Screens } from '@/App'
 import { api } from '@/api/client'
-import type { Answer, LogEntry, ProductSystem } from '@/api/types'
+import type { Answer, LogEntry, ProductSystem, SystemRead } from '@/api/types'
+import { useUi } from '@/store/ui'
 import { actorOf } from '@/activity/agents'
 import { formatAgo } from '@/lib/format'
 import system from './fixtures/system.json'
@@ -24,6 +25,8 @@ vi.mock('@/api/client', async (importOriginal) => {
       layout: vi.fn(async () => layoutAnswer(system.value as ProductSystem)),
       releaseCards: vi.fn(async () => layoutAnswer(system.value as ProductSystem)),
       log: vi.fn(async () => log),
+      systemAs: vi.fn(async () => ({ ...(system as unknown as SystemRead), open_requests: 0 })),
+      parameters: vi.fn(async () => ({ value: null })),
     },
   }
 })
@@ -116,5 +119,17 @@ describe('version editor', () => {
     await waitFor(() => expect(screen.queryByText(`Read-only: the product system as it was at entry #${olderEntry.seq}.`)).not.toBeInTheDocument())
     const bar = await screen.findByRole('toolbar', { name: 'Canvas' })
     expect(within(bar).getByRole('button', { name: 'Calculate an impact result' })).toBeInTheDocument()
+  })
+
+  it('an older entry is drawn as it was whatever state is chosen', async () => {
+    useUi.setState({ canvasSystemId: system.value.id, canvasVariant: 'heavy', chosenEntry: null })
+    const view = renderAt(`/systems/${system.value.id}/versions/${hash}`, <Screens />)
+    await waitFor(() => expect(view.container.querySelectorAll('.react-flow__node').length).toBeGreaterThan(0))
+    expect(vi.mocked(api.systemAs)).not.toHaveBeenCalled()
+    expect(vi.mocked(api.layout).mock.calls.map((call) => call[1])).not.toContain('heavy')
+    expect(vi.mocked(api.parameters).mock.calls.map((call) => call[2])).not.toContain('heavy')
+    expect(screen.queryByText(/^Under (case|scenario) /)).toBeNull()
+    expect(screen.getByLabelText('State')).toBeDisabled()
+    useUi.setState({ canvasVariant: null })
   })
 })

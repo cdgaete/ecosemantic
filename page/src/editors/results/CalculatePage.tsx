@@ -1,24 +1,40 @@
-import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 import { ApiError } from '@/api/client'
-import { keys, useCalculations, useMonteCarloDefaults, useSearchMethods, useStartRun, useSystem, useVocabulary } from '@/api/queries'
-import type { MonteCarloConfig, Scope } from '@/api/types'
+import { useCalculations, useMethodTree, useMonteCarloDefaults, useStartRun, useSystem, useVocabulary } from '@/api/queries'
+import type { Method, MethodFamily, MonteCarloConfig, Scope } from '@/api/types'
 import { Button } from '@/components/ui/button'
+import { categoryLabel } from '@/lib/format'
 import { paths, useGo } from '@/lib/paths'
 import { AppLink } from '@/lib/router'
-import { useUi } from '@/store/ui'
 import { EditorHeader } from '@/window/EditorHeader'
 import { FieldGrid } from '@/window/FieldGrid'
 import { Section } from '@/window/Section'
+import { useCanvasVariant } from '@/window/useCanvasState'
 import { useEditorTab } from '@/window/useEditorTab'
 import { demandOf, serializeParams } from './params'
 import { paramsOfCall } from './recorded'
+import { useStartImpact } from './useStartImpact'
 
 function holder(error: Error): { systemId: string; runId: string } | null {
   if (!(error instanceof ApiError)) return null
   const { run_id, product_system_id } = error.details
   return typeof run_id === 'string' && typeof product_system_id === 'string' ? { systemId: product_system_id, runId: run_id } : null
+}
+
+const DRAWS: { key: 'n_min' | 'n_max' | 'rel_se_target' | 'seed'; label: string }[] = [
+  { key: 'n_min', label: 'Fewest draws' },
+  { key: 'n_max', label: 'Most draws' },
+  { key: 'rel_se_target', label: 'Target precision' },
+  { key: 'seed', label: 'Seed' },
+]
+
+function categoriesOf(families: MethodFamily[], named: string): Method[] {
+  return families.find((family) => family.name === named)?.categories.flatMap((category) => category.indicators) ?? []
+}
+
+function familyOf(families: MethodFamily[], methodId: string): string {
+  return families.find((family) => categoriesOf(families, family.name).some((method) => method.id === methodId))?.name ?? ''
 }
 
 export function CalculatePage() {
@@ -28,22 +44,24 @@ export function CalculatePage() {
   const read = useSystem(id)
   const system = read.data?.value
   const database = system?.database.name ?? ''
-  const families = useVocabulary(database, 'impact_methods')
-  const [mode, setMode] = useState<'family' | 'category'>('family')
+  const listed = useVocabulary(database, 'impact_methods')
+  const tree = useMethodTree(database)
   const calculations = useCalculations(id)
-  const lastFamily = (calculations.data?.value ?? []).map((call) => paramsOfCall(call).impact_method).find((named) => named !== undefined) ?? ''
+  const families = tree.data?.value ?? []
+  const last = (calculations.data?.value ?? []).map(paramsOfCall).find((named) => named.impact_method !== undefined || named.method_id !== undefined)
+  const lastFamily = last?.impact_method ?? (last?.method_id === undefined ? '' : familyOf(families, last.method_id))
   const [chosenFamily, setFamily] = useState<string | null>(null)
   const family = chosenFamily ?? lastFamily
-  const [query, setQuery] = useState('')
-  const [methodId, setMethodId] = useState('')
-  const hits = useSearchMethods(database, { query, limit: 15 })
+  const [chosenMethod, setMethodId] = useState<string | null>(null)
+  const offered = categoriesOf(families, family)
+  const lastMethod = last?.method_id ?? ''
+  const methodId = chosenMethod ?? (offered.some((method) => method.id === lastMethod) ? lastMethod : '')
   const [chosen, setChosen] = useState<string[] | null>(null)
   const [amount, setAmount] = useState(1)
   const [kind, setKind] = useState<'result' | 'simulation'>(() => (new URLSearchParams(location.search).get('kind') === 'simulation' ? 'simulation' : 'result'))
-  const canvasSystemId = useUi((s) => s.canvasSystemId)
-  const canvasVariant = useUi((s) => s.canvasVariant)
+  const state = useCanvasVariant(system)
   const start = useStartRun(id)
-  const client = useQueryClient()
+  const startImpact = useStartImpact(id)
   const defaults = useMonteCarloDefaults()
   const [mcParams, setMcParams] = useState<Omit<MonteCarloConfig, 'n'> | null>(null)
   useEffect(() => {
@@ -53,22 +71,19 @@ export function CalculatePage() {
   }, [defaults.data])
   useEditorTab({ id: `calculate:${id}`, kind: 'results', title: `Calculation of: ${system?.name ?? ''}`, path: paths.results(id, 'setup', '') })
   if (!system) return <p className="p-4 text-muted-foreground">{read.error?.message ?? 'Loading…'}</p>
-  const names = [...system.scenarios.map((s) => s.name), ...system.cases.map((c) => c.name)]
-  const shown = canvasSystemId === id && canvasVariant !== null && names.includes(canvasVariant) ? canvasVariant : null
-  const variants = chosen ?? (shown === null ? [] : [shown])
-  const ready = (mode === 'family' ? family !== '' : methodId !== '') && (kind === 'result' || mcParams !== null)
+  const options = [...system.scenarios.map((s) => s.name), ...system.cases.map((c) => c.name)]
+  const variants = chosen ?? (state === null ? [] : [state.name])
+  const ready = family !== '' && (kind === 'result' || mcParams !== null)
   const rootCode = system.reference_process
   const run = () => {
-    const method = mode === 'family' ? { impact_method: family } : { method_id: methodId }
+    const method = methodId === '' ? { impact_method: family } : { method_id: methodId }
     if (kind === 'simulation') {
       if (mcParams === null) return
       const demand = demandOf({ variants: [], amount }, rootCode)
       start.mutate({ ...method, ...(demand ? { demand } : {}), monte_carlo: mcParams }, { onSuccess: (answer) => go(paths.simulation(id, answer.value.id)) })
       return
     }
-    useUi.getState().startImpact(id)
-    client.removeQueries({ queryKey: keys.impacts(id) })
-    go(paths.results(id, 'impact', serializeParams({ ...method, variants, amount })))
+    startImpact('impact', serializeParams({ ...method, variants, amount }))
   }
   const root = system.processes.find((p) => p.code === rootCode)
   return (
@@ -94,14 +109,19 @@ export function CalculatePage() {
               label: 'Impact assessment',
               value: (
                 <span className="flex min-w-0 flex-wrap items-center gap-3">
-                  <label className="flex items-center gap-1">
-                    <input type="radio" name="mode" checked={mode === 'family'} onChange={() => setMode('family')} /> Method
-                  </label>
                   <label htmlFor="calc-family" className="flex min-w-0 max-w-full items-center gap-1">
-                    Family
-                    <select id="calc-family" className="min-w-0 max-w-full rounded-sm border bg-background px-1" value={family} disabled={mode !== 'family'} onChange={(e) => setFamily(e.target.value)}>
+                    Method
+                    <select
+                      id="calc-family"
+                      className="min-w-0 max-w-full rounded-sm border bg-background px-1"
+                      value={family}
+                      onChange={(e) => {
+                        setFamily(e.target.value)
+                        setMethodId('')
+                      }}
+                    >
                       <option value="">choose…</option>
-                      {(families.data?.value ?? []).map((t) => (
+                      {(listed.data?.value ?? []).map((t) => (
                         <option key={t.value} value={t.value}>
                           {t.value}
                           {t.detail ? ` (${t.detail})` : ''}
@@ -109,20 +129,13 @@ export function CalculatePage() {
                       ))}
                     </select>
                   </label>
-                  <label className="flex items-center gap-1">
-                    <input type="radio" name="mode" checked={mode === 'category'} onChange={() => setMode('category')} /> One category
-                  </label>
-                  <label htmlFor="calc-query" className="flex items-center gap-1">
-                    Search
-                    <input id="calc-query" className="rounded-sm border bg-background px-1" placeholder="search…" value={query} disabled={mode !== 'category'} onChange={(e) => setQuery(e.target.value)} />
-                  </label>
                   <label htmlFor="calc-method" className="flex min-w-0 max-w-full items-center gap-1">
                     Category
-                    <select id="calc-method" className="min-w-0 max-w-full rounded-sm border bg-background px-1" value={methodId} disabled={mode !== 'category'} onChange={(e) => setMethodId(e.target.value)}>
-                      <option value="">choose…</option>
-                      {(hits.data?.items ?? []).map((m) => (
+                    <select id="calc-method" className="min-w-0 max-w-full rounded-sm border bg-background px-1" value={methodId} disabled={family === ''} onChange={(e) => setMethodId(e.target.value)}>
+                      <option value="">All categories</option>
+                      {offered.map((m) => (
                         <option key={m.id} value={m.id}>
-                          {[m.impact_method, m.impact_category, m.indicator].filter(Boolean).join(' › ')} [{m.unit}]
+                          {categoryLabel(m)} [{m.unit}]
                         </option>
                       ))}
                     </select>
@@ -135,15 +148,17 @@ export function CalculatePage() {
                   {
                     label: 'Variants',
                     value:
-                      names.length === 0 ? (
+                      options.length === 0 ? (
                         <span className="text-muted-foreground">No scenario or case.</span>
                       ) : (
                         <span className="flex flex-col gap-1">
-                          {shown !== null && variants.includes(shown) ? (
-                            <span>The canvas shows {system.cases.some((c) => c.name === shown) ? 'case' : 'scenario'} {shown}; it is ticked below.</span>
+                          {state !== null && variants.includes(state.name) ? (
+                            <span>
+                              The canvas shows {state.kind} {state.name}; it is ticked below.
+                            </span>
                           ) : null}
                           <span className="flex flex-wrap gap-3">
-                            {names.map((name) => (
+                            {options.map((name) => (
                               <label key={name} className="flex items-center gap-1">
                                 <input type="checkbox" checked={variants.includes(name)} onChange={(e) => setChosen(e.target.checked ? [...variants, name] : variants.filter((v) => v !== name))} /> {name}
                               </label>
@@ -172,13 +187,13 @@ export function CalculatePage() {
                     label: 'Monte Carlo',
                     value: (
                       <span className="flex flex-wrap items-center gap-3">
-                        {(['n_min', 'n_max', 'rel_se_target', 'seed'] as const).map((k) => (
-                          <label key={k} className="flex items-center gap-1">
-                            {k}
-                            <input type="number" step="any" className="w-20 rounded-sm border bg-background px-1 text-right" value={mcParams[k]} onChange={(e) => setMcParams({ ...mcParams, [k]: Number(e.target.value) })} />
+                        {DRAWS.map(({ key, label }) => (
+                          <label key={key} title={key} className="flex items-center gap-1">
+                            {label}
+                            <input type="number" step="any" className="w-20 rounded-sm border bg-background px-1 text-right" value={mcParams[key]} onChange={(e) => setMcParams({ ...mcParams, [key]: Number(e.target.value) })} />
                           </label>
                         ))}
-                        <label htmlFor="calc-scope" className="flex items-center gap-1">
+                        <label htmlFor="calc-scope" title="scope" className="flex items-center gap-1">
                           Uncertainty in
                           <select id="calc-scope" className="min-w-0 max-w-full rounded-sm border bg-background px-1" value={mcParams.scope} onChange={(e) => setMcParams({ ...mcParams, scope: e.target.value as Scope })}>
                             <option value="full">all exchanges</option>

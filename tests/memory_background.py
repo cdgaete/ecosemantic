@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Collection, Sequence
+from typing import cast
 
 from ecosemantic.errors import NotFound
 from ecosemantic.model.entities import Method, method_named
 from ecosemantic.model.refs import BackgroundRef, Database, ElementaryFlowRef
+from ecosemantic.package.canonical import cas_number
+from ecosemantic.ports.inventory import no_flow
 from ecosemantic.ports.search import Phrase, browsed, phrases, spellings
 from ecosemantic.ports.terms import tokens
 from ecosemantic.ports.types import (
@@ -15,18 +18,24 @@ from ecosemantic.ports.types import (
     ClassificationScheme,
     ClassificationValue,
     Compartment,
+    CompartmentName,
     DatabaseSummary,
     ElementaryFlow,
     ElementaryFlowHit,
     Factor,
     FlowType,
+    ListingOrder,
+    Location,
     Page,
     ProcessHit,
+    WeightingSet,
     factor_page,
     flow_side,
+    page_holding,
     page_start,
 )
 from tests.fixture_data import (
+    CAS_FIELDS,
     CLASSIFICATIONS,
     CODES,
     FIXTURE_BIO,
@@ -38,16 +47,22 @@ from tests.fixture_data import (
     PROCESSES,
 )
 
+LOCATION = "GLO"
+LOCATION_NAME = "Global"
 
-def _compartment(categories: tuple[str, ...]) -> tuple[str, str | None]:
-    """The compartment and sub-compartment as a bundle files them: a natural resource under
-    openLCA's "Resource"."""
-    top = categories[0] if categories else ""
-    return "Resource" if top == "natural resource" else top, ("/".join(categories[1:]) or None)
+
+def _compartment(categories: tuple[str, ...]) -> tuple[CompartmentName, str | None]:
+    """The compartment and sub-compartment the fixture files a flow under."""
+    return cast(CompartmentName, categories[0]), (", ".join(categories[1:]) or None)
 
 
 def _flow_type(categories: tuple[str, ...]) -> FlowType:
     return "natural resource" if categories and categories[0] == "natural resource" else "emission"
+
+
+def _cas(key: str) -> tuple[str | None, str | None]:
+    """The CAS number and the text beside it that the fixture flow key answers."""
+    return cas_number(CAS_FIELDS.get(key))
 
 
 def _known(database: str) -> None:
@@ -123,6 +138,12 @@ def _carries(key: str, classifications: Sequence[str]) -> bool:
     return any(value in stored for value in classifications)
 
 
+def _held(hits: Sequence[ProcessHit | ElementaryFlowHit], item: str | None) -> int | None:
+    """The 0-based position of the hit an id names among the hits, or None when they hold
+    none."""
+    return next((at for at, hit in enumerate(hits) if hit.ref.id == item), None)
+
+
 class MemoryInventory:
     """The fixture background read from its constants."""
 
@@ -140,7 +161,7 @@ class MemoryInventory:
             ref=ref,
             name=name,
             reference_product=product,
-            location="GLO",
+            location=LOCATION,
             unit=unit,
             classifications=_stored(key),
             url=None,
@@ -148,17 +169,37 @@ class MemoryInventory:
         )
 
     async def get_elementary_flow(self, ref: ElementaryFlowRef) -> ElementaryFlow:
-        key = self._flow_key(ref.id)
-        name, categories, unit = FLOWS[key]
-        compartment, sub_compartment = _compartment(categories)
-        return ElementaryFlow(
-            ref=ref,
-            name=name,
-            compartment=compartment,
-            sub_compartment=sub_compartment,
-            unit=unit,
-            flow_type=_flow_type(categories),
-        )
+        found = await self.get_elementary_flows(ref.database, [ref.id])
+        if not found:
+            raise no_flow(ref)
+        return found[0]
+
+    async def get_elementary_flows(self, database: str, ids: Sequence[str]) -> list[ElementaryFlow]:
+        """One flow per id the fixture holds, in the order given; an id it does not hold is left
+        out, and NotFound for a database the fixture does not serve."""
+        _known(database)
+        held = {flow_id: key for key, flow_id in FLOW_IDS.items()}
+        flows: list[ElementaryFlow] = []
+        for flow_id in ids:
+            key = held.get(flow_id)
+            if key is None:
+                continue
+            name, categories, unit = FLOWS[key]
+            compartment, sub_compartment = _compartment(categories)
+            number, published = _cas(key)
+            flows.append(
+                ElementaryFlow(
+                    ref=ElementaryFlowRef(database=database, id=flow_id),
+                    name=name,
+                    compartment=compartment,
+                    sub_compartment=sub_compartment,
+                    unit=unit,
+                    flow_type=_flow_type(categories),
+                    cas_number=number,
+                    cas_as_published=published,
+                )
+            )
+        return flows
 
     async def missing(
         self, refs: Sequence[BackgroundRef | ElementaryFlowRef]
@@ -168,10 +209,13 @@ class MemoryInventory:
         held = {"background": set(CODES.values()), "elementary_flow": set(FLOW_IDS.values())}
         return [ref for ref in refs if ref.id not in held[ref.kind]]
 
-    def __init__(self, treating: Collection[str] = ()) -> None:
+    def __init__(
+        self, treating: Collection[str] = (), weighting_sets: Sequence[WeightingSet] = ()
+    ) -> None:
         # the fixture's processes produce their references; a test names those to treat as
-        # treatments
+        # treatments, and the sets a family answers
         self.treating = frozenset(treating)
+        self.sets = list(weighting_sets)
 
     async def treatments(self, refs: Sequence[BackgroundRef]) -> list[BackgroundRef]:
         for ref in refs:
@@ -185,13 +229,21 @@ class MemoryInventory:
     async def resolve_method(self, database: str, reference: str) -> Method:
         return method_named(await self.list_methods(database), database, reference)
 
+    async def weighting_sets(self, database: str, impact_method: str) -> list[WeightingSet]:
+        """The sets the double was given for a family, in the order given; none for a family it was
+        given none of, and NotFound for a family the fixture does not hold."""
+        _known(database)
+        if not any(m.impact_method == impact_method for m in methods()):
+            raise NotFound(f"no impact method {impact_method!r} in {database!r}")
+        return [s for s in self.sets if s.impact_method == impact_method]
+
     async def list_units(self, database: str) -> list[str]:
         _known(database)
         return sorted({unit for _, _, unit, _, _ in PROCESSES.values()})
 
-    async def list_locations(self, database: str) -> list[str]:
+    async def list_locations(self, database: str) -> list[Location]:
         _known(database)
-        return ["GLO"]
+        return [Location(code=LOCATION, name=LOCATION_NAME)]
 
     async def list_compartments(self, database: str) -> list[Compartment]:
         _known(database)
@@ -259,12 +311,6 @@ class MemoryInventory:
                 return key
         raise NotFound(f"no process {native_id!r} in {FIXTURE_DB!r}")
 
-    def _flow_key(self, flow_id: str) -> str:
-        for key, found in FLOW_IDS.items():
-            if found == flow_id:
-                return key
-        raise NotFound(f"no elementary flow {flow_id!r} in {FIXTURE_BIO!r}")
-
     def _exchanges(
         self, inputs: dict[str, float], emissions: dict[str, float], key: str
     ) -> list[BackgroundExchange]:
@@ -277,6 +323,7 @@ class MemoryInventory:
                 reference=True,
                 flow=product,
                 supplier=None,
+                supplier_location=None,
                 amount=1.0,
                 unit=unit,
                 cut_off=None,
@@ -289,6 +336,7 @@ class MemoryInventory:
                     reference=False,
                     flow=PROCESSES[provider][1],
                     supplier=PROCESSES[provider][0],
+                    supplier_location=LOCATION,
                     amount=amount,
                     unit=PROCESSES[provider][2],
                     cut_off=None,
@@ -303,6 +351,7 @@ class MemoryInventory:
                     reference=False,
                     flow=FLOWS[flow][0],
                     supplier=None,
+                    supplier_location=None,
                     amount=amount,
                     unit=FLOWS[flow][2],
                     cut_off=None,
@@ -313,7 +362,9 @@ class MemoryInventory:
 
 
 class MemorySearch:
-    """The fixture background searched over its constants; every row is in memory."""
+    """The fixture background searched over its constants; every row is in memory. It has no
+    ranking, so it lists every match in name order, which is the order a listing with no term
+    has."""
 
     async def processes(
         self,
@@ -324,10 +375,12 @@ class MemorySearch:
         limit: int = 20,
         cursor: str | None = None,
         classifications: Sequence[str] | None = None,
+        order: ListingOrder = "relevance",
+        item: str | None = None,
     ) -> Page[ProcessHit]:
         _known(database)
         parsed = browsed(query, classifications is not None)
-        offset = page_start(cursor, limit)
+        start = page_start(cursor, limit)
         hits = [
             ProcessHit(
                 ref=BackgroundRef(database=database, id=CODES[key]),
@@ -345,8 +398,13 @@ class MemorySearch:
             and (location is None or location == "GLO")
             and (unit is None or unit == process_unit)
         ]
+        offset = start if cursor is not None else page_holding(_held(hits, item), limit)
         return Page.at_offset(
-            hits[offset : offset + limit], len(hits) > offset + limit, offset, limit
+            items=hits[offset : offset + limit],
+            has_more=len(hits) > offset + limit,
+            offset=offset,
+            limit=limit,
+            total=len(hits),
         )
 
     async def elementary_flows(
@@ -359,10 +417,12 @@ class MemorySearch:
         unit: str | None = None,
         limit: int = 20,
         cursor: str | None = None,
+        order: ListingOrder = "relevance",
+        item: str | None = None,
     ) -> Page[ElementaryFlowHit]:
         _known(database)
         parsed = browsed(query, compartment is not None or sub_compartment is not None)
-        offset = page_start(cursor, limit)
+        start = page_start(cursor, limit)
         hits = []
         for key, (name, categories, flow_unit) in sorted(
             FLOWS.items(), key=lambda item: (item[1][0], _compartment(item[1][1])[0])
@@ -381,6 +441,7 @@ class MemorySearch:
                 )
             ):
                 continue
+            number, published = _cas(key)
             hits.append(
                 ElementaryFlowHit(
                     ref=ElementaryFlowRef(database=FIXTURE_BIO, id=FLOW_IDS[key]),
@@ -389,11 +450,17 @@ class MemorySearch:
                     sub_compartment=found_sub,
                     unit=flow_unit,
                     flow_type=found_type,
-                    cas_number=None,
+                    cas_number=number,
+                    cas_as_published=published,
                 )
             )
+        offset = start if cursor is not None else page_holding(_held(hits, item), limit)
         return Page.at_offset(
-            hits[offset : offset + limit], len(hits) > offset + limit, offset, limit
+            items=hits[offset : offset + limit],
+            has_more=len(hits) > offset + limit,
+            offset=offset,
+            limit=limit,
+            total=len(hits),
         )
 
     async def methods(
@@ -404,5 +471,9 @@ class MemorySearch:
         hits = [m for m in methods() if _relevance(parsed, m.spec) is not None]
         offset = page_start(cursor, limit)
         return Page.at_offset(
-            hits[offset : offset + limit], len(hits) > offset + limit, offset, limit
+            items=hits[offset : offset + limit],
+            has_more=len(hits) > offset + limit,
+            offset=offset,
+            limit=limit,
+            total=len(hits),
         )

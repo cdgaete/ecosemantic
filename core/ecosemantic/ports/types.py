@@ -43,9 +43,30 @@ RequestKind = Literal["approve", "return", "edit"]
 Resolution = Literal["accepted", "overridden"]
 Restored = Literal["added", "unchanged"]
 FlowType = Literal["emission", "natural resource", "inventory indicator", "economic"]
+ListingOrder = Literal["relevance", "name"]
 FLOW_TYPES: tuple[str, ...] = get_args(FlowType)
+CompartmentName = Literal[
+    "air",
+    "water",
+    "soil",
+    "immaterial",
+    "natural resource",
+    "economic",
+    "inventory indicator",
+]
+COMPARTMENT_NAMES: tuple[str, ...] = get_args(CompartmentName)
+FLOW_TYPE_OF: dict[CompartmentName, FlowType] = {
+    "air": "emission",
+    "water": "emission",
+    "soil": "emission",
+    "immaterial": "emission",
+    "natural resource": "natural resource",
+    "economic": "economic",
+    "inventory indicator": "inventory indicator",
+}
 TreeKind = Literal["process", "elementary_flow", "remainder"]
 Side = Literal["input", "output"]
+InventoryOrder = Literal["compartment", "amount"]
 Decomposition = Literal["process", "path", "flow"]
 RunStatus = Literal["queued", "running", "done", "failed", "cancelled"]
 OpenStatus = Literal["queued", "running"]
@@ -62,28 +83,39 @@ CallOutcome = Literal["ok", "error"]
 AGENT_NAME = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
 _INPUT_SUB_COMPARTMENTS: dict[str, frozenset[str]] = {
     "inventory indicator": frozenset({"resource use"}),
-    "economic": frozenset({"primary production factor"}),
 }
 _OUTPUT_SUB_COMPARTMENTS: dict[str, frozenset[str]] = {
     "inventory indicator": frozenset({"output flow", "waste"}),
 }
 
 
-def flow_side(flow_type: FlowType, sub_compartment: str | None) -> Side:
-    """Which side of a process an elementary flow sits on: a resource is drawn, an emission emitted.
+def side_of(flow_type: FlowType, sub_compartment: str | None) -> Side | None:
+    """Which side of a process an elementary flow sits on — a resource drawn, an emission emitted —
+    or None when the table names no side for the pair.
 
-    Indicator and economic flows follow ecoinvent's sub-compartment, which names the side; a pair
-    the table does not name is refused.
+    An economic flow is an output except under ecoinvent's `primary production factor`, which is an
+    input. Indicator flows follow ecoinvent's sub-compartment, which names the side.
     """
     if flow_type == "natural resource":
         return "input"
     if flow_type == "emission":
         return "output"
+    if flow_type == "economic":
+        return "input" if sub_compartment == "primary production factor" else "output"
     if sub_compartment in _INPUT_SUB_COMPARTMENTS.get(flow_type, frozenset()):
         return "input"
     if sub_compartment in _OUTPUT_SUB_COMPARTMENTS.get(flow_type, frozenset()):
         return "output"
-    raise NotSupported(f"no side for a {flow_type!r} flow in {sub_compartment!r}")
+    return None
+
+
+def flow_side(flow_type: FlowType, sub_compartment: str | None) -> Side:
+    """The side of a process an elementary flow sits on, as `side_of` names it; NotSupported for a
+    type and sub-compartment the table names no side for."""
+    side = side_of(flow_type, sub_compartment)
+    if side is None:
+        raise NotSupported(f"no side for a {flow_type!r} flow in {sub_compartment!r}")
+    return side
 
 
 Limit = Annotated[int, Field(ge=1)]
@@ -100,18 +132,40 @@ def page_start(cursor: str | None, limit: int) -> int:
     return int(cursor)
 
 
+def page_holding(position: int | None, limit: int) -> int:
+    """The offset of the page that holds the row at a 0-based position, counted from the first row
+    in steps of limit; 0 for no position."""
+    if position is None:
+        return 0
+    return position - position % limit
+
+
 class Page(BaseModel, Generic[T]):
-    """One page of a listing."""
+    """One page of a listing, its cursors and the number of rows the whole listing holds."""
 
     items: list[T]
     has_more: bool
     next_cursor: str | None = None
+    total: int | None = None
+    previous_cursor: str | None = None
 
     @classmethod
-    def at_offset(cls, items: list[T], has_more: bool, offset: int, limit: int) -> Page[T]:
-        """A page whose cursor, when there is more, is the offset of the next one."""
+    def at_offset(
+        cls,
+        items: list[T],
+        has_more: bool,
+        offset: int,
+        limit: int,
+        total: int | None = None,
+    ) -> Page[T]:
+        """A page whose cursors name the pages beside it: the next one when there is more, and the
+        one before it past the first row."""
         return cls(
-            items=items, has_more=has_more, next_cursor=str(offset + limit) if has_more else None
+            items=items,
+            has_more=has_more,
+            next_cursor=str(offset + limit) if has_more else None,
+            total=total,
+            previous_cursor=str(max(offset - limit, 0)) if offset > 0 else None,
         )
 
 
@@ -137,11 +191,12 @@ class ProcessHit(BaseModel):
 class ElementaryFlowHit(BaseModel):
     ref: ElementaryFlowRef
     name: str
-    compartment: str
+    compartment: CompartmentName
     sub_compartment: str | None
     unit: str
     flow_type: FlowType
     cas_number: str | None
+    cas_as_published: str | None = None
 
     def summary_item(self) -> SummaryItem:
         """The hit as one item of a summary, carrying the reference that opens it."""
@@ -161,6 +216,7 @@ class BackgroundExchange(BaseModel):
     reference: bool
     flow: str
     supplier: str | None
+    supplier_location: str | None
     amount: float
     unit: str
     cut_off: str | None
@@ -192,11 +248,12 @@ class BackgroundProcess(BaseModel):
 class ElementaryFlow(BaseModel):
     ref: ElementaryFlowRef
     name: str
-    compartment: str
+    compartment: CompartmentName
     sub_compartment: str | None
     unit: str
     flow_type: FlowType
     cas_number: str | None = None
+    cas_as_published: str | None = None
     synonyms: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -229,20 +286,17 @@ class SubCompartment(BaseModel):
 
 
 class Compartment(BaseModel):
-    name: str
+    name: CompartmentName
     flow_count: int
     sub_compartments: list[SubCompartment]
 
     @classmethod
-    def tally(cls, placed: Iterable[tuple[str, str | None]]) -> list[Compartment]:
+    def tally(cls, placed: Iterable[tuple[CompartmentName, str | None]]) -> list[Compartment]:
         """The compartments the given flows fall in, in name order, each with its flow count and
-        the sub-compartments found under it with their counts. A flow placed in no compartment is
-        not counted."""
-        counts: dict[str, int] = {}
-        subs: dict[str, dict[str, int]] = {}
+        the sub-compartments found under it with their counts."""
+        counts: dict[CompartmentName, int] = {}
+        subs: dict[CompartmentName, dict[str, int]] = {}
         for compartment, sub_compartment in placed:
-            if not compartment:
-                continue
             counts[compartment] = counts.get(compartment, 0) + 1
             if sub_compartment is not None:
                 held = subs.setdefault(compartment, {})
@@ -266,10 +320,31 @@ class Factor(BaseModel):
 
     flow: ElementaryFlowRef
     name: str
-    compartment: str
+    compartment: CompartmentName
     sub_compartment: str | None
     unit: str
     factor: float
+
+
+class WeightingFactor(BaseModel):
+    """One category of a weighting set: the impact method it characterises as its id, the
+    normalisation the set gives it and its weight, each as the bundle states it and none when it
+    states none."""
+
+    method_id: str
+    normalisation: float | None
+    weighting: float | None
+
+
+class WeightingSet(BaseModel):
+    """One normalisation and weighting set of an impact method's family: its name, none where the
+    bundle names none, the unit of the weighted score it answers in, and one factor per category it
+    characterises."""
+
+    impact_method: str
+    name: str | None
+    unit: str | None
+    factors: list[WeightingFactor]
 
 
 def _factor_order(factor: Factor) -> tuple[str, str, bool, str]:
@@ -300,8 +375,19 @@ def factor_page(
     offset = page_start(cursor, limit)
     matched = [factor for factor in sorted(factors, key=_factor_order) if _holds(factor, words)]
     return Page.at_offset(
-        matched[offset : offset + limit], len(matched) > offset + limit, offset, limit
+        matched[offset : offset + limit],
+        len(matched) > offset + limit,
+        offset,
+        limit,
+        total=len(matched),
     )
+
+
+class Location(BaseModel):
+    """A location a background database's processes are in, under the code a filter takes."""
+
+    code: str
+    name: str
 
 
 class DatabaseSummary(BaseModel):
@@ -397,9 +483,34 @@ class Score(BaseModel):
     method_id: str
 
 
-def fraction_of(score: float, total: float) -> float:
-    """A score as a share of the total it is part of; no share of a total of zero."""
-    return score / total if total else 0.0
+def fraction_of(score: float, total: float) -> float | None:
+    """A score as a share of the total it is part of; none for a total of zero, which nothing is a
+    share of."""
+    return None if total == 0 else score / total
+
+
+VALUE_CHOICES = (
+    "A weighted total rests on value choices: its weights state how much the method's authors "
+    "judge each category to matter, not a measurement."
+)
+
+
+class Total(BaseModel):
+    """One weighting set's total: the set that gives it, named as the bundle names it and none where
+    the bundle names none, its place among the family's sets counted from 0, the unit it answers
+    in, and the value, none where it gives no total. `categories` names the methods whose scores
+    take part and `normalised_by_zero` those the set weights and normalises by 0, which take none.
+    `reason` says why a set gives no total, and `value_choices` marks what the weights rest on."""
+
+    impact_method: str
+    weighting_set: str | None
+    position: int
+    unit: str | None
+    value: float | None
+    categories: list[str]
+    normalised_by_zero: list[str]
+    reason: str | None
+    value_choices: str = VALUE_CHOICES
 
 
 class LinkedLoop(BaseModel):
@@ -417,7 +528,7 @@ class Hotspot(BaseModel):
     location: str | None
     reference_product: str
     score: float
-    fraction: float
+    fraction: float | None
 
 
 class Cut(BaseModel):
@@ -425,31 +536,34 @@ class Cut(BaseModel):
     how many parts fell under it and their share, and how many parts reach it past the list's
     length and their share. A share sums the magnitudes of its parts, as the cut-off compares
     them; `below_score` and `unlisted_score` sum their scores as they are signed, so the listed
-    scores plus both make the total."""
+    scores plus both make the total. Over a total of 0 a part is no share of it, so the cut-off
+    sets aside nothing and both shares are None."""
 
     cutoff: float
     below: int
-    share: float
+    share: float | None
     below_score: float
     unlisted: int
-    unlisted_share: float
+    unlisted_share: float | None
     unlisted_score: float
 
 
 def listed(scores: Sequence[float], total: float, top_n: int, cutoff: float) -> tuple[int, Cut]:
     """How many of the scores, ranked by falling magnitude, a flat list shows, at most top_n of
     those that reach cutoff, and what it leaves out, each part signed and each share summed in
-    magnitude."""
+    magnitude. Over a total of 0 no score is a share of it, so the list shows at most top_n parts,
+    the cut-off leaves none out of them and the rest is unlisted, each share none."""
     fractions = [fraction_of(score, total) for score in scores]
-    reaching = sum(1 for fraction in fractions if abs(fraction) >= cutoff)
+    magnitudes = [abs(fraction) for fraction in fractions if fraction is not None]
+    reaching = len(scores) if total == 0 else sum(1 for value in magnitudes if value >= cutoff)
     shown = min(top_n, reaching)
     return shown, Cut(
         cutoff=cutoff,
-        below=len(fractions) - reaching,
-        share=sum(abs(fraction) for fraction in fractions[reaching:]),
+        below=len(scores) - reaching,
+        share=None if total == 0 else sum(magnitudes[reaching:]),
         below_score=sum(scores[reaching:]),
         unlisted=reaching - shown,
-        unlisted_share=sum(abs(fraction) for fraction in fractions[shown:reaching]),
+        unlisted_share=None if total == 0 else sum(magnitudes[shown:reaching]),
         unlisted_score=sum(scores[shown:reaching]),
     )
 
@@ -464,12 +578,12 @@ class FlowHotspot(BaseModel):
     rank: int
     flow: ElementaryFlowRef
     name: str
-    compartment: str
+    compartment: CompartmentName
     sub_compartment: str | None
     amount: float
     unit: str
     score: float
-    fraction: float
+    fraction: float | None
 
 
 class FlowHotspots(BaseModel):
@@ -484,7 +598,7 @@ class TreeNode(BaseModel):
     name: str
     location: str | None
     score: float
-    fraction: float
+    fraction: float | None
     level: int
     children: list[TreeNode] = Field(default_factory=list)
 
@@ -498,7 +612,7 @@ class Tree(BaseModel):
 class InventoryRow(BaseModel):
     flow: ElementaryFlowRef
     name: str
-    compartment: str
+    compartment: CompartmentName
     sub_compartment: str | None
     flow_type: FlowType
     unit: str
@@ -518,11 +632,12 @@ class InventoryRow(BaseModel):
 
 
 N_MIN = 30
+ADAPTIVE_N_MIN = 6
 N_MAX = 200
 MAX_DRAWS = 1000
 N_MIN_HELP = (
-    "The fewest draws an adaptive run takes. It bounds the run with `n_max` and "
-    "applies only when `n` is unset."
+    "The fewest draws an adaptive run takes, at least 6, the fewest draws a median's interval "
+    "needs. It bounds the run with `n_max` and applies only when `n` is unset."
 )
 N_MAX_HELP = (
     "The most draws an adaptive run takes, between `n_min` and `n_max`. It applies "
@@ -541,9 +656,9 @@ class MonteCarloConfig(BaseModel):
     centred on the amount its formula, parameters and case resolve, keeping its relative spread,
     so an exchange a case sets to zero samples zero. A background normal distribution whose
     standard deviation exceeds its amount is sampled at its amount; the result counts them in
-    `normals_at_amount`. `n` fixes the count; otherwise sampling stops between `n_min` and
-    `n_max` once the relative standard error of every category's median is under
-    `rel_se_target`, which takes six samples at least."""
+    `drawn.background.held`. `n` fixes the count; otherwise sampling stops between `n_min` and
+    `n_max`, which takes an `n_min` of at least 6, once every category it can measure has a
+    median whose relative standard error is under `rel_se_target` and none is left to measure."""
 
     n_min: int = Field(default=N_MIN, ge=1, le=MAX_DRAWS, description=N_MIN_HELP)
     n_max: int = Field(default=N_MAX, ge=1, le=MAX_DRAWS, description=N_MAX_HELP)
@@ -556,6 +671,11 @@ class MonteCarloConfig(BaseModel):
     def _ordered(self) -> MonteCarloConfig:
         if self.n_min > self.n_max:
             raise ValueError("n_min must be <= n_max")
+        if self.n is None and self.n_min < ADAPTIVE_N_MIN:
+            raise ValueError(
+                f"an adaptive run takes n_min of at least {ADAPTIVE_N_MIN}, "
+                "the fewest draws a median's interval needs"
+            )
         return self
 
 
@@ -624,14 +744,62 @@ class MonteCarloCategory(BaseModel):
         return self.samples
 
 
+class MonteCarloTotal(BaseModel):
+    """One weighting set's total over a run's draws: the set's identity as `Total` carries it, each
+    draw's weighted sum in short and either the draws themselves or their histogram, and the reason
+    a set gives no total."""
+
+    impact_method: str
+    weighting_set: str | None
+    position: int
+    unit: str | None
+    categories: list[str]
+    normalised_by_zero: list[str]
+    summary: MonteCarloSummary | None
+    samples: list[float] | None = None
+    histogram: Histogram | None = None
+    reason: str | None
+    value_choices: str = VALUE_CHOICES
+
+    def sampled(self) -> list[float]:
+        """The draws, or Invalid when this answer carries none."""
+        if self.samples is None:
+            raise Invalid("this Monte Carlo total carries no samples; ask for them with samples")
+        return self.samples
+
+
+class DrawnCount(BaseModel):
+    """How many of one kind a calculation reaches, how many of them carry a distribution, how many
+    of those the run drew, and how many it held at their amount."""
+
+    there: int
+    carried: int
+    drawn: int
+    held: int = 0
+
+
+class Drawn(BaseModel):
+    """What a calculation reached and what of it carried a distribution: the literal parameters
+    of the systems it reaches, the foreground's exchanges and the background's rows."""
+
+    parameters: DrawnCount
+    foreground: DrawnCount
+    background: DrawnCount
+
+
 class MonteCarloResult(BaseModel):
     """The samples of every category over the database build `database` names, and why sampling
-    stopped: at the target relative standard error of every median, at the ceiling `n_max`, at a
-    stated count, or cancelled.
-    `gating_method` is the id of the method of the category whose median's relative standard
-    error is the largest, or the first whose is undefined. `normals_at_amount` counts the
-    background normal distributions sampled at their amount because their standard deviation
-    exceeds it.
+    stopped: at the target relative standard error of every median it can measure, at the ceiling
+    `n_max`, at a stated count, or cancelled.
+    `gating_method` is the id of the method of the category that held the run longest, the one
+    whose median's relative standard error was above the target at the latest check that found
+    one; a run of a stated count names none, and so does one no category ever held.
+    `constant` names the categories met as constant, every draw equal, and
+    `indistinguishable_from_zero` those left out of the stop rule, their median's 95 % interval
+    holding 0, both in method order and each judged at the run's end. `drawn` states how many
+    parameters, foreground exchanges and background rows the calculation reaches, how many of
+    them carry a distribution, how many of those the run drew and how many it held at their
+    amount: a wide background normal, whose standard deviation exceeds it.
     `credit_loops` names the processes of each loop holding a credit, whose delivery no check
     decides. `dropped_draws` are the draws, counted from zero, left out because a loop without a
     credit, or a process using its own product, delivered nothing in them; `dropped_loops` names
@@ -639,14 +807,18 @@ class MonteCarloResult(BaseModel):
     scaled most negatively, or that used as much of its own product as it made. The linked
     fields name those loops inside linked systems. `n` counts the draws kept, and each
     category's samples follow them in order; `without_samples` answers the same result with each
-    category's histogram in place of its draws."""
+    category's and each total's histogram in place of its draws. `totals` holds one total per
+    weighting set of the run's method family, each draw's weighted sum in short; no total takes
+    part in the stop rule."""
 
     database: Database
     n: int
     stopped: Stopped
-    gating_method: str
+    gating_method: str | None
+    constant: list[str]
+    indistinguishable_from_zero: list[str]
     scope: Scope
-    normals_at_amount: int
+    drawn: Drawn
     credit_loops: list[list[str]]
     dropped_draws: list[int]
     dropped_loops: list[list[str]]
@@ -654,6 +826,7 @@ class MonteCarloResult(BaseModel):
     linked_credit_loops: list[LinkedLoop] = Field(default_factory=list)
     dropped_linked_loops: list[LinkedLoop] = Field(default_factory=list)
     categories: list[MonteCarloCategory]
+    totals: list[MonteCarloTotal] = Field(default_factory=list)
 
     def draws(self) -> list[int]:
         """The draw, counted from zero, each sample was taken at."""
@@ -661,8 +834,8 @@ class MonteCarloResult(BaseModel):
         return [d for d in range(self.n + len(dropped)) if d not in dropped]
 
     def without_samples(self) -> MonteCarloResult:
-        """A copy whose every category carries its summary and the histogram of its draws,
-        with no samples."""
+        """A copy whose every category and every total carries its summary and the histogram of its
+        draws, with no samples."""
         return self.model_copy(
             update={
                 "categories": [
@@ -670,42 +843,53 @@ class MonteCarloResult(BaseModel):
                         update={"samples": None, "histogram": Histogram.of(category.sampled())}
                     )
                     for category in self.categories
-                ]
+                ],
+                "totals": [
+                    total.model_copy(
+                        update={"samples": None, "histogram": Histogram.of(total.sampled())}
+                    )
+                    if total.samples is not None
+                    else total
+                    for total in self.totals
+                ],
             }
         )
 
 
 class RunProgress(BaseModel):
     """How far a sampling run has got: the draws taken and the largest relative standard error
-    of a category's median, None while any is undefined. The total is unknown until the stop
-    rule stops."""
+    among the categories it can measure, None while it can measure none. The total is unknown
+    until the stop rule stops."""
 
     iterations: int = 0
     worst_rel_se: float | None = None
 
 
 class RunDraft(BaseModel):
-    """What a caller posts: the key to pin, the sampling to do, and each exchange at that key
-    sending a positive amount to a treatment, which runs it backwards."""
+    """What a caller posts: the key to pin, the sampling to do, each exchange at that key sending a
+    positive amount to a treatment, which runs it backwards, and the weighting sets whose totals the
+    run answers."""
 
     product_system_id: uuid.UUID
     at_hash: str
     demand: list[DemandItem] = Field(default_factory=list)
     methods: list[Method] = Field(default_factory=list)
+    weighting_sets: list[WeightingSet] = Field(default_factory=list)
     config: MonteCarloConfig
     treatments_run_backwards: list[str] = Field(default_factory=list)
 
 
 class RunState(BaseModel):
     """One sampling run without what it answered: the key it was computed on, each exchange at
-    that key sending a positive amount to a treatment, which runs it backwards, and where it got
-    to. A listing answers runs so."""
+    that key sending a positive amount to a treatment, which runs it backwards, the weighting sets
+    its totals answer, and where it got to. A listing answers runs so."""
 
     id: uuid.UUID
     product_system_id: uuid.UUID
     at_hash: str
     demand: list[DemandItem] = Field(default_factory=list)
     methods: list[Method] = Field(default_factory=list)
+    weighting_sets: list[WeightingSet] = Field(default_factory=list)
     config: MonteCarloConfig
     treatments_run_backwards: list[str] = Field(default_factory=list)
     status: RunStatus = "queued"

@@ -1,8 +1,14 @@
 import { useMatch } from 'react-router-dom'
 import { useLog } from '@/api/queries'
+import type { ProductSystem } from '@/api/types'
 import { useUi, type ChosenEntry } from '@/store/ui'
 
 export type CanvasState = { live: true } | { live: false; hash: string; entry: ChosenEntry | null }
+
+export interface CanvasVariant {
+  kind: 'case' | 'scenario'
+  name: string
+}
 
 export function useCanvasState(systemId: string | null): CanvasState {
   const version = useMatch('/systems/:id/versions/:hash/*')
@@ -14,4 +20,13 @@ export function useCanvasState(systemId: string | null): CanvasState {
   if (hash !== null) return { live: false, hash, entry: null }
   if (chosen !== null && chosen.systemId === systemId && latest !== null && chosen.seq < latest) return { live: false, hash: chosen.hash, entry: chosen }
   return { live: true }
+}
+
+export function useCanvasVariant(system: ProductSystem | undefined): CanvasVariant | null {
+  const chosen = useUi((s) => (system === undefined || s.canvasSystemId !== system.id ? null : s.canvasVariant))
+  const state = useCanvasState(system?.id ?? null)
+  if (system === undefined || chosen === null || !state.live) return null
+  if (system.cases.some((one) => one.name === chosen)) return { kind: 'case', name: chosen }
+  if (system.scenarios.some((one) => one.name === chosen)) return { kind: 'scenario', name: chosen }
+  return null
 }

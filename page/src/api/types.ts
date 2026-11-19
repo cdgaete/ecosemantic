@@ -6,7 +6,9 @@ export interface Database {
   version: string
   system_model: string
   fingerprint: string | null
+  revision: number | null
 }
+export interface ListedDatabase extends Database { processes: number }
 export interface BackgroundRef { kind: 'background'; database: string; id: string }
 export interface ForegroundRef { kind: 'foreground'; code: string }
 export interface SystemRef { kind: 'system'; product_system_id: string; at_hash: string | null; case: string | null }
@@ -40,7 +42,14 @@ export interface Process {
   metadata: Record<string, Json>
   exchanges: Exchange[]
 }
-export interface Parameter { name: string; value: number | null; formula: string | null; unit: string; description: string }
+export interface Parameter {
+  name: string
+  value: number | null
+  formula: string | null
+  unit: string
+  description: string
+  uncertainty: Uncertainty | null
+}
 export interface Case { name: string; description: string; values: Record<string, number> }
 export interface CaseRow { parameter: string; values: (number | null)[] }
 export interface CaseMatrix { cases: string[]; rows: CaseRow[] }
@@ -51,6 +60,7 @@ export interface ExchangeOverride {
   amount: number | null
   multiplier: number | null
   input: BackgroundRef | ForegroundRef | null
+  name: string | null
 }
 export interface ParameterOverride { kind: 'parameter'; name: string; value: number }
 export type Override = ExchangeOverride | ParameterOverride
@@ -96,6 +106,7 @@ export interface LogEntry {
   changes: Change[]
   message: string
 }
+export interface Unchanged { message: string }
 export type Effect = 'read' | 'write' | 'delete' | 'compute'
 export type Origin = 'agent' | 'view'
 export type SummaryKind = 'background' | 'elementary_flow'
@@ -148,8 +159,10 @@ export interface RequestDraft {
   entity_id?: string
 }
 export interface SystemCard { id: string; name: string; description: string; database: string; hash: string; view_url: string | null }
+export interface SystemRow { system: SystemCard; processes: number; last: LogEntry; validation: ValidationReport | null; unvalidated: ErrorEnvelope | null; open_requests: number }
 export interface Answer<T> { value: T; hint: string | null; view_url: string | null }
 export interface Listing<T> { items: T[]; has_more: boolean; next_cursor: string | null; hint: string | null; view_url: string | null }
+export interface MethodListing extends Listing<Method> { weighting_sets: Record<string, (string | null)[]> }
 export interface InventoryListing extends Listing<InventoryRow> { database: Database; credit_loops: string[][]; linked_credit_loops: LinkedLoop[]; treatments_run_backwards: string[]; floor: number; dropped: number }
 export interface Port { exchange_id: string; y: number }
 export interface CardGeometry { width: number; header_height: number; section_padding: number; section_label: number; row_height: number }
@@ -184,8 +197,21 @@ export interface Method {
   indicator: string
 }
 export interface Score { value: number; unit: string; method_id: string }
+export interface WeightingFactor { method_id: string; normalisation: number | null; weighting: number | null }
+export interface WeightingSet { impact_method: string; name: string | null; unit: string | null; factors: WeightingFactor[] }
+export interface Total {
+  impact_method: string
+  weighting_set: string | null
+  position: number
+  unit: string | null
+  value: number | null
+  categories: string[]
+  normalised_by_zero: string[]
+  reason: string | null
+  value_choices: string
+}
 export interface PairedDelta { delta_abs: number; delta_pct: number | null; delta_ci95: [number, number] | null }
-export interface VariantScores { name: string; scores: Score[]; deltas: number[]; credit_loops: string[][]; linked_credit_loops: LinkedLoop[]; treatments_run_backwards: string[]; uncertainty: MonteCarloResult | null; paired_deltas: PairedDelta[] | null }
+export interface VariantScores { name: string; scores: Score[]; deltas: number[]; totals: Total[]; total_deltas: (number | null)[]; credit_loops: string[][]; linked_credit_loops: LinkedLoop[]; treatments_run_backwards: string[]; uncertainty: MonteCarloResult | null; paired_deltas: PairedDelta[] | null }
 export type Scope = 'full' | 'biosphere_only'
 export interface MonteCarloDefaults { n_min: number; n_max: number; rel_se_target: number; seed: number }
 export interface MonteCarloConfig extends MonteCarloDefaults { scope: Scope; n: number | null }
@@ -199,10 +225,25 @@ export interface MonteCarloSummary {
 }
 export interface Histogram { low: number; high: number; counts: number[] }
 export interface MonteCarloCategory { method_id: string; summary: MonteCarloSummary; samples: number[] | null; histogram: Histogram | null }
+export interface MonteCarloTotal {
+  impact_method: string
+  weighting_set: string | null
+  position: number
+  unit: string | null
+  categories: string[]
+  normalised_by_zero: string[]
+  summary: MonteCarloSummary | null
+  samples: number[] | null
+  histogram: Histogram | null
+  reason: string | null
+  value_choices: string
+}
 export type Stopped = 'target' | 'ceiling' | 'fixed' | 'cancelled'
-export interface MonteCarloResult { database: Database; n: number; stopped: Stopped; gating_method: string; scope: Scope; normals_at_amount: number; credit_loops: string[][]; dropped_draws: number[]; dropped_loops: string[][]; dropped_background: string[]; linked_credit_loops: LinkedLoop[]; dropped_linked_loops: LinkedLoop[]; categories: MonteCarloCategory[] }
+export interface DrawnCount { there: number; carried: number; drawn: number; held: number }
+export interface Drawn { parameters: DrawnCount; foreground: DrawnCount; background: DrawnCount }
+export interface MonteCarloResult { database: Database; n: number; stopped: Stopped; gating_method: string | null; constant: string[]; indistinguishable_from_zero: string[]; scope: Scope; drawn: Drawn; credit_loops: string[][]; dropped_draws: number[]; dropped_loops: string[][]; dropped_background: string[]; linked_credit_loops: LinkedLoop[]; dropped_linked_loops: LinkedLoop[]; categories: MonteCarloCategory[]; totals: MonteCarloTotal[] }
 export interface PinBehind { product_system_id: string; name: string; at_hash: string }
-export interface ImpactResult { product_system: string; database: Database; methods: Method[]; scores: Score[]; demand: DemandItem[]; credit_loops: string[][]; linked_credit_loops: LinkedLoop[]; links_behind: PinBehind[]; treatments_run_backwards: string[]; variants: VariantScores[]; uncertainty: MonteCarloResult | null }
+export interface ImpactResult { product_system: string; database: Database; methods: Method[]; scores: Score[]; demand: DemandItem[]; totals: Total[]; credit_loops: string[][]; linked_credit_loops: LinkedLoop[]; links_behind: PinBehind[]; treatments_run_backwards: string[]; variants: VariantScores[]; uncertainty: MonteCarloResult | null }
 export type RunStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
 export interface RunProgress { iterations: number; worst_rel_se: number | null }
 export interface Run {
@@ -211,6 +252,7 @@ export interface Run {
   at_hash: string
   demand: DemandItem[]
   methods: Method[]
+  weighting_sets: WeightingSet[]
   config: MonteCarloConfig
   treatments_run_backwards: string[]
   status: RunStatus
@@ -282,8 +324,8 @@ export interface ServerInfo {
   data_dir: string
   systems_dir: string
 }
-export interface Hotspot { rank: number; ref: BackgroundRef | ForegroundRef | LinkedProcessRef; name: string; location: string | null; reference_product: string; score: number; fraction: number }
-export interface FlowHotspot { rank: number; flow: ElementaryFlowRef; name: string; compartment: string; sub_compartment: string | null; amount: number; unit: string; score: number; fraction: number }
+export interface Hotspot { rank: number; ref: BackgroundRef | ForegroundRef | LinkedProcessRef; name: string; location: string | null; reference_product: string; score: number; fraction: number | null }
+export interface FlowHotspot { rank: number; flow: ElementaryFlowRef; name: string; compartment: CompartmentName; sub_compartment: string | null; amount: number; unit: string; score: number; fraction: number | null }
 export type TreeKind = 'process' | 'elementary_flow' | 'remainder'
 export interface TreeNode {
   kind: TreeKind
@@ -291,7 +333,7 @@ export interface TreeNode {
   name: string
   location: string | null
   score: number
-  fraction: number
+  fraction: number | null
   level: number
   children: TreeNode[]
 }
@@ -299,10 +341,10 @@ export type Decomposition = 'process' | 'path' | 'flow'
 export interface Cut {
   cutoff: number
   below: number
-  share: number
+  share: number | null
   below_score: number
   unlisted: number
-  unlisted_share: number
+  unlisted_share: number | null
   unlisted_score: number
 }
 export interface ContributionResult {
@@ -320,11 +362,13 @@ export interface ContributionResult {
   cut: Cut | null
 }
 export type FlowType = 'emission' | 'natural resource' | 'inventory indicator' | 'economic'
+export type CompartmentName = 'air' | 'water' | 'soil' | 'immaterial' | 'natural resource' | 'economic' | 'inventory indicator'
 export type Side = 'input' | 'output'
+export type InventoryOrder = 'compartment' | 'amount'
 export interface InventoryRow {
   flow: ElementaryFlowRef
   name: string
-  compartment: string
+  compartment: CompartmentName
   sub_compartment: string | null
   flow_type: FlowType
   side: Side
@@ -335,12 +379,13 @@ export interface InventoryRow {
 export interface ElementaryFlow {
   ref: ElementaryFlowRef
   name: string
-  compartment: string
+  compartment: CompartmentName
   sub_compartment: string | null
   unit: string
   flow_type: FlowType
   side: Side
   cas_number: string | null
+  cas_as_published: string | null
   synonyms: string[]
 }
 export interface ValidationCase { id: string; passed: boolean; detail: string | null }
@@ -350,11 +395,12 @@ export interface ProcessHit { ref: BackgroundRef; name: string; reference_produc
 export interface ElementaryFlowHit {
   ref: ElementaryFlowRef
   name: string
-  compartment: string
+  compartment: CompartmentName
   sub_compartment: string | null
   unit: string
   flow_type: FlowType
   cas_number: string | null
+  cas_as_published: string | null
 }
 export interface BackgroundExchange {
   input: BackgroundRef | ElementaryFlowRef | null
@@ -363,6 +409,7 @@ export interface BackgroundExchange {
   reference: boolean
   flow: string
   supplier: string | null
+  supplier_location: string | null
   amount: number
   unit: string
   cut_off: string | null
@@ -378,7 +425,13 @@ export interface BackgroundProcess {
   url: string | null
   exchanges: BackgroundExchange[] | null
 }
-export interface Page<T> { items: T[]; has_more: boolean; next_cursor: string | null }
+export interface Page<T> {
+  items: T[]
+  has_more: boolean
+  next_cursor: string | null
+  total: number | null
+  previous_cursor: string | null
+}
 export interface DatabaseSummary {
   processes: number
   elementary_flows: number
@@ -398,13 +451,13 @@ export interface ClassificationNode {
   children: ClassificationNode[]
 }
 export interface SubCompartment { name: string; flow_count: number }
-export interface Compartment { name: string; flow_count: number; sub_compartments: SubCompartment[] }
+export interface Compartment { name: CompartmentName; flow_count: number; sub_compartments: SubCompartment[] }
 export interface MethodCategory { name: string; indicators: Method[] }
 export interface MethodFamily { name: string; categories: MethodCategory[] }
 export interface Factor {
   flow: ElementaryFlowRef
   name: string
-  compartment: string
+  compartment: CompartmentName
   sub_compartment: string | null
   unit: string
   factor: number
@@ -430,5 +483,5 @@ export interface ContributionArguments {
   max_nodes?: number
   cutoff?: number
 }
-export interface InventoryArguments { demand?: DemandItem[]; compartment?: string; query?: string; limit?: number; cursor?: string }
+export interface InventoryArguments { demand?: DemandItem[]; side?: Side; order?: InventoryOrder; compartment?: string; query?: string; limit?: number; cursor?: string }
 export interface StartRunArguments { method_id?: string; impact_method?: string; demand?: DemandItem[]; monte_carlo?: Partial<MonteCarloConfig> }

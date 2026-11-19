@@ -42,7 +42,14 @@ const units: Answer<Term[]> = {
   ],
   view_url: null,
 }
-const locations: Answer<Term[]> = { hint: null, value: [{ value: 'GLO', detail: 'Global' }], view_url: null }
+const locations: Answer<Term[]> = {
+  hint: null,
+  value: [
+    { value: 'CL', detail: 'Chile' },
+    { value: 'GLO', detail: 'Global' },
+  ],
+  view_url: null,
+}
 
 const RIVER = river.value.ref.id
 const CARBON = '7033761e-a295-5042-bedc-164a1623396b'
@@ -87,10 +94,13 @@ const readFlow = vi.fn<FlowRead>(async () => river)
 const readVocabulary = vi.fn<VocabularyRead>(async (_database, kind) => (kind === 'units' ? units : locations))
 const readSearchFlows = vi.fn<FlowSearchRead>(async () => flowHits)
 const readSearchMethods = vi.fn<MethodSearchRead>(async () => methodHits)
-const readFactors = vi.fn<FactorsRead>(async (_database, _id, params) => {
+const filteredFactors = (params: FactorsParams): Answer<Page<Factor>> => {
   const term = (params.query ?? '').toLocaleLowerCase()
-  return { ...factors, value: { ...factors.value, items: factors.value.items.filter((item) => item.name.toLocaleLowerCase().includes(term)) } }
-})
+  const items = factors.value.items.filter((item) => item.name.toLocaleLowerCase().includes(term))
+  return { ...factors, value: { ...factors.value, items, total: items.length } }
+}
+
+const readFactors = vi.fn<FactorsRead>(async (_database, _id, params) => filteredFactors(params))
 
 vi.mock('@/api/client', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/api/client')>()
@@ -129,10 +139,7 @@ beforeEach(() => {
   readVocabulary.mockReset().mockImplementation(async (_database, kind) => (kind === 'units' ? units : locations))
   readSearchFlows.mockReset().mockResolvedValue(flowHits)
   readSearchMethods.mockReset().mockResolvedValue(methodHits)
-  readFactors.mockReset().mockImplementation(async (_database, _id, params) => {
-    const term = (params.query ?? '').toLocaleLowerCase()
-    return { ...factors, value: { ...factors.value, items: factors.value.items.filter((item) => item.name.toLocaleLowerCase().includes(term)) } }
-  })
+  readFactors.mockReset().mockImplementation(async (_database, _id, params) => filteredFactors(params))
 })
 
 it('walks air to urban air close to ground and lists Particulate matter', async () => {
@@ -156,10 +163,29 @@ it('opens a flow with its CAS number, unit and side', async () => {
   const shown = await detail('Water, river')
   expect(shown.getByText('cubic meter')).toBeInTheDocument()
   expect(shown.getByText('input')).toBeInTheDocument()
-  expect(shown.getByText('Resource')).toBeInTheDocument()
+  expect(shown.getAllByText('natural resource')).toHaveLength(2)
   expect(shown.getByText('in water')).toBeInTheDocument()
   const cas = shown.getByText('CAS number').closest('div')
   expect(cas?.lastElementChild).toBeEmptyDOMElement()
+})
+
+it('shows the CAS text a flow sets aside where it holds no number', async () => {
+  readFlow.mockResolvedValue({ ...river, value: { ...river.value, cas_as_published: 'n.a.' } })
+  renderAt(`/databases/fixture/flows/${RIVER}`, <Screens />)
+  const shown = await detail('Water, river')
+  expect(shown.getByText('CAS number').closest('div')?.lastElementChild).toBeEmptyDOMElement()
+  expect(shown.getByText('CAS as published').closest('div')?.lastElementChild).toHaveTextContent('n.a.')
+})
+
+it('shows a flow\'s CAS number and no published text beside it', async () => {
+  readFlow.mockResolvedValue({
+    ...river,
+    value: { ...river.value, cas_number: '124-38-9', cas_as_published: null },
+  })
+  renderAt(`/databases/fixture/flows/${RIVER}`, <Screens />)
+  const shown = await detail('Water, river')
+  expect(shown.getByText('CAS number').closest('div')?.lastElementChild).toHaveTextContent('124-38-9')
+  expect(shown.queryByText('CAS as published')).toBeNull()
 })
 
 it('walks gwp to climate change and opens GWP100 with its two factors', async () => {
@@ -217,5 +243,67 @@ it('lists the units and the locations', async () => {
   renderAt('/databases/fixture/locations', <Screens />)
   const locationsList = await listing('Locations')
   expect(await locationsList.findByText('GLO')).toBeInTheDocument()
+  expect(locationsList.getByText('Global')).toBeInTheDocument()
   expect(locationsList.getByText('1')).toBeInTheDocument()
+})
+
+it('filters the locations by their names as well as their codes', async () => {
+  renderAt('/databases/fixture/locations', <Screens />)
+  const locationsList = await listing('Locations')
+  expect(await locationsList.findByText('Chile')).toBeInTheDocument()
+  fireEvent.change(locationsList.getByLabelText('Filter the locations'), { target: { value: 'glob' } })
+  await waitFor(() => expect(locationsList.queryByText('Chile')).toBeNull())
+  expect(locationsList.getByText('Global')).toBeInTheDocument()
+})
+
+it('a table pages back from a later page', async () => {
+  const first = renderAt('/databases/fixture/flows?compartment=air', <Screens />)
+  const front = await listing('Elementary flows')
+  expect(await front.findByText('Particulate matter')).toBeInTheDocument()
+  expect(front.queryByRole('button', { name: 'Previous page' })).toBeNull()
+  first.unmount()
+
+  readFlowsIn.mockResolvedValue({ ...flows, value: { ...flows.value, previous_cursor: '0' } })
+  renderAt(
+    '/databases/fixture/flows?compartment=air&cursor=25',
+    <>
+      <Screens />
+      <Address />
+    </>,
+  )
+  const later = await listing('Elementary flows')
+  fireEvent.click(await later.findByRole('button', { name: 'Previous page' }))
+  await waitFor(() => expect(screen.getByTestId('address')).toHaveTextContent('cursor=0'))
+  expect(readFlowsIn.mock.calls.at(-1)?.[2].cursor).toBe('0')
+})
+
+it('a CAS number stays whole', async () => {
+  const flow = flows.value.items[0]
+  readFlowsIn.mockResolvedValue({
+    ...flows,
+    value: { ...flows.value, items: [{ ...flow, cas_number: '000056-23-5', cas_as_published: null }] },
+  })
+  const numbered = renderAt('/databases/fixture/flows?compartment=air', <Screens />)
+  const rows = await listing('Elementary flows')
+  expect(await rows.findByText('000056-23-5')).toHaveClass('whitespace-nowrap')
+  numbered.unmount()
+
+  readFlowsIn.mockResolvedValue({
+    ...flows,
+    value: { ...flows.value, items: [{ ...flow, cas_number: null, cas_as_published: '000056-23-5' }] },
+  })
+  renderAt('/databases/fixture/flows?compartment=air', <Screens />)
+  const published = await listing('Elementary flows')
+  const cas = await published.findByText('000056-23-5')
+  expect(cas).toHaveClass('whitespace-nowrap')
+  expect(cas.closest('td')).toHaveTextContent('000056-23-5 (as published)')
+})
+
+it('the factors say how many their filter keeps', async () => {
+  renderAt(`/databases/fixture/methods/${GWP100}`, <Screens />)
+  const shown = await detail('GWP100')
+  expect(await shown.findByText('Carbon dioxide, fossil')).toBeInTheDocument()
+  fireEvent.change(shown.getByLabelText('Filter the factors'), { target: { value: 'methane' } })
+  await waitFor(() => expect(shown.getByText('1 factor')).toBeInTheDocument())
+  expect(shown.queryByText('2 factors')).toBeNull()
 })

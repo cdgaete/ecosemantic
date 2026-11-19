@@ -7,11 +7,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useUi } from '@/store/ui'
 import { ICON_BUTTON, IconButton } from '@/window/IconButton'
 import { keysOf } from '@/window/shortcuts'
+import { useCanvasState, useCanvasVariant } from '@/window/useCanvasState'
 import { useMinWidth } from '@/window/useMinWidth'
 
 export interface CanvasToolbarProps {
   system: ProductSystem
   calculate?: ReactNode
+  grip?: ReactNode
   notes: string[]
   following: boolean
   fit: () => void
@@ -24,8 +26,9 @@ export interface CanvasToolbarProps {
   reset: () => void
 }
 
-export function CanvasToolbar({ system, calculate, notes, following, fit, follow, scaling, minimap, setMinimapOpen, focus, reorganise, reset }: CanvasToolbarProps) {
-  const variant = useUi((s) => (s.canvasSystemId === system.id ? s.canvasVariant : null))
+export function CanvasToolbar({ system, calculate, grip, notes, following, fit, follow, scaling, minimap, setMinimapOpen, focus, reorganise, reset }: CanvasToolbarProps) {
+  const state = useCanvasVariant(system)
+  const live = useCanvasState(system.id).live
   const setVariant = useUi((s) => s.setCanvasVariant)
   const scaledView = useUi((s) => s.scaledView)
   const setScaledView = useUi((s) => s.setScaledView)
@@ -41,6 +44,7 @@ export function CanvasToolbar({ system, calculate, notes, following, fit, follow
         aria-label="Canvas"
         className="flex max-w-full flex-wrap items-center justify-center gap-1 rounded-xl border bg-chrome/95 p-1 shadow-lg backdrop-blur"
       >
+        {grip}
         {calculate ? (
           <>
             {calculate}
@@ -52,7 +56,8 @@ export function CanvasToolbar({ system, calculate, notes, following, fit, follow
           <select
             aria-label="State"
             className="nodrag min-w-28 max-w-48 rounded-sm border bg-background px-1"
-            value={variant ?? ''}
+            value={state?.name ?? ''}
+            disabled={!live}
             onChange={(e) => setVariant(e.target.value === '' ? null : e.target.value)}
           >
             <option value="">base values</option>

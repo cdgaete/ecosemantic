@@ -6,17 +6,20 @@ import json
 import zipfile
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import cast
 
 import olca_schema as o
 
 from ecosemantic.databases.lists import LeftOut, LeftOutRow, write_left_out
+from ecosemantic.databases.revision import revise
 from ecosemantic.databases.uslci.profile import database_name
 from ecosemantic.errors import Conflict, Invalid
 from ecosemantic.files import replace
 from ecosemantic.model import units
 from ecosemantic.package.background import Import, exchange_refusal, read_background
+from ecosemantic.package.manifest import Correction
 from ecosemantic.package.olca import uncertainty_refusal
 from ecosemantic.package.wholeness import require_whole
 
@@ -407,6 +410,9 @@ def build(
     *,
     version: str,
     out_dir: Path,
+    revision: int,
+    corrections: Sequence[Correction],
+    now: datetime,
     bridged: Sequence[Path] = (),
 ) -> Built:
     """Write a release, the repositories its bridges link to and its methods as
@@ -415,9 +421,10 @@ def build(
     the own factor of the repository its process came from where that factor is not the core's. A
     bridge input whose description names a process the bundle holds is written with it as its
     provider. The bundle is checked whole but for its providers, which the import reports as
-    unlinked inputs. A record two method packages both hold is the one of the package later in the
-    sequence, the profile's newest last; a record the release and a bridged repository both hold is
-    the release's."""
+    unlinked inputs, revised into the release's corrections and the canonical shape, and read back
+    before it is moved into place. A record two method packages both hold is the one of the package
+    later in the sequence, the profile's newest last; a record the release and a bridged repository
+    both hold is the release's."""
     destination = out_dir / f"{database_name(version)}.zip"
     if destination.exists():
         raise Conflict(f"{destination.name} exists; name another destination")
@@ -530,15 +537,26 @@ def build(
     written |= {f"{CATEGORIES}/{i}.json": _serialised(c) for i, c in categories.items()}
     written |= written_methods
     staged = destination.with_name(f"{destination.name}.partial")
+    revised = destination.with_name(f"{destination.name}.revised")
     try:
         with zipfile.ZipFile(staged, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
             for name, content in written.items():
                 archive.writestr(name, content)
         require_whole(staged, providers=False)
-        imported = read_background(staged, database_name(version), foreground=frozenset())
-        replace(staged, destination)
+        revise(
+            staged,
+            revised,
+            name=database_name(version),
+            version=version,
+            revision=revision,
+            corrections=corrections,
+            now=now,
+        )
+        imported = read_background(revised, database_name(version), foreground=frozenset())
+        replace(revised, destination)
     finally:
         staged.unlink(missing_ok=True)
+        revised.unlink(missing_ok=True)
     rows = tuple(sorted(left_out, key=lambda row: row.key))
     write_left_out(out_dir / f"left-out-{version}.csv", rows)
     return Built(

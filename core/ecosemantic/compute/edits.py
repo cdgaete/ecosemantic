@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 import uuid
 from collections.abc import Mapping, Sequence
@@ -11,7 +12,13 @@ from pydantic import JsonValue, ValidationError
 
 from ecosemantic.compute.links import pins
 from ecosemantic.compute.overrides import apply_scenario
-from ecosemantic.compute.parameters import materialize
+from ecosemantic.compute.parameters import (
+    followed,
+    materialize,
+    refuse_double_spread,
+    refuse_unfollowed_cases,
+    require_centred,
+)
 from ecosemantic.errors import Conflict, Invalid, build_label, error_line
 from ecosemantic.model.canonical import base_pin, stale
 from ecosemantic.model.entities import (
@@ -325,6 +332,25 @@ def _materialised(system: ProductSystem, exchange_id: uuid.UUID) -> tuple[Produc
     return out, exchange
 
 
+def _agreeing(
+    system: ProductSystem, exchange_id: uuid.UUID, amount: float | None, remedy: str
+) -> tuple[ProductSystem, Exchange]:
+    """The document materialised, an amount given beside the exchange's formula being the one
+    the formula evaluates to, within a relative 1e-12, and Invalid naming both and the remedy
+    otherwise."""
+    out, exchange = _materialised(system, exchange_id)
+    if (
+        amount is not None
+        and exchange.formula is not None
+        and not math.isclose(exchange.amount, amount, rel_tol=1e-12)
+    ):
+        raise Invalid(
+            f"amount {amount!r} is not what formula {exchange.formula!r} evaluates to, "
+            f"{exchange.amount!r}: give the amount it evaluates to, or {remedy}"
+        )
+    return out, exchange
+
+
 def add_exchange(
     system: ProductSystem,
     code: str,
@@ -339,10 +365,11 @@ def add_exchange(
     uncertainty: Uncertainty | None = None,
     linked: ProductSystem | None = None,
 ) -> tuple[ProductSystem, Exchange]:
-    """The document with a new exchange on the process, its amount materialised. A link takes
-    `linked`, the linked system as it stood at the pin."""
-    if (amount is None) == (formula is None):
-        raise Invalid("give exactly one of amount and formula")
+    """The document with a new exchange on the process, its amount materialised; an amount given
+    beside a formula is the one the formula evaluates to, so an exchange as a read answers it
+    writes back. A link takes `linked`, the linked system as it stood at the pin."""
+    if amount is None and formula is None:
+        raise Invalid("give an amount, a formula or both")
     out = system.model_copy(deep=True)
     process = out.process(code)
     if type == "production":
@@ -392,7 +419,13 @@ def add_exchange(
     except ValidationError as error:
         raise invalid(error) from error
     process.exchanges.append(exchange)
-    return _materialised(out, exchange.id)
+    out, exchange = _agreeing(out, exchange.id, amount, "give the formula alone")
+    refuse_double_spread(out)
+    if exchange.uncertainty is not None:
+        require_centred(
+            exchange.uncertainty, exchange.amount, f"exchange {out.exchange_named(exchange.id)}"
+        )
+    return out, exchange
 
 
 def patch_exchange(
@@ -407,7 +440,8 @@ def patch_exchange(
     uncertainty: Uncertainty | None = None,
     clear: Sequence[ExchangeClearable] = (),
 ) -> tuple[ProductSystem, Exchange]:
-    """The document with an exchange's fields replaced; type and input are fixed."""
+    """The document with an exchange's fields replaced; type and input are fixed. An amount on
+    an exchange that keeps a formula is the one the formula evaluates to."""
     given = [amount, formula, name, unit, comment, uncertainty]
     if all(value is None for value in given) and not clear:
         raise Invalid("name at least one field to change")
@@ -422,8 +456,6 @@ def patch_exchange(
     if formula is not None:
         exchange.formula = formula
     if amount is not None:
-        if exchange.formula is not None:
-            raise Invalid("the amount is derived from a formula; clear the formula to set it")
         exchange.amount = amount
     if unit is not None:
         if exchange.type == "production":
@@ -438,7 +470,16 @@ def patch_exchange(
         exchange.comment = comment
     if uncertainty is not None:
         exchange.uncertainty = uncertainty
-    return _materialised(out, exchange_id)
+    out, exchange = _agreeing(
+        out, exchange_id, amount, "clear the formula to set an amount of its own"
+    )
+    refuse_double_spread(out)
+    owner = f"exchange {out.exchange_named(exchange.id)}"
+    if uncertainty is not None:
+        require_centred(uncertainty, exchange.amount, owner)
+    elif amount is not None or formula is not None:
+        exchange.uncertainty = followed(exchange.uncertainty, exchange.amount, owner)
+    return out, exchange
 
 
 def remove_exchange(system: ProductSystem, exchange_id: uuid.UUID) -> ProductSystem:
@@ -545,20 +586,52 @@ def set_parameter_space(
         users = _parameter_users(out, name)
         if users:
             raise Invalid(f"parameter {name!r} is used by {users}; change those first")
+    for parameter in out.parameters:
+        if parameter.formula is None and parameter.uncertainty is not None:
+            require_centred(
+                parameter.uncertainty,
+                float(parameter.value or 0.0),
+                f"parameter {parameter.name!r}",
+            )
+    refuse_double_spread(out)
+    refuse_unfollowed_cases(out)
     return materialize(out)
+
+
+def _resolved_swap(system: ProductSystem, override: Override) -> Override:
+    """The override with its swapped supplier checked against the exchange and the name it gives
+    the exchange: a foreground supplier's reference product, or the one a background swap states.
+    A swap of an exchange that is no product is left as given, for the dry run to refuse."""
+    if not isinstance(override, ExchangeOverride) or override.input is None:
+        return override
+    _, exchange = system.exchange(override.exchange_id)
+    if exchange.type != "product":
+        return override
+    if isinstance(override.input, ForegroundRef):
+        target = system.process(override.input.code)
+        same_unit(exchange.unit, target.unit, target.name)
+        if override.name is None:
+            return override.model_copy(update={"name": target.reference_product})
+        return override
+    if override.name is None:
+        raise Invalid(
+            f"a swap of {exchange.name!r} to a background dataset names the supplier it swaps in"
+        )
+    return override
 
 
 def add_scenario(
     system: ProductSystem, *, name: str, description: str, overrides: Sequence[Override]
 ) -> tuple[ProductSystem, Scenario]:
-    """The document with a new scenario, applied once to prove it, pinned to the base pin."""
+    """The document with a new scenario, its swaps resolved against the exchanges they change and
+    applied once to prove it, pinned to the base pin."""
     if any(s.name == name for s in system.scenarios):
         raise Conflict(f"scenario {name!r} already exists in {system.name!r}")
     try:
         scenario = Scenario(
             name=name,
             description=description,
-            overrides=list(overrides),
+            overrides=[_resolved_swap(system, o) for o in overrides],
             base_hash=base_pin(system),
         )
     except ValidationError as error:

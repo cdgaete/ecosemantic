@@ -5,6 +5,7 @@ import { AccountsScreen } from '@/accounts/AccountsScreen'
 import { rememberToken } from '@/api/client'
 import { useHeldStream } from '@/api/stream'
 import { DatabasesEditor } from '@/editors/databases/DatabasesEditor'
+import { DatasetPeek } from '@/editors/explorer/DatasetPeek'
 import { ExplorerEditor } from '@/editors/explorer/ExplorerEditor'
 import { NoEditor } from '@/editors/NoEditor'
 import { ProcessEditor } from '@/editors/process/ProcessEditor'
@@ -39,6 +40,7 @@ export function Screens() {
           <Route path="systems/:id/versions/:hash/*" element={<VersionEditor />} />
           <Route path="systems/:id/processes/:code/*" element={<ProcessEditor />} />
           <Route path="systems/:id/results/*" element={<ResultsEditor />} />
+          <Route path="systems/:id/datasets/:database/*" element={<DatasetPeek />} />
           <Route path="databases" element={<DatabasesEditor />} />
           <Route path="databases/:name/*" element={<ExplorerEditor />} />
           <Route path="systems/:id/simulations/:runId" element={<SimulationEditor />} />

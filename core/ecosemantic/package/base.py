@@ -33,6 +33,11 @@ class BaseBundle:
             }
             self.categories = list(reader.read_each(o.ImpactCategory))
             self.methods = list(reader.read_each(o.ImpactMethod))
+            held = {loc.id: loc for loc in reader.read_each(o.Location)}
+        self.locations: dict[str, o.Location] = {}
+        for location in held.values():
+            if location.code:
+                self.locations.setdefault(location.code, location)
         self.producers, self.treaters = providers(
             self.processes.values(), {i: f.flow_type for i, f in self.flows.items()}
         )

@@ -1,4 +1,6 @@
-export function Facts({ rows }: { rows: [string, string][] }) {
+import type { ReactNode } from 'react'
+
+export function Facts({ rows }: { rows: [string, ReactNode][] }) {
   return (
     <dl className="grid grid-cols-1 gap-1 pt-1 text-xs">
       {rows.map(([label, value]) => (

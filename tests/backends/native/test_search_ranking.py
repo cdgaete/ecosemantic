@@ -51,21 +51,21 @@ PROCESS_ROWS = [
     (name, product, "GLO", unit) for name, product, unit, _, _ in PROCESSES.values()
 ] + EXTRA
 FLOW_ROWS = [
-    ("Carbon dioxide, fossil", ("air",), "124-38-9"),
+    ("Carbon dioxide, fossil", ("air", None), "124-38-9"),
     ("Carbon dioxide, fossil", ("air", "urban air close to ground"), "124-38-9"),
     ("Methane, fossil", ("air", "non-urban air or from high stacks"), "74-82-8"),
-    ("Water, river", ("Resource", "in water"), None),
+    ("Water, river", ("natural resource", "in water"), None),
     ("Particulate Matter, < 2.5 um", ("air", "urban air close to ground"), None),
-    ("Copper, Cu 0.38%, in mixed ore", ("Resource", "in ground"), "7440-50-8"),
-    ("Sulfur dioxide", ("air",), "7446-09-5"),
-    ("Dinitrogen monoxide", ("air",), "010024-97-2"),
+    ("Copper, Cu 0.38%, in mixed ore", ("natural resource", "in ground"), "7440-50-8"),
+    ("Sulfur dioxide", ("air", None), "7446-09-5"),
+    ("Dinitrogen monoxide", ("air", None), "010024-97-2"),
 ]
 METHOD_KEYS = [
-    (NAME, "IPCC 2021", "climate change: fossil > global warming potential (GWP100)"),
-    (NAME, "IPCC 2021", "climate change: biogenic > global warming potential (GWP100)"),
-    (NAME, "EF v3.1", "climate change > global warming potential (GWP100)"),
-    (NAME, "EF v3.1", "water use > user deprivation potential"),
-    (NAME, "ReCiPe 2016 v1.03, midpoint (H)", "particulate matter formation > PMFP"),
+    (NAME, "IPCC 2021", "climate change: fossil", "global warming potential (GWP100)"),
+    (NAME, "IPCC 2021", "climate change: biogenic", "global warming potential (GWP100)"),
+    (NAME, "EF v3.1", "climate change", "global warming potential (GWP100)"),
+    (NAME, "EF v3.1", "water use", "user deprivation potential"),
+    (NAME, "ReCiPe 2016 v1.03, midpoint (H)", "particulate matter formation", "PMFP"),
 ]
 PROCESS_QUERIES = [
     "steel",
@@ -110,13 +110,14 @@ def imported() -> Import:
     flows = {
         (DATABASE.elementary_flows, f"f{at}"): {
             "name": name,
-            "categories": categories,
+            "compartment": compartment,
+            "sub_compartment": sub_compartment,
             "unit": "kilogram",
-            "type": "natural resource" if categories[0] == "Resource" else "emission",
+            "type": "natural resource" if compartment == "natural resource" else "emission",
             "CAS number": cas,
             "synonyms": [],
         }
-        for at, (name, categories, cas) in enumerate(FLOW_ROWS)
+        for at, (name, (compartment, sub_compartment), cas) in enumerate(FLOW_ROWS)
     }
     methods = [ImportedMethod(key=key, unit="unit", factors=[]) for key in METHOD_KEYS]
     return Import(
@@ -170,8 +171,8 @@ def fts5() -> sqlite3.Connection:
     connection.executemany(
         "INSERT INTO flows(code, name, compartment, sub_compartment, cas) VALUES (?,?,?,?,?)",
         [
-            (f"f{at}", name, cats[0], "/".join(cats[1:]) or None, cas)
-            for at, (name, cats, cas) in enumerate(FLOW_ROWS)
+            (f"f{at}", name, compartment, sub_compartment, cas)
+            for at, (name, (compartment, sub_compartment), cas) in enumerate(FLOW_ROWS)
         ],
     )
     connection.executemany(

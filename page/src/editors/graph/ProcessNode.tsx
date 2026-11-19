@@ -39,7 +39,7 @@ function Row({ exchange, systemId, hot, scaled, card }: { exchange: Exchange; sy
   const amount = amountCell(exchange, scaled, values)
   const name =
     exchange.input?.kind === 'background' ? (
-      <AppLink to={paths.background(exchange.input.database, exchange.input.id)} title={exchange.name} className="truncate hover:underline nodrag nopan">
+      <AppLink to={paths.dataset(systemId, exchange.input.database, exchange.input.id)} title={exchange.name} className="truncate hover:underline nodrag nopan">
         {exchange.name}
       </AppLink>
     ) : exchange.input?.kind === 'foreground' ? (
@@ -79,7 +79,7 @@ function ProcessNodeComponent({ data }: NodeProps<ProcessNodeType>) {
   const hidden = inputs.slice(placement.shown_inputs)
   return (
     <>
-      <CardToolbar size={{ width: card.width, height: placement.height }}>
+      <CardToolbar size={{ width: card.width, height: placement.height }} shown={chosen}>
         <ProcessMenuItems systemId={systemId} process={process} />
       </CardToolbar>
       <div

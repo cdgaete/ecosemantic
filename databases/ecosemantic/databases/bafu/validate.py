@@ -4,11 +4,12 @@ workbook's terms, and hold the differences it knows to a list."""
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from ecosemantic.compute.totals import weighted_sum
 from ecosemantic.databases.bafu.differences import (
     Difference,
     read_differences,
@@ -32,9 +33,12 @@ from ecosemantic.databases.scores import (
 )
 from ecosemantic.databases.stopwatch import Stopwatch
 from ecosemantic.errors import Invalid
+from ecosemantic.model.entities import method_id
 from ecosemantic.package.background import Dataset, Import, Key, read_background
+from ecosemantic.ports.types import WeightingFactor, WeightingSet
 
 Cell = tuple[str, str]
+MethodKey = tuple[str, str, str, str]
 
 
 @dataclass(frozen=True)
@@ -137,8 +141,9 @@ def _cell(score: float, declared: str, unit: str, production: float) -> float:
 
 
 def _score(scores: Scores, code: str, column: Column) -> float:
-    """The core's score of a dataset under the method and category a workbook column names."""
-    key = (code, column.method, column.category)
+    """The core's score of a dataset under the method and category a workbook column names, an
+    openLCA category being both the category and the indicator."""
+    key = (code, column.method, column.category, column.category)
     if key not in scores.values:
         raise Invalid(
             f"{column.header!r} names {column.method}, {column.category}, and the import "
@@ -147,16 +152,69 @@ def _score(scores: Scores, code: str, column: Column) -> float:
     return scores.values[key]
 
 
-def _total(
-    scores: Scores, profile: Profile, code: str, declared: str, unit: str, production: float
-) -> float:
-    """The core's score of a dataset summed over the profile's columns of the total's method, each
-    converted and signed as its column is: the categories the workbook's total sums."""
-    return sum(
-        _cell(_score(scores, code, column), declared, unit, production)
-        for column in profile.columns
-        if column.method == profile.total.method
+@dataclass(frozen=True)
+class TotalSet:
+    """The weighting set a profile's total is computed through, and each of its factors' method key
+    with the id the factor names that method by."""
+
+    weighting: WeightingSet
+    factors: tuple[tuple[MethodKey, str], ...]
+
+
+def _total_set(imported: Import, profile: Profile) -> TotalSet:
+    """The weighting set the profile's total names of the family it names, as the import read it,
+    each factor naming its category by that method's id; Invalid naming a set the family lacks."""
+    held = [w for w in imported.weightings if w.family == profile.total.method]
+    for weighting in held:
+        if weighting.name == profile.total.weighting_set:
+            factors: list[WeightingFactor] = []
+            named: list[tuple[MethodKey, str]] = []
+            for key, normalisation, weight in weighting.factors:
+                identity = method_id(" > ".join(key))
+                factors.append(
+                    WeightingFactor(
+                        method_id=identity, normalisation=normalisation, weighting=weight
+                    )
+                )
+                named.append((key, identity))
+            return TotalSet(
+                weighting=WeightingSet(
+                    impact_method=weighting.family,
+                    name=weighting.name,
+                    unit=weighting.unit,
+                    factors=factors,
+                ),
+                factors=tuple(named),
+            )
+    named = ", ".join(sorted(repr(weighting.name) for weighting in held)) or "none"
+    raise Invalid(
+        f"the total names the weighting set {profile.total.weighting_set!r} of "
+        f"{profile.total.method!r}, and the package holds {named}"
     )
+
+
+def _by_method(
+    scores: Scores, factors: Sequence[tuple[MethodKey, str]]
+) -> dict[str, dict[str, float]]:
+    """Each dataset's scores under the categories the total's set names, by the id of each one: the
+    categories alone, so a set of twenty reads twenty of the import's hundreds."""
+    held: dict[str, dict[str, float]] = {}
+    for code in scores.declared:
+        held[code] = {named: scores.values[(code, *key[1:])] for key, named in factors}
+    return held
+
+
+def _total(
+    weighting: WeightingSet,
+    by_method: Mapping[str, float],
+    declared: str,
+    unit: str,
+    production: float,
+) -> float:
+    """The core's total of a dataset through the profile's weighting set, converted and signed as a
+    column is: each category the set weights normalised and weighted, the categories it leaves out
+    taking no part."""
+    return _cell(weighted_sum(weighting, by_method), declared, unit, production)
 
 
 def _compared(
@@ -165,11 +223,13 @@ def _compared(
     workbook: Workbook,
     rows: Mapping[int, str],
     scores: Scores,
+    total: TotalSet,
 ) -> tuple[dict[Cell, float], dict[Cell, float]]:
     """Each compared cell's core score in the workbook's terms and the workbook's value for it:
     every profile column and the total column, for every row the workbook scores, a cell the
     workbook leaves empty being no cell at all."""
     held = _datasets(imported)
+    totals = _by_method(scores, total.factors)
     core: dict[Cell, float] = {}
     other: dict[Cell, float] = {}
     for row in workbook.rows:
@@ -187,7 +247,7 @@ def _compared(
             other[(process, column.header)] = row.values[column.header]
         if profile.total.header in row.values:
             core[(process, profile.total.header)] = _total(
-                scores, profile, code, declared, row.unit, production
+                total.weighting, totals[code], declared, row.unit, production
             )
             other[(process, profile.total.header)] = row.values[profile.total.header]
     return core, other
@@ -253,8 +313,9 @@ def validate(
     that process's dataset under a column's method and category is compared in the workbook's
     terms: converted through the unit table to the unit the row's column D names, and signed by the
     dataset's production, so a waste treatment the core produces at minus one unit is compared per
-    the unit the workbook treats. The total column is compared against the sum of the method's
-    categories. A pair beyond the profile's tolerance is a difference; when a differences list is
+    the unit the workbook treats. The total column is compared against the weighted sum of the
+    categories the profile's named weighting set weights, normalised as it states. A pair beyond
+    the profile's tolerance is a difference; when a differences list is
     named, a difference the list lacks and a pair the list holds within the tolerance are
     mismatches, and with no list the differences are answered and not compared."""
     stopwatch = Stopwatch()
@@ -271,7 +332,8 @@ def validate(
     stopwatch.lap("workbook")
     scores = score_every_dataset(imported, name=bundle.stem, compiled=compiled)
     stopwatch.seconds |= scores.seconds
-    core, other = _compared(imported, profile, workbook, rows, scores)
+    total = _total_set(imported, profile)
+    core, other = _compared(imported, profile, workbook, rows, scores, total)
     beyond, largest, by_column = _differences(core, other, profile.tolerance)
     if differences is not None:
         mismatches += _listed(beyond, core, other, differences)

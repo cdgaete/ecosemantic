@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from ecosemantic import files
 from ecosemantic.errors import NotFound, Unavailable
 from ecosemantic.model.entities import Actor, ProductSystem
+from ecosemantic.package import sidecar as sidecar_module
 from ecosemantic.package.log import LOG_FILE, next_entry, read_log, write_log
 from ecosemantic.package.olca import WrittenLognormal
 from ecosemantic.package.requests import (
@@ -143,6 +144,21 @@ def test_a_sidecar_keeps_a_lognormals_written_parameters(
     back = read_sidecar(tmp_path).identities.lognormals
     assert back == {f"{first.id}:2": written}
     assert (back[f"{first.id}:2"].loc, back[f"{first.id}:2"].scale) == (-2.3, 0.1823)
+
+
+def test_reading_a_sidecar_builds_no_type_adapter(
+    product_system: ProductSystem, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stored(tmp_path, product_system)
+    first = read_sidecar(tmp_path)
+
+    def refuse(*args: object, **kwargs: object) -> object:
+        raise AssertionError("a sidecar read or write builds no TypeAdapter")
+
+    monkeypatch.setattr(sidecar_module, "TypeAdapter", refuse)
+    assert read_sidecar(tmp_path) == first
+    write_sidecar(tmp_path, first)
+    assert read_sidecar(tmp_path) == first
 
 
 def test_parsed_lines_reads_each_line_as_its_model_and_a_missing_file_reads_as_none(

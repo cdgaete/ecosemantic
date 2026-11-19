@@ -3,8 +3,10 @@ import { renderAt } from './render'
 import { App, Screens } from '@/App'
 import { api } from '@/api/client'
 import type { SystemRead } from '@/api/types'
+import { paths } from '@/lib/paths'
 import { useUi } from '@/store/ui'
 import { shortHash } from '@/lib/format'
+import { Palette } from '@/window/Palette'
 import { leaves } from '@/window/palette'
 import { menus } from '@/window/menus'
 import systems from './fixtures/systems.json'
@@ -65,17 +67,17 @@ describe('palette', () => {
     renderAt(base, <App router={false} />)
     await waitFor(() => expect(screen.getByRole('link', { name: 'Activity' })).toBeInTheDocument())
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
-    const box = await screen.findByPlaceholderText('Go to a process, a page or a command…')
+    const box = await screen.findByPlaceholderText('Go to a process, a database, a page or a command…')
     fireEvent.change(box, { target: { value: 'inspector' } })
     fireEvent.click(await screen.findByRole('option', { name: 'View › Inspector › Close' }))
     await waitFor(() => expect(screen.queryByRole('link', { name: 'Activity' })).not.toBeInTheDocument())
-    expect(screen.queryByPlaceholderText('Go to a process, a page or a command…')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('Go to a process, a database, a page or a command…')).not.toBeInTheDocument()
   })
 
   it('opens from a button on the top bar that names its keys', async () => {
     renderAt(base, <App router={false} />)
     fireEvent.click(screen.getByRole('button', { name: 'Go to anything' }))
-    expect(await screen.findByPlaceholderText('Go to a process, a page or a command…')).toBeInTheDocument()
+    expect(await screen.findByPlaceholderText('Go to a process, a database, a page or a command…')).toBeInTheDocument()
   })
 
   it('goes to a process of the system on the canvas', async () => {
@@ -83,7 +85,7 @@ describe('palette', () => {
     await waitFor(() => expect(screen.getByRole('link', { name: 'Activity' })).toBeInTheDocument())
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
     const process = system.value.processes[0]
-    fireEvent.change(await screen.findByPlaceholderText('Go to a process, a page or a command…'), { target: { value: process.name } })
+    fireEvent.change(await screen.findByPlaceholderText('Go to a process, a database, a page or a command…'), { target: { value: process.name } })
     const option = await screen.findByRole('option', { name: new RegExp(process.name) })
     expect(within(option).getByText(process.code)).toBeInTheDocument()
     fireEvent.click(option)
@@ -98,7 +100,7 @@ describe('palette', () => {
     renderAt(base, <Screens />)
     await waitFor(() => expect(screen.getByRole('link', { name: 'Activity' })).toBeInTheDocument())
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
-    await screen.findByPlaceholderText('Go to a process, a page or a command…')
+    await screen.findByPlaceholderText('Go to a process, a database, a page or a command…')
     const items = await screen.findAllByRole('option', { name: /Cátodo de cobre/ })
     expect(items).toHaveLength(2)
     expect(items[0]).toHaveTextContent(shortHash(one.id))
@@ -115,6 +117,19 @@ describe('palette', () => {
     await waitFor(() => expect(useUi.getState().canvasSystemId).toBe(two.id))
   })
 
+  it("finds a database's name in it, in its sections and in its search, and goes to the search", async () => {
+    const go = vi.fn()
+    useUi.setState({ paletteOpen: true })
+    renderAt(base, <Palette menus={[]} go={go} />)
+    const box = screen.getByPlaceholderText('Go to a process, a database, a page or a command…')
+    fireEvent.change(box, { target: { value: 'fixture' } })
+    const group = await screen.findByRole('group', { name: 'Databases' })
+    await waitFor(() => expect(within(group).getAllByRole('option')).toHaveLength(7))
+    expect(within(group).getByRole('option', { name: 'fixture › Elementary flows' })).toBeInTheDocument()
+    fireEvent.click(within(group).getByRole('option', { name: 'fixture › Search' }))
+    expect(go).toHaveBeenCalledWith(paths.search('fixture'))
+  })
+
   it('matches the words an item shows and the code of a process, not stray letters', async () => {
     const processes = [
       { ...system.value.processes[0], name: 'Refinería electrolítica', code: 'refinery' },
@@ -124,7 +139,7 @@ describe('palette', () => {
     renderAt(base, <Screens />)
     await waitFor(() => expect(screen.getByRole('link', { name: 'Activity' })).toBeInTheDocument())
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
-    const box = await screen.findByPlaceholderText('Go to a process, a page or a command…')
+    const box = await screen.findByPlaceholderText('Go to a process, a database, a page or a command…')
     fireEvent.change(box, { target: { value: 'refi' } })
     expect(await screen.findByRole('option', { name: /Refinería electrolítica/ })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: /Fundición/ })).toBeNull()

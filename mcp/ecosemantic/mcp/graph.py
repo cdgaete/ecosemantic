@@ -17,7 +17,8 @@ from ecosemantic.mcp.envelopes import Answer, as_uuid, bound, boundary
 from ecosemantic.model.refs import ElementaryFlowRef
 from ecosemantic.model.summary import SUMMARY_ITEMS, Summary, listed
 from ecosemantic.model.validation import SOLVABLE, anchors, validate
-from ecosemantic.ports.types import Layout, Spot, System
+from ecosemantic.ports.inventory import no_flow
+from ecosemantic.ports.types import Layout, Side, Spot, System
 from ecosemantic.routes import Route, route
 from ecosemantic.scaling import Scaled, scale
 from ecosemantic.textmap import as_text
@@ -71,10 +72,22 @@ async def _arrangement(
         for e in p.exchanges
         if isinstance(e.input, ElementaryFlowRef)
     }
-    sides = {
-        flow_id: (await context.inventory.get_elementary_flow(ref)).side
-        for flow_id, ref in flows.items()
-    }
+    by_database: dict[str, list[ElementaryFlowRef]] = {}
+    for ref in flows.values():
+        by_database.setdefault(ref.database, []).append(ref)
+    sides: dict[str, Side] = {}
+    for database, refs in by_database.items():
+        answered = {
+            flow.ref.id: flow
+            for flow in await context.inventory.get_elementary_flows(
+                database, [ref.id for ref in refs]
+            )
+        }
+        for ref in refs:
+            found = answered.get(ref.id)
+            if found is None:
+                raise no_flow(ref)
+            sides[ref.id] = found.side
     report = validate(system, system.reference_process, await held_pins(system, context.storage))
     blocking = [i for i in report.errors if i.case in SOLVABLE]
     reason = blocking[0].message if blocking else None

@@ -3,6 +3,8 @@ alone."""
 
 from __future__ import annotations
 
+from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, cast, get_args
@@ -12,14 +14,22 @@ from olca_schema.zipio import ZipReader
 
 from ecosemantic.errors import Invalid, NotSupported
 from ecosemantic.model import units
+from ecosemantic.package.canonical import (
+    UNSTATED,
+    UNSTATED_NAME,
+    Placement,
+    cas_number,
+    method_parts,
+    place,
+    unrooted_path,
+)
 from ecosemantic.package.olca import from_olca_uncertainty
 from ecosemantic.package.wholeness import makes, named_provider, provider_of, providers, treats
-from ecosemantic.ports.types import FlowType
+from ecosemantic.ports.types import side_of
 
 Key = tuple[str, str]
 Dataset = dict[str, object]
 ExchangeKind = Literal["production", "technosphere", "biosphere"]
-ELEMENTARY_ROOT = "elementary flows"
 ALLOCATED = (
     o.AllocationType.PHYSICAL_ALLOCATION,
     o.AllocationType.ECONOMIC_ALLOCATION,
@@ -47,18 +57,32 @@ class Unlinked:
 
 @dataclass(frozen=True)
 class ImportedMethod:
-    """One impact category: its key, unit and factors, and how many factors it set apart by
-    naming a location."""
+    """One impact category: its key of database, family, category and indicator, its unit and
+    factors, and how many factors it set apart by naming a location."""
 
-    key: tuple[str, str, str]
+    key: tuple[str, str, str, str]
     unit: str
     factors: list[tuple[Key, float]]
     set_apart: int = 0
 
 
 @dataclass(frozen=True)
+class ImportedWeighting:
+    """One normalisation and weighting set of a method family: its name, none where the bundle
+    names none, its weighted score unit, and a factor per category it names, as that category's
+    method key with the normalisation and the weight the bundle states for it."""
+
+    family: str
+    name: str | None
+    unit: str | None
+    factors: list[tuple[tuple[str, str, str, str], float | None, float | None]]
+
+
+@dataclass(frozen=True)
 class Import:
-    """What a package becomes: datasets, elementary flows, methods, and what could not link."""
+    """What a package becomes: datasets, elementary flows, methods, their normalisation and
+    weighting sets, what could not link, how many flows carried text that is no CAS number, and
+    the locations its processes name."""
 
     database: str
     biosphere: str
@@ -66,7 +90,10 @@ class Import:
     flows: dict[Key, Dataset]
     methods: list[ImportedMethod]
     processes: int
+    weightings: list[ImportedWeighting] = field(default_factory=list)
     unlinked: list[Unlinked] = field(default_factory=list)
+    cas_set_aside: int = 0
+    locations: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -86,26 +113,6 @@ def _ref_name(ref: o.Ref | None, what: str) -> str:
     if ref is None or ref.name is None:
         raise Invalid(f"{what} has no unit")
     return ref.name
-
-
-def _categories(path: str | None) -> tuple[str, ...]:
-    parts = [p.strip() for p in (path or "").split("/") if p.strip()]
-    if parts and parts[0].lower() == ELEMENTARY_ROOT:
-        parts = parts[1:]
-    return tuple(parts)
-
-
-def _flow_type(categories: tuple[str, ...]) -> FlowType:
-    """The type an elementary flow's top category names: openLCA's `Resource` or ecoinvent's
-    `natural resource` is a natural resource, a category named after a type is that type, and any
-    other is an emission."""
-    top = categories[0].lower() if categories else ""
-    if top.startswith("resource"):
-        return "natural resource"
-    for flow_type in get_args(FlowType):
-        if top == flow_type:
-            return flow_type
-    return "emission"
 
 
 def _distribution(process: o.Process, e: o.Exchange, flow: _Flow, factor: float) -> Dataset:
@@ -157,7 +164,10 @@ class _Reader:
             p.id: _ref_id(p.unit_group, f"flow property {p.name!r}")
             for p in reader.read_each(o.FlowProperty)
         }
-        self.locations = {loc.id: loc.code for loc in reader.read_each(o.Location)}
+        self.locations = {loc.id: (loc.code, loc.name) for loc in reader.read_each(o.Location)}
+        self.named_at: Counter[str] = Counter()
+        self.location_names: dict[str, str] = {}
+        self.shared_names: dict[str, tuple[str, str]] = {}
         self.sources = {s.id: s.url for s in reader.read_each(o.Source)}
         self.flows = {f.id: self._flow(f) for f in reader.read_each(o.Flow)}
         self.processes = [p for p in reader.read_each(o.Process) if p.id not in foreground]
@@ -166,18 +176,44 @@ class _Reader:
             self.processes, {i: f.entity.flow_type for i, f in self.flows.items()}
         )
         self.unlinked: list[Unlinked] = []
+        self.misfits: Counter[str] = Counter()
+        self.cas_set_aside = 0
+        self.listed: dict[str, list[tuple[str, o.ImpactCategory, Key]]] = {}
 
-    def _location(self, process: o.Process) -> str | None:
-        """The code of the process's location, or None when it names none. Invalid when the
-        package does not hold the location the process names."""
+    def _location(self, process: o.Process) -> str:
+        """The code of the process's location, at the reserved code when it names none. Invalid
+        when the package does not hold the location the process names, or holds it without a code
+        and a name."""
         if process.location is None:
-            return None
+            self._named(UNSTATED, UNSTATED_NAME)
+            return UNSTATED
         at = process.location.id or ""
         if at not in self.locations:
             raise Invalid(
                 f"{process.name!r} names location {at!r}, which the package does not hold"
             )
-        return self.locations[at]
+        code, name = self.locations[at]
+        if not (code or "").strip() or not (name or "").strip():
+            raise Invalid(f"{process.name!r} names location {at!r}, which has no code or no name")
+        self._named(code, name)
+        return code
+
+    def _named(self, code: str, name: str) -> None:
+        """Count the process that names a location at its code, and hold the first name the code
+        is named under and the first other name it is also named under."""
+        self.named_at[code] += 1
+        first = self.location_names.setdefault(code, name)
+        if first != name:
+            self.shared_names.setdefault(code, (first, name))
+
+    def locations_named(self) -> dict[str, str]:
+        """The locations the processes name, code to name, in code order, each code two named
+        locations share counted as a misfit once per process that names it."""
+        for code, (first, other) in self.shared_names.items():
+            self.misfits[f"location code {code!r} named {first!r} and {other!r}"] += self.named_at[
+                code
+            ]
+        return dict(sorted(self.location_names.items()))
 
     def _url(self, process: o.Process) -> dict[str, str]:
         """The dataset's publication link, when its documentation names one."""
@@ -421,33 +457,104 @@ class _Reader:
         ]
 
     def biosphere_flows(self) -> dict[Key, Dataset]:
-        """The elementary flows as biosphere datasets."""
+        """The elementary flows as biosphere datasets, each placed in a compartment of the closed
+        vocabulary, with its CAS number where the field holds one and the text as published where
+        it does not. A flow whose category no rule places, or whose placement names no side, is a
+        misfit and left out; so is every flow of a name placed together from two different
+        paths."""
         out: dict[Key, Dataset] = {}
+        shared: dict[tuple[str | None, str, str | None], list[str]] = {}
         for flow in self.flows.values():
             if flow.entity.flow_type != o.FlowType.ELEMENTARY_FLOW:
                 continue
-            categories = _categories(flow.entity.category)
+            path = unrooted_path(flow.entity.category)
+            placement = place(flow.entity.category)
+            if placement is None:
+                self.misfits[f"compartment {path!r}"] += 1
+                continue
+            if not self._names_a_side(placement):
+                continue
+            number, published = cas_number(flow.entity.cas)
+            if published is not None:
+                self.cas_set_aside += 1
+            shared.setdefault(
+                (flow.entity.name, placement.compartment, placement.sub_compartment), []
+            ).append(path)
             out[(self.biosphere, flow.entity.id)] = {
                 "name": flow.entity.name,
                 "unit": flow.stored.name,
-                "categories": categories,
-                "type": _flow_type(categories),
-                "CAS number": flow.entity.cas,
+                "compartment": placement.compartment,
+                "sub_compartment": placement.sub_compartment,
+                "type": placement.flow_type,
+                "CAS number": number,
+                "CAS as published": published,
                 "synonyms": list(flow.entity.synonyms or []),
             }
+        self._refuse_shared_names(shared)
         return out
 
+    def _names_a_side(self, placement: Placement) -> bool:
+        """Whether the flow's type and sub-compartment name a side; a pair the table does not name
+        is counted as a misfit."""
+        if side_of(placement.flow_type, placement.sub_compartment) is not None:
+            return True
+        self.misfits[
+            f"{placement.flow_type} flow in {placement.compartment}/"
+            f"{placement.sub_compartment} names no side"
+        ] += 1
+        return False
+
+    def _refuse_shared_names(
+        self, shared: Mapping[tuple[str | None, str, str | None], list[str]]
+    ) -> None:
+        """Count each flow of a name placed in one compartment and sub-compartment from more than
+        one category path, so the mapping that put them together is refused."""
+        for (name, _compartment, _sub), paths in shared.items():
+            if len(set(paths)) < 2:
+                continue
+            first = paths[0]
+            other = next(path for path in paths if path != first)
+            for _ in paths:
+                self.misfits[
+                    f"flows named {name!r} placed together from {first!r} and {other!r}"
+                ] += 1
+
+    def _categories(
+        self, family: str, method: o.ImpactMethod
+    ) -> list[tuple[str, o.ImpactCategory, Key]]:
+        """Each category a method lists, its id, the category itself and the key it is registered
+        under, in the method's order; a category whose name holds no indicator is counted as a
+        misfit and left out, and a reference the package does not hold is refused."""
+        if method.id is not None and method.id in self.listed:
+            return self.listed[method.id]
+        found: list[tuple[str, o.ImpactCategory, Key]] = []
+        for ref in method.impact_categories or []:
+            category_id = _ref_id(ref, family)
+            category = self.reader.read(o.ImpactCategory, category_id)
+            if category is None:
+                raise Invalid(f"method {family!r} names a category the package lacks")
+            named, indicator = method_parts(category.name or "")
+            if not named.strip() or not indicator.strip():
+                self.misfits[f"category without a name in {family!r}"] += 1
+                continue
+            found.append((category_id, category, (self.database, family, named, indicator)))
+        if method.id is not None:
+            self.listed[method.id] = found
+        return found
+
     def methods(self) -> list[ImportedMethod]:
-        """Every impact category of every method, its factors in canonical units. A factor that
-        names a location is set apart and counted, and the category applies the factor without a
-        location to every process; a flow the category characterises only with factors that name
-        a location has no factor to apply and is not supported."""
+        """Every impact category of every method, its factors in canonical units. A method whose
+        name is blank and a category whose category or indicator is blank are counted as misfits
+        and left out. A factor that names a location is set apart and counted, and the category
+        applies the factor without a location to every process; a flow the category characterises
+        only with factors that name a location has no factor to apply and is not supported."""
         out: list[ImportedMethod] = []
         for method in self.reader.read_each(o.ImpactMethod):
-            for ref in method.impact_categories or []:
-                category = self.reader.read(o.ImpactCategory, _ref_id(ref, method.name or ""))
-                if category is None:
-                    raise Invalid(f"method {method.name!r} names a category the package lacks")
+            family = method.name or ""
+            if not family.strip():
+                self.misfits[f"method without a family in {self.database}"] += 1
+                continue
+            for _category_id, category, key in self._categories(family, method):
                 owner = f"a factor of {category.name!r}"
                 factors: list[tuple[Key, float]] = []
                 located: dict[Key, str] = {}
@@ -459,23 +566,23 @@ class _Reader:
                             f"{category.name!r} gives {flow.entity.name!r} in flow property "
                             f"{_ref_name(f.flow_property, owner)!r}, not its reference property"
                         )
-                    key = (self.biosphere, flow.entity.id)
+                    at_flow = (self.biosphere, flow.entity.id)
                     if f.location is not None:
-                        located.setdefault(key, flow.entity.name)
+                        located.setdefault(at_flow, flow.entity.name)
                         set_apart += 1
                         continue
                     unit = units.by_symbol(_ref_name(f.unit, owner))
-                    factors.append((key, float(f.value or 0.0) / unit.factor))
-                applied = {key for key, _ in factors}
-                for key, flow_name in located.items():
-                    if key not in applied:
+                    factors.append((at_flow, float(f.value or 0.0) / unit.factor))
+                applied = {flow_key for flow_key, _ in factors}
+                for flow_key, flow_name in located.items():
+                    if flow_key not in applied:
                         raise NotSupported(
-                            f"{method.name or ''!r} > {category.name or ''!r} characterises "
+                            f"{family!r} > {category.name!r} characterises "
                             f"{flow_name!r} only with factors that name a location"
                         )
                 out.append(
                     ImportedMethod(
-                        key=(self.database, method.name or "", category.name or ""),
+                        key=key,
                         unit=category.ref_unit or "",
                         factors=factors,
                         set_apart=set_apart,
@@ -483,24 +590,78 @@ class _Reader:
                 )
         return out
 
+    def weightings(self) -> list[ImportedWeighting]:
+        """Every normalisation and weighting set of every method, each factor the method key of
+        the category it names with that category's normalisation and weight, and the set's name,
+        none of them where the bundle states none, in the bundle's order of families, sets and
+        factors. A factor naming a category its family does not list is counted as a misfit, once
+        per factor."""
+        out: list[ImportedWeighting] = []
+        for method in self.reader.read_each(o.ImpactMethod):
+            family = method.name or ""
+            if not family.strip():
+                continue
+            keys = {
+                category_id: key for category_id, _category, key in self._categories(family, method)
+            }
+            for nw_set in method.nw_sets or []:
+                name = nw_set.name
+                factors: list[tuple[tuple[str, str, str, str], float | None, float | None]] = []
+                for f in nw_set.factors or []:
+                    category_id = _ref_id(
+                        f.impact_category, f"weighting set {name!r} of {family!r}"
+                    )
+                    key = keys.get(category_id)
+                    if key is None:
+                        self.misfits[
+                            f"weighting set {name!r} of {family!r} names a category the family "
+                            "lacks"
+                        ] += 1
+                        continue
+                    factors.append((key, f.normalisation_factor, f.weighting_factor))
+                out.append(
+                    ImportedWeighting(
+                        family=family,
+                        name=name,
+                        unit=nw_set.weighted_score_unit,
+                        factors=factors,
+                    )
+                )
+        return out
+
 
 def read_background(path: Path, name: str, *, foreground: frozenset[str]) -> Import:
     """Read an openLCA package into the datasets, flows and methods of a database called name;
-    the processes named in foreground install nothing."""
+    the processes named in foreground install nothing, and a package that does not fit the
+    canonical shape is refused."""
     with ZipReader(str(path)) as reader:
         state = _Reader(reader, name, foreground)
         datasets: dict[Key, Dataset] = {}
         for process in state.processes:
             datasets.update(state.datasets(process))
-        return Import(
+        imported = Import(
             database=name,
             biosphere=state.biosphere,
             datasets=datasets,
             flows=state.biosphere_flows(),
             methods=state.methods(),
             processes=len(state.processes),
+            weightings=state.weightings(),
             unlinked=state.unlinked,
+            cas_set_aside=state.cas_set_aside,
+            locations=state.locations_named(),
         )
+        require_canonical(name, state.misfits)
+    return imported
+
+
+def require_canonical(name: str, misfits: Mapping[str, int]) -> None:
+    """Invalid while the import holds anything the canonical shape does not, naming each misfit
+    and how many rows carry it."""
+    if not misfits:
+        return
+    found = "; ".join(f"{what} ({count} rows)" for what, count in sorted(misfits.items()))
+    raise Invalid(f"{name} does not fit the canonical shape: {found}")
 
 
 def require_linked(imported: Import) -> None:

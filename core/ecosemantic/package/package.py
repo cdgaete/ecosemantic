@@ -8,11 +8,12 @@ from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 
+from ecosemantic.compute.parameters import refuse_double_spread, require_centred
 from ecosemantic.errors import Conflict, Invalid
 from ecosemantic.model.canonical import content_hash
 from ecosemantic.model.entities import Actor, ProductSystem
 from ecosemantic.package.jsonld import BASE_TAG, Stated, read_jsonld, stated_base, write_jsonld
-from ecosemantic.package.log import next_entry, read_log, refuse_base, write_log
+from ecosemantic.package.log import changes_nothing, next_entry, read_log, refuse_base, write_log
 from ecosemantic.package.sidecar import (
     SIDECAR_DIR,
     ActivityRecord,
@@ -109,6 +110,43 @@ def write_package(
     return entry
 
 
+def _refuse_drifted_spreads(before: ProductSystem, after: ProductSystem) -> None:
+    """Nothing, or Invalid naming each parameter and exchange the return changed whose
+    distribution is not centred on the value it now carries. A distribution the return leaves as
+    it was written is taken as it stands, wherever its centre lies."""
+    written_parameters = {p.name: p for p in before.parameters}
+    for parameter in after.parameters:
+        stored = written_parameters.get(parameter.name)
+        unchanged = stored is not None and (
+            parameter.value == stored.value
+            and parameter.formula == stored.formula
+            and parameter.uncertainty == stored.uncertainty
+        )
+        if unchanged or parameter.uncertainty is None:
+            continue
+        require_centred(
+            parameter.uncertainty,
+            float(parameter.value or 0.0),
+            f"parameter {parameter.name!r}",
+        )
+    written_exchanges = {e.id: e for process in before.processes for e in process.exchanges}
+    for process in after.processes:
+        for exchange in process.exchanges:
+            stored = written_exchanges.get(exchange.id)
+            unchanged = stored is not None and (
+                exchange.amount == stored.amount
+                and exchange.formula == stored.formula
+                and exchange.uncertainty == stored.uncertainty
+            )
+            if unchanged or exchange.uncertainty is None:
+                continue
+            require_centred(
+                exchange.uncertainty,
+                exchange.amount,
+                f"exchange {after.exchange_named(exchange.id)}",
+            )
+
+
 def write_returned(
     exported_root: Path,
     root: Path,
@@ -117,11 +155,14 @@ def write_returned(
     linked: Mapping[uuid.UUID, ProductSystem] | None = None,
     now: datetime | None = None,
     at_entry: int | None = None,
-) -> LogEntry:
-    """Store the package openLCA exported over the retained one; one entry sourced openlca. The
+) -> LogEntry | None:
+    """Store the package openLCA exported over the retained one; one entry sourced openlca, or
+    None and no entry for an export that is the stored state in every field but its hash. The
     export was taken at the log entry `at_entry` states, or else the one its base tag names;
     Invalid when neither names one, and Conflict for an entry the log does not hold at that
-    hash and for any write since it."""
+    hash and for any write since it. Invalid too for a returned document that gives an amount a
+    second spread and for a parameter or exchange it changes whose distribution is not centred on
+    the value it now carries."""
     before, log = read_package(root)
     last = log[-1].seq
     exported_at = at_entry
@@ -146,6 +187,10 @@ def write_returned(
             f"it is at entry #{last}"
         )
     after = read_jsonld(exported_root, read_sidecar(root))
+    refuse_double_spread(after)
+    _refuse_drifted_spreads(before, after)
+    if changes_nothing(before, after):
+        return None
     return write_package(
         after.model_copy(update={"hash": before.hash}),
         root,

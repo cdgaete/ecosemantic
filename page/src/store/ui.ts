@@ -18,11 +18,20 @@ export interface ChosenEntry {
 }
 
 export type InspectorMode = 'open' | 'widened' | 'closed'
+export type SheetKind = 'explorer' | 'results'
+export interface Offset {
+  x: number
+  y: number
+}
 
 interface UiState {
   theme: Theme
   person: string | null
   inspector: InspectorMode
+  inspectorWidth: number | null
+  timelineOpen: boolean
+  toolsOffset: Offset | null
+  origins: Record<SheetKind, string | null>
   sheetOpen: boolean
   toolsOpen: boolean
   navOpen: boolean
@@ -38,6 +47,8 @@ interface UiState {
   seen: Record<string, number>
   since: Record<string, number>
   collapsed: Record<string, boolean>
+  navDatabases: Record<string, boolean>
+  resultCategories: Record<string, string>
   explorerSchemes: Record<string, string>
   formulaValues: boolean
   scaledView: boolean
@@ -45,6 +56,10 @@ interface UiState {
   setTheme: (theme: Theme) => void
   setPerson: (person: string) => void
   setInspector: (mode: InspectorMode) => void
+  setInspectorWidth: (width: number | null) => void
+  setTimelineOpen: (open: boolean) => void
+  setToolsOffset: (offset: Offset | null) => void
+  setOrigin: (kind: SheetKind, address: string | null) => void
   setSheetOpen: (open: boolean) => void
   setToolsOpen: (open: boolean) => void
   setNavOpen: (open: boolean) => void
@@ -63,10 +78,12 @@ interface UiState {
   unpin: (id: string) => void
   unpinWhere: (test: (tab: EditorTab) => boolean) => void
   toggleSection: (key: string) => void
+  toggleNavDatabase: (name: string) => void
   setFormulaValues: (shown: boolean) => void
   setScaledView: (scaled: boolean) => void
   setMinimapOpen: (open: boolean) => void
   setExplorerScheme: (database: string, scheme: string) => void
+  setResultCategory: (systemId: string, methodId: string) => void
 }
 
 const THEME_OF_VERSION_1 = { cobalt: 'light', ecosemantic: 'dark', openlca: 'light' } as const satisfies Record<string, Theme>
@@ -115,6 +132,10 @@ export const useUi = create<UiState>()(
       theme: 'light',
       person: null,
       inspector: 'open',
+      inspectorWidth: null,
+      timelineOpen: true,
+      toolsOffset: null,
+      origins: { explorer: null, results: null },
       sheetOpen: false,
       toolsOpen: false,
       navOpen: false,
@@ -130,6 +151,8 @@ export const useUi = create<UiState>()(
       seen: {},
       since: {},
       collapsed: {},
+      navDatabases: {},
+      resultCategories: {},
       explorerSchemes: {},
       formulaValues: false,
       scaledView: true,
@@ -140,6 +163,10 @@ export const useUi = create<UiState>()(
       },
       setPerson: (person) => set({ person }),
       setInspector: (inspector) => set({ inspector }),
+      setInspectorWidth: (inspectorWidth) => set({ inspectorWidth }),
+      setTimelineOpen: (timelineOpen) => set({ timelineOpen }),
+      setToolsOffset: (toolsOffset) => set({ toolsOffset }),
+      setOrigin: (kind, address) => set((state) => ({ origins: { ...state.origins, [kind]: address } })),
       setSheetOpen: (open) => set(open ? { sheetOpen: true, toolsOpen: false } : { sheetOpen: false }),
       setToolsOpen: (open) => set(open ? { toolsOpen: true, sheetOpen: false } : { toolsOpen: false }),
       setNavOpen: (navOpen) => set({ navOpen }),
@@ -175,10 +202,12 @@ export const useUi = create<UiState>()(
       unpin: (id) => set((state) => ({ pinned: state.pinned.filter((p) => p.id !== id) })),
       unpinWhere: (test) => set((state) => ({ pinned: state.pinned.filter((p) => !test(p)) })),
       toggleSection: (key) => set((state) => ({ collapsed: { ...state.collapsed, [key]: !state.collapsed[key] } })),
+      toggleNavDatabase: (name) => set((state) => ({ navDatabases: { ...state.navDatabases, [name]: !state.navDatabases[name] } })),
       setFormulaValues: (shown) => set({ formulaValues: shown }),
       setScaledView: (scaledView) => set({ scaledView }),
       setMinimapOpen: (open) => set({ minimapOpen: open }),
       setExplorerScheme: (database, scheme) => set((state) => ({ explorerSchemes: { ...state.explorerSchemes, [database]: scheme } })),
+      setResultCategory: (systemId, methodId) => set((state) => ({ resultCategories: { ...state.resultCategories, [systemId]: methodId } })),
     }),
     {
       name: 'ecosemantic-page',
@@ -189,9 +218,14 @@ export const useUi = create<UiState>()(
         theme: state.theme,
         person: state.person,
         inspector: state.inspector,
+        inspectorWidth: state.inspectorWidth,
+        timelineOpen: state.timelineOpen,
+        toolsOffset: state.toolsOffset,
         pinned: state.pinned,
         seen: state.seen,
         collapsed: state.collapsed,
+        navDatabases: state.navDatabases,
+        resultCategories: state.resultCategories,
         explorerSchemes: state.explorerSchemes,
         formulaValues: state.formulaValues,
         minimapOpen: state.minimapOpen,

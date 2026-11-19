@@ -12,6 +12,7 @@ from olca_schema.zipio import ZipReader
 from ecosemantic.errors import Invalid, NotSupported
 from ecosemantic.model.entities import Uncertainty
 from ecosemantic.package.background import Import, exchange_refusal, read_background
+from ecosemantic.package.canonical import UNSTATED, UNSTATED_NAME
 from tests.openlca_fixture import (
     FLOW_IDS,
     FLOWS,
@@ -19,7 +20,13 @@ from tests.openlca_fixture import (
     MISSING_LOCATION,
     MISSING_PROVIDER,
     NAME,
+    NORMALISATION,
+    NORMALISATION_SET,
     PROCESSES,
+    PUBLISHER_FLOW_IDS,
+    WEIGHTS,
+    WEIGHTS_SET,
+    WEIGHTS_UNIT,
     build_package,
 )
 
@@ -176,11 +183,119 @@ def test_a_process_reads_its_category_then_its_tags_as_classifications(tmp_path:
 
 def test_elementary_flows_carry_compartment_type_and_cas(imported: Import) -> None:
     co2 = imported.flows[(f"{NAME}-biosphere", FLOW_IDS["co2"])]
-    assert co2["categories"] == ("Emissions to air", "unspecified") and co2["type"] == "emission"
+    assert (co2["compartment"], co2["sub_compartment"], co2["type"]) == (
+        "air",
+        "unspecified",
+        "emission",
+    )
+    assert "categories" not in co2
     assert co2["unit"] == "kilogram" and co2["CAS number"] == "124-38-9"
     water = imported.flows[(f"{NAME}-biosphere", FLOW_IDS["water"])]
-    assert water["categories"] == ("Resources", "in water")
+    assert (water["compartment"], water["sub_compartment"]) == ("natural resource", "in water")
     assert water["type"] == "natural resource" and water["unit"] == "cubic meter"
+
+
+def _placed(imported: Import, flow_id: str) -> tuple[object, object, object]:
+    flow = imported.flows[(f"{NAME}-biosphere", flow_id)]
+    return (flow["compartment"], flow["sub_compartment"], flow["type"])
+
+
+def test_a_flow_of_each_publisher_vocabulary_is_placed(tmp_path: Path) -> None:
+    imported = read_background(
+        build_package(tmp_path / "publishers.zip", publisher_flows=True),
+        NAME,
+        foreground=frozenset(),
+    )
+    assert _placed(imported, PUBLISHER_FLOW_IDS["nox"]) == ("air", "unspecified", "emission")
+    assert _placed(imported, PUBLISHER_FLOW_IDS["dust"]) == (
+        "air",
+        "troposphere, rural",
+        "emission",
+    )
+    assert _placed(imported, PUBLISHER_FLOW_IDS["ore"]) == (
+        "natural resource",
+        "ground",
+        "natural resource",
+    )
+    assert _placed(imported, PUBLISHER_FLOW_IDS["wages"]) == (
+        "economic",
+        "unspecified",
+        "economic",
+    )
+    assert _placed(imported, FLOW_IDS["co2"]) == ("air", "unspecified", "emission")
+    assert _placed(imported, FLOW_IDS["water"]) == (
+        "natural resource",
+        "in water",
+        "natural resource",
+    )
+
+
+def test_cas_numbers_are_read_canonical(tmp_path: Path) -> None:
+    imported = read_background(
+        build_package(
+            tmp_path / "cas.zip",
+            extra_flows={"digit": ("Wages", "Elementary flows/Economic/unspecified")},
+            cas={
+                "co2": "000124-38-9",
+                "water": "7732-18-5",
+                "ch4": "n.a.",
+                "digit": "7732190",
+            },
+        ),
+        NAME,
+        foreground=frozenset(),
+    )
+    flows = {flow["name"]: flow for flow in imported.flows.values()}
+    answers = {name: (flow["CAS number"], flow["CAS as published"]) for name, flow in flows.items()}
+    assert answers == {
+        "Carbon dioxide, fossil": ("124-38-9", None),
+        "Methane, fossil": (None, "n.a."),
+        "Water, river": ("7732-18-5", None),
+        "Wages": (None, "7732190"),
+    }
+    assert imported.cas_set_aside == 2
+
+
+def test_an_unknown_compartment_refuses_the_import_naming_it_and_its_count(
+    tmp_path: Path,
+) -> None:
+    package = build_package(
+        tmp_path / "social.zip",
+        extra_flows={
+            "land": ("Land use, social", "Elementary flows/Social issues/unspecified"),
+            "noise": ("Noise, social", "Elementary flows/Social issues/unspecified"),
+        },
+    )
+    with pytest.raises(Invalid) as raised:
+        read_background(package, NAME, foreground=frozenset())
+    assert "compartment 'Social issues/unspecified' (2 rows)" in str(raised.value)
+
+
+def test_two_paths_placed_together_refuse_the_import(tmp_path: Path) -> None:
+    package = build_package(
+        tmp_path / "smoke.zip",
+        extra_flows={
+            "smoke_emission": ("Smoke", "Elementary flows/emission/air/troposphere/rural"),
+            "smoke_air": ("Smoke", "Elementary flows/air/troposphere, rural"),
+        },
+    )
+    with pytest.raises(Invalid) as raised:
+        read_background(package, NAME, foreground=frozenset())
+    assert "flows named 'Smoke' placed together" in str(raised.value)
+
+
+def test_an_indicator_flow_whose_sub_compartment_names_no_side_refuses_the_import(
+    tmp_path: Path,
+) -> None:
+    package = build_package(
+        tmp_path / "indicator.zip",
+        extra_flows={"jobs": ("Jobs", "Elementary flows/inventory indicator/unspecified")},
+    )
+    with pytest.raises(Invalid) as raised:
+        read_background(package, NAME, foreground=frozenset())
+    assert "inventory indicator flow in inventory indicator/unspecified names no side" in str(
+        raised.value
+    )
 
 
 def test_an_elementary_flow_takes_its_type_from_its_top_category(tmp_path: Path) -> None:
@@ -213,28 +328,85 @@ def test_an_elementary_flow_takes_its_type_from_its_top_category(tmp_path: Path)
 
 def test_methods_carry_factors_in_canonical_units(imported: Import) -> None:
     by_key = {m.key: m for m in imported.methods}
-    climate = by_key[(NAME, METHOD, "climate change")]
+    climate = by_key[(NAME, METHOD, "climate change", "climate change")]
     assert climate.unit == "kg CO2-Eq"
     assert dict(climate.factors) == {
         (f"{NAME}-biosphere", FLOW_IDS["co2"]): pytest.approx(1.0),
         (f"{NAME}-biosphere", FLOW_IDS["ch4"]): pytest.approx(28.0),
     }
-    assert dict(by_key[(NAME, METHOD, "water use")].factors) == {
+    assert dict(by_key[(NAME, METHOD, "water use", "water use")].factors) == {
         (f"{NAME}-biosphere", FLOW_IDS["water"]): pytest.approx(1.0)
     }
+
+
+def test_an_openlca_category_is_both_category_and_indicator(imported: Import) -> None:
+    keys = {m.key for m in imported.methods}
+    assert keys == {
+        (NAME, METHOD, "climate change", "climate change"),
+        (NAME, METHOD, "water use", "water use"),
+    }
+    assert imported.weightings == []
+
+
+def _category_keys() -> list[tuple[str, str, str, str]]:
+    """The method key of each category the fixture's method lists, in its order."""
+    return [
+        (NAME, METHOD, "climate change", "climate change"),
+        (NAME, METHOD, "water use", "water use"),
+    ]
+
+
+def test_a_family_reads_its_weighting_sets_as_the_bundle_states_them(tmp_path: Path) -> None:
+    imported = read_background(
+        build_package(tmp_path / "p.zip", weighting_sets=True), NAME, foreground=frozenset()
+    )
+    weighted, normalised, unnamed = imported.weightings
+    assert (weighted.family, weighted.name, weighted.unit) == (METHOD, WEIGHTS_SET, WEIGHTS_UNIT)
+    assert weighted.factors == [(key, None, WEIGHTS[key[2]]) for key in _category_keys()]
+    assert (normalised.family, normalised.name, normalised.unit) == (
+        METHOD,
+        NORMALISATION_SET,
+        None,
+    )
+    assert normalised.factors == [(key, NORMALISATION[key[2]], None) for key in _category_keys()]
+    assert (unnamed.family, unnamed.name, unnamed.unit, unnamed.factors) == (METHOD, None, None, [])
+
+
+def test_a_factor_naming_a_foreign_category_refuses_the_import(tmp_path: Path) -> None:
+    package = build_package(tmp_path / "p.zip", weighting_sets=True, bad_weighting=True)
+    with pytest.raises(Invalid) as refused:
+        read_background(package, NAME, foreground=frozenset())
+    assert str(refused.value) == (
+        f"{NAME} does not fit the canonical shape: weighting set {WEIGHTS_SET!r} of "
+        f"{METHOD!r} names a category the family lacks (1 rows)"
+    )
 
 
 def test_a_factor_naming_a_location_is_set_apart(tmp_path: Path) -> None:
     imported = read_background(
         build_package(tmp_path / "p.zip", regional=True), NAME, foreground=frozenset()
     )
-    climate = {m.key: m for m in imported.methods}[(NAME, METHOD, "climate change")]
+    climate = {m.key: m for m in imported.methods}[
+        (NAME, METHOD, "climate change", "climate change")
+    ]
     assert dict(climate.factors) == {
         (f"{NAME}-biosphere", FLOW_IDS["co2"]): pytest.approx(1.0),
         (f"{NAME}-biosphere", FLOW_IDS["ch4"]): pytest.approx(28.0),
     }
     assert climate.set_apart == 1
-    assert {m.key: m for m in imported.methods}[(NAME, METHOD, "water use")].set_apart == 0
+    assert {m.key: m for m in imported.methods}[
+        (NAME, METHOD, "water use", "water use")
+    ].set_apart == 0
+
+
+def test_a_method_without_a_family_refuses_the_import(tmp_path: Path) -> None:
+    package = build_package(tmp_path / "nameless.zip", nameless_method=True)
+    with pytest.raises(Invalid) as refused:
+        read_background(package, NAME, foreground=frozenset())
+    message = str(refused.value)
+    assert "does not fit the canonical shape" in message
+    assert "method without a family" in message
+    assert "(1 rows)" in message
 
 
 def test_a_flow_characterised_only_at_locations_is_not_supported(tmp_path: Path) -> None:
@@ -386,3 +558,60 @@ def test_a_process_naming_a_location_the_package_lacks_is_invalid(tmp_path: Path
         read_background(package, NAME, foreground=frozenset())
     assert "steel production" in str(caught.value)
     assert MISSING_LOCATION in str(caught.value)
+
+
+def test_a_process_without_a_location_is_located_unstated(tmp_path: Path) -> None:
+    package = build_package(tmp_path / "package.zip", no_location=True)
+    imported = read_background(package, NAME, foreground=frozenset())
+    assert {str(dataset["location"]) for dataset in imported.datasets.values()} == {UNSTATED}
+    assert imported.locations == {UNSTATED: UNSTATED_NAME}
+
+
+def test_the_import_holds_the_locations_the_processes_name_only(tmp_path: Path) -> None:
+    package = build_package(tmp_path / "package.zip", regional=True)
+    imported = read_background(package, NAME, foreground=frozenset())
+    assert imported.locations == {"GLO": "Global"}
+
+
+def test_a_code_two_used_locations_share_refuses_the_import(tmp_path: Path) -> None:
+    package = build_package(tmp_path / "package.zip", shared_code_used=True)
+    with pytest.raises(Invalid) as caught:
+        read_background(package, NAME, foreground=frozenset())
+    assert "location code 'NA' named 'Namibia' and 'Northern Appalachia' (2 rows)" in str(
+        caught.value
+    )
+
+
+def test_two_locations_of_one_code_no_process_names_install(tmp_path: Path) -> None:
+    package = build_package(tmp_path / "package.zip", shared_code=True)
+    imported = read_background(package, NAME, foreground=frozenset())
+    assert imported.locations == {"GLO": "Global"}
+
+
+def test_a_package_out_of_shape_is_refused_or_brought_into_it(tmp_path: Path) -> None:
+    social = {"social": ("Social cost of carbon", "Elementary flows/Social issues/unspecified")}
+    refused = build_package(
+        tmp_path / "refused.zip",
+        extra_flows=social,
+        unmapped_category=True,
+        no_location=True,
+        cas={"co2": "000124-38-9", "ch4": "n.a."},
+    )
+    with pytest.raises(Invalid) as caught:
+        read_background(refused, NAME, foreground=frozenset())
+    assert str(caught.value) == (
+        f"{NAME} does not fit the canonical shape: compartment 'Social issues/unspecified' (1 rows)"
+    )
+    installed = build_package(
+        tmp_path / "installed.zip",
+        unmapped_category=True,
+        no_location=True,
+        cas={"co2": "000124-38-9", "ch4": "n.a."},
+    )
+    imported = read_background(installed, NAME, foreground=frozenset())
+    assert (NAME, METHOD, "land use", "land use") in {m.key for m in imported.methods}
+    flows = {code: flow for (_, code), flow in imported.flows.items()}
+    assert flows[FLOW_IDS["co2"]]["CAS number"] == "124-38-9"
+    assert flows[FLOW_IDS["ch4"]]["CAS number"] is None
+    assert flows[FLOW_IDS["ch4"]]["CAS as published"] == "n.a."
+    assert {str(dataset["location"]) for dataset in imported.datasets.values()} == {UNSTATED}

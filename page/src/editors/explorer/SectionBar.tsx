@@ -1,19 +1,23 @@
-import { useSummary } from '@/api/queries'
-import { formatAmount } from '@/lib/format'
+import { useDatabases, useSummary } from '@/api/queries'
+import { formatAmount, formatRelease } from '@/lib/format'
 import { paths, type ExplorerSection } from '@/lib/paths'
 import { AppLink } from '@/lib/router'
 import { cn } from '@/lib/utils'
 import { Icon } from '@/window/Icon'
+import { DatabaseSearch } from './DatabaseSearch'
 import { SECTIONS } from './sections'
 
 export function SectionBar({ name, section }: { name: string; section: ExplorerSection }) {
   const summary = useSummary(name)
+  const databases = useDatabases()
   const counts = summary.data?.value
+  const held = databases.data?.value.find((database) => database.name === name)
   return (
     <header className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-b bg-chrome px-3 py-1.5">
       <h1 className="flex min-w-0 items-center gap-1.5 text-sm font-semibold [overflow-wrap:anywhere]">
         <Icon name="database" />
         {name}
+        {held === undefined ? null : <span className="text-xs font-normal text-muted-foreground">{formatRelease(held)}</span>}
       </h1>
       <nav aria-label="Sections" className="flex min-w-0 flex-wrap items-center gap-1">
         {SECTIONS.map((entry) => (
@@ -32,6 +36,7 @@ export function SectionBar({ name, section }: { name: string; section: ExplorerS
           </AppLink>
         ))}
       </nav>
+      <DatabaseSearch name={name} section={section} />
     </header>
   )
 }

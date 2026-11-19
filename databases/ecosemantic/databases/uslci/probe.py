@@ -9,6 +9,7 @@ import zipfile
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 import olca_schema as o
@@ -108,7 +109,14 @@ def _unlinked(inventory: Path, methods: Sequence[Path], bridged: Sequence[Path])
     with tempfile.TemporaryDirectory(prefix="ecosemantic-uslci-probe-") as directory:
         try:
             built = build(
-                inventory, methods, version="probe", out_dir=Path(directory), bridged=bridged
+                inventory,
+                methods,
+                version="probe",
+                out_dir=Path(directory),
+                revision=1,
+                corrections=(),
+                now=datetime.now(UTC),
+                bridged=bridged,
             )
         except EcoSemanticError as error:
             return _Unlinked(

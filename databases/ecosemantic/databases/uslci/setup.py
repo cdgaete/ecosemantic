@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 import olca_schema as o
@@ -13,9 +14,10 @@ from olca_schema.zipio import ZipReader
 
 from ecosemantic.databases.lists import read_unlinked
 from ecosemantic.databases.prepared import PreparedRelease
+from ecosemantic.databases.revision import listed_corrections
 from ecosemantic.databases.uslci.build import build
 from ecosemantic.databases.uslci.download import Commons, download
-from ecosemantic.databases.uslci.profile import Pin, Profile, recorded
+from ecosemantic.databases.uslci.profile import RELEASES, Pin, Profile, recorded
 from ecosemantic.databases.uslci.validate import list_mismatches
 from ecosemantic.errors import Invalid
 from ecosemantic.ports.types import InstallProgress, Reporter
@@ -75,7 +77,14 @@ def prepare(profile: Profile, server: Commons, work: Path, report: Reporter) -> 
     report(InstallProgress(step="downloaded", count=sum(path.stat().st_size for path in fetched)))
     report(InstallProgress(step="building"))
     built = build(
-        files.inventory, files.methods, version=profile.version, out_dir=work, bridged=files.bridged
+        files.inventory,
+        files.methods,
+        version=profile.version,
+        out_dir=work,
+        revision=profile.revision,
+        corrections=listed_corrections(RELEASES, profile.corrections),
+        now=datetime.now(UTC),
+        bridged=files.bridged,
     )
     report(InstallProgress(step="checking"))
     mismatches = list_mismatches(built.imported, built.left_out, profile)

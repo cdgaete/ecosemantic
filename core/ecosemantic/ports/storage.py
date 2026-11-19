@@ -70,9 +70,10 @@ class StoragePort(Protocol):
         exported_root: Path,
         actor: Actor,
         at_entry: int | None = None,
-    ) -> LogEntry:
+    ) -> LogEntry | None:
         """Store an export openLCA returns over the stored system, as of the log entry
-        `at_entry` states or its base tag names."""
+        `at_entry` states or its base tag names; None, and no entry, for an export that changes
+        nothing."""
         ...
 
     async def export_package(self, product_system_id: uuid.UUID, destination: Path) -> None:

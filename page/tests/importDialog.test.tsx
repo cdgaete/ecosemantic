@@ -44,14 +44,27 @@ describe('import dialog', () => {
   it('posts an openLCA package with the entry the person says it was exported at', async () => {
     vi.mocked(api.returnPackage).mockResolvedValue(entry)
     renderAt('/', <ImportDialog systemId="s1" format="openlca" onClose={() => undefined} />)
-    fireEvent.change(screen.getByLabelText('Exported at entry (optional)'), { target: { value: '12' } })
+    fireEvent.change(screen.getByLabelText("Number of the system's last entry (optional)"), { target: { value: '12' } })
     choose()
     await waitFor(() => expect(api.returnPackage).toHaveBeenCalledWith('s1', zip, 'Carlos', '12'))
   })
 
+  it('says a return that changes nothing wrote nothing', async () => {
+    vi.mocked(api.returnTables).mockResolvedValue({ message: 'The returned folder changes nothing; no entry was written.' })
+    renderAt('/', <ImportDialog systemId="s1" format="tables" onClose={() => undefined} />)
+    choose()
+    await waitFor(() => expect(screen.getByText('The returned folder changes nothing; no entry was written.')).toBeInTheDocument())
+    expect(screen.queryByText(/Imported as entry/)).toBeNull()
+  })
+
   it('asks for the exported entry on an openLCA package alone', () => {
     renderAt('/', <ImportDialog systemId="s1" format="tables" onClose={() => undefined} />)
-    expect(screen.queryByLabelText('Exported at entry (optional)')).toBeNull()
+    expect(screen.queryByLabelText("Number of the system's last entry (optional)")).toBeNull()
+  })
+
+  it('labels the entry it asks for by the number it takes', () => {
+    renderAt('/', <ImportDialog systemId="s1" format="openlca" onClose={() => undefined} />)
+    expect(screen.getByLabelText("Number of the system's last entry (optional)")).toBeInTheDocument()
   })
 
   it('draws a refusal cell by cell', async () => {

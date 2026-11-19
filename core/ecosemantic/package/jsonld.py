@@ -22,6 +22,7 @@ from ecosemantic.model.entities import (
     Parameter,
     Process,
     ProductSystem,
+    Uncertainty,
 )
 from ecosemantic.model.refs import (
     BackgroundRef,
@@ -37,6 +38,8 @@ from ecosemantic.model.refs import (
 from ecosemantic.model.validation import linked_reference
 from ecosemantic.package.olca import (
     WrittenLognormal,
+    bounded,
+    bounds_of,
     from_olca_uncertainty,
     to_olca_uncertainty,
 )
@@ -187,11 +190,11 @@ class UnitTable:
         return [*self.groups.values(), *self.properties.values()]
 
 
-def location_entity(code: str) -> tuple[o.Ref, o.Location]:
+def location_entity(code: str, name: str) -> tuple[o.Ref, o.Location]:
     """The reference to a location code and the location it names, under openLCA's name-based id."""
     return (
         _ref(o.RefType.Location, keygen(code), code),
-        o.Location(id=keygen(code), name=code, code=code),
+        o.Location(id=keygen(code), name=name, code=code),
     )
 
 
@@ -219,7 +222,7 @@ class _Writer:
         return self.units.refs(name)
 
     def location(self, code: str) -> o.Ref:
-        ref, entity = location_entity(code)
+        ref, entity = location_entity(code, code)
         if code not in self.locations:
             self.locations[code] = entity
             self.identities.locations[keygen(code)] = code
@@ -365,11 +368,40 @@ class _Writer:
             id=exchange.id, label=exchange.name
         )
         uncertainty = exchange.uncertainty
-        if uncertainty is not None and uncertainty.type == "lognormal":
-            self.identities.lognormals[f"{process.id}:{number}"] = WrittenLognormal(
-                loc=float(uncertainty.params["loc"]), scale=float(uncertainty.params["scale"])
-            )
+        if uncertainty is not None:
+            bounds = bounds_of(uncertainty)
+            if bounds is not None:
+                self.identities.exchange_bounds[f"{process.id}:{number}"] = bounds
+            if uncertainty.type == "lognormal":
+                self.identities.lognormals[f"{process.id}:{number}"] = WrittenLognormal(
+                    loc=float(uncertainty.params["loc"]),
+                    scale=float(uncertainty.params["scale"]),
+                )
         return out
+
+    def parameter(self, parameter: Parameter, names: set[str]) -> o.Parameter:
+        """A parameter as openLCA writes it, the bounds openLCA holds nowhere and a lognormal's
+        parameters as written kept in the sidecar beside it."""
+        spread = parameter.uncertainty
+        if spread is not None:
+            bounds = bounds_of(spread)
+            if bounds is not None:
+                self.identities.parameter_bounds[parameter.name] = bounds
+            if spread.type == "lognormal":
+                self.identities.parameter_lognormals[parameter.name] = WrittenLognormal(
+                    loc=float(spread.params["loc"]), scale=float(spread.params["scale"])
+                )
+        formula = parameter.formula
+        return o.Parameter(
+            id=str(uuid.uuid5(self.product_system.id, parameter.name)),
+            name=self.prefix + parameter.name,
+            parameter_scope=o.ParameterScope.GLOBAL_SCOPE,
+            is_input_parameter=formula is None,
+            value=parameter.value,
+            formula=rewrite_formula(formula, names, self.prefix) if formula else None,
+            description=parameter.description,
+            uncertainty=to_olca_uncertainty(spread),
+        )
 
     def reference(self) -> tuple[Process, int] | None:
         """The reference process and its production exchange's internal id, or None without
@@ -407,18 +439,7 @@ class _Writer:
             self.identities.processes[str(process.id)] = ProcessIdentity(
                 id=process.id, code=process.code
             )
-        parameters = [
-            o.Parameter(
-                id=str(uuid.uuid5(self.product_system.id, p.name)),
-                name=self.prefix + p.name,
-                parameter_scope=o.ParameterScope.GLOBAL_SCOPE,
-                is_input_parameter=p.formula is None,
-                value=p.value,
-                formula=rewrite_formula(p.formula, names, self.prefix) if p.formula else None,
-                description=p.description,
-            )
-            for p in self.product_system.parameters
-        ]
+        parameters = [self.parameter(p, names) for p in self.product_system.parameters]
         system = o.ProductSystem(
             id=str(self.product_system.id),
             name=self.product_system.name,
@@ -615,11 +636,19 @@ class _Reader:
         known = self.ident.exchanges.get(f"{process.id}:{exchange.internal_id}")
         flow_name = exchange.flow.name if exchange.flow and exchange.flow.name else ""
         formula = exchange.amount_formula
-        uncertainty = from_olca_uncertainty(
+        spread = from_olca_uncertainty(
             exchange.uncertainty,
             exchange.amount,
             owner=f"{process.name!r}, exchange of {flow_name!r}",
             written=self.ident.lognormals.get(f"{process.id}:{exchange.internal_id}"),
+        )
+        uncertainty = (
+            bounded(
+                spread.scaled(sign),
+                self.ident.exchange_bounds.get(f"{process.id}:{exchange.internal_id}"),
+            )
+            if spread is not None
+            else None
         )
         return Exchange(
             id=known.id if known else uuid.uuid4(),
@@ -630,8 +659,21 @@ class _Reader:
             input=ref,
             formula=strip_prefix(formula, self.ident.parameter_prefix) if formula else None,
             comment=exchange.description,
-            uncertainty=uncertainty.scaled(sign) if uncertainty is not None else None,
+            uncertainty=uncertainty,
         )
+
+    def parameter_uncertainty(self, name: str, parameter: o.Parameter) -> Uncertainty | None:
+        """The distribution openLCA holds on a literal parameter, with the bounds and the
+        lognormal's own parameters the sidecar keeps beside it."""
+        if not parameter.is_input_parameter:
+            return None
+        held = from_olca_uncertainty(
+            parameter.uncertainty,
+            parameter.value if parameter.value is not None else 0.0,
+            owner=f"parameter {name!r}",
+            written=self.ident.parameter_lognormals.get(name),
+        )
+        return bounded(held, self.ident.parameter_bounds.get(name))
 
     def read(self) -> ProductSystem:
         own = str(self.sidecar.product_system.id)
@@ -680,6 +722,7 @@ class _Reader:
                 ),
                 unit=self.ident.parameter_units.get(name, ""),
                 description=p.description or "",
+                uncertainty=self.parameter_uncertainty(name, p),
             )
             for name, p in _in_written_order(held, self.ident.parameter_units)
         ]

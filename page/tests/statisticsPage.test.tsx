@@ -24,7 +24,7 @@ vi.mock('@/api/client', async (importOriginal) => {
 
 describe('statistics page', () => {
   it('names the processes an error names, beside its message and suggestion', async () => {
-    const view: SystemView = { id: system.value.id, system: system.value as ProductSystem, openRequests: 0, version: null }
+    const view: SystemView = { id: system.value.id, system: system.value as ProductSystem, openRequests: 0, version: null, state: null }
     renderAt('/', <StatisticsPage view={view} />)
     await waitFor(() => expect(screen.getByText('dangling_reference')).toBeInTheDocument())
     expect(screen.getByText('Processes: frame, widget')).toBeInTheDocument()
@@ -35,7 +35,7 @@ describe('statistics page', () => {
   it('names the reference process from the system, and says so when there is none', async () => {
     const doc = system.value as ProductSystem
     const widget = doc.processes.find((p) => p.code === 'widget')!
-    const named: SystemView = { id: doc.id, system: { ...doc, reference_process: 'widget' }, openRequests: 0, version: null }
+    const named: SystemView = { id: doc.id, system: { ...doc, reference_process: 'widget' }, openRequests: 0, version: null, state: null }
     const view = renderAt('/', <StatisticsPage view={named} />)
     await waitFor(() => expect(screen.getByRole('link', { name: widget.name })).toBeInTheDocument())
     view.unmount()

@@ -9,7 +9,7 @@ from ecosemantic.model.refs import DemandItem, ForegroundRef
 from ecosemantic.ports.types import Score
 from tests.fixture_data import FIXTURE_DATABASE
 
-GWP = Method.of(("db", "IPCC", "climate change"), "kg CO2-Eq")
+GWP = Method.of(("db", "IPCC", "climate change", "climate change"), "kg CO2-Eq")
 TOTAL = Score(value=1.0, unit="kg CO2-Eq", method_id=GWP.id)
 
 

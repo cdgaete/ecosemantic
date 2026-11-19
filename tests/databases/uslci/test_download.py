@@ -54,6 +54,7 @@ def pinned_profile() -> Profile:
         ),
         unlinked="unlinked-1.2026-09.0.csv",
         left_out="left-out-1.2026-09.0.csv",
+        revision=1,
     )
 
 

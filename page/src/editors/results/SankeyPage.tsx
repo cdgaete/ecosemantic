@@ -18,7 +18,7 @@ export function SankeyPage({ result }: { result: Result }) {
   const methods = impact.data?.value.methods ?? []
   const [share, setShare] = useState(1)
   const [maxNodes, setMaxNodes] = useState(10)
-  const { chosen, choose } = useCategory(scores)
+  const { chosen, choose } = useCategory(scores, id, (category) => category.value)
   const chosenMethod = chosen === undefined ? undefined : methodById(methods, chosen.method_id)
   const tree = useContributions(id, hash, { by: 'path', method_id: chosen?.method_id, max_level: 6, max_nodes: maxNodes, cutoff: share / 100, demand: demandOf(params!, root) }, chosen !== undefined && !stale)
   const figure = useMemo(() => (tree.data?.value.root ? sankeyFromTree(tree.data.value.root) : null), [tree.data])

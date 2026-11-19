@@ -10,12 +10,13 @@ from pathlib import Path
 
 import keyring
 import pytest
-from fastmcp import FastMCP
+from fastmcp import Client, FastMCP
 from packaging.requirements import Requirement
 
+from ecosemantic.backends.native.calculation import NativeCalculation
 from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.local import build_context
-from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.context import AGENT, ServerContext
 from ecosemantic.mcp.server import build_server
 from ecosemantic.model.canonical import base_pin, content_hash
 from ecosemantic.model.entities import (
@@ -36,14 +37,20 @@ from ecosemantic.model.refs import (
     ForegroundRef,
     SystemRef,
 )
+from ecosemantic.package.resolver import InventoryResolver
 from ecosemantic.ports.resolver import BackgroundInfo, FlowInfo
-from ecosemantic.ports.types import System
+from ecosemantic.ports.types import DatabaseSource, Drawn, DrawnCount, System
 from tests.dict_resolver import DictResolver
 from tests.engine_fixture import install_fixtures
 from tests.fixture_data import CODES as FIXTURE_CODES
 from tests.fixture_data import FIXTURE_BIO, FIXTURE_DATABASE, FIXTURE_DB
 from tests.fixture_data import FLOW_IDS as FIXTURE_FLOWS
+from tests.memory_activity import MemoryActivity
+from tests.memory_background import MemoryInventory, MemorySearch
+from tests.memory_installs import MemoryInstaller, MemoryInstalls
 from tests.memory_keyring import MemoryKeyring
+from tests.memory_runs import MemoryLauncher, MemoryRuns
+from tests.memory_storage import MemoryStorage
 
 NS = uuid.UUID("6f1b5a5e-0c3e-4b52-9a1e-2f0d6c1a7d10")
 
@@ -96,6 +103,15 @@ RIVER = ElementaryFlowRef(database=BIO, id=str(uuid.uuid5(NS, "flow|water, river
 
 def uid(*parts: str) -> uuid.UUID:
     return uuid.uuid5(NS, "|".join(parts))
+
+
+def drawn_counts() -> Drawn:
+    """Counts for an answer whose drawing is not what the test judges."""
+    return Drawn(
+        parameters=DrawnCount(there=0, carried=0, drawn=0),
+        foreground=DrawnCount(there=3, carried=2, drawn=2),
+        background=DrawnCount(there=9, carried=4, drawn=3, held=1),
+    )
 
 
 def ex(
@@ -277,7 +293,11 @@ def fixture_product_system() -> ProductSystem:
                 description="organic cotton, half the sewing electricity, less waste",
                 overrides=[
                     ExchangeOverride(exchange_id=tshirt.exchanges[2].id, multiplier=0.5),
-                    ExchangeOverride(exchange_id=yarn.exchanges[1].id, input=ORGANIC),
+                    ExchangeOverride(
+                        exchange_id=yarn.exchanges[1].id,
+                        input=ORGANIC,
+                        name="organic cotton fibre",
+                    ),
                     ParameterOverride(name="waste_rate", value=0.05),
                 ],
             )
@@ -602,3 +622,101 @@ def tshirt_labelled(product_system: ProductSystem, label: ProductSystem) -> Prod
 @pytest.fixture(scope="session")
 def full_server(context: ServerContext) -> FastMCP:
     return build_server(context)
+
+
+@pytest.fixture
+def ports_only(native_store: NativeStore, tmp_path: Path) -> ServerContext:
+    """Four ports in memory and the calculation backend, so a tool needing more fails here."""
+    inventory = MemoryInventory()
+    return ServerContext(
+        inventory=inventory,
+        search=MemorySearch(),
+        calculation=NativeCalculation(native_store),
+        storage=MemoryStorage(),
+        resolver=InventoryResolver(inventory),
+        actor=AGENT,
+        runs=MemoryRuns(),
+        activity=MemoryActivity(),
+        launcher=MemoryLauncher(),
+        installs=MemoryInstalls(),
+        installer=MemoryInstaller(
+            [
+                DatabaseSource(
+                    name="uslci",
+                    versions=["2024"],
+                    system_models=[],
+                    credential=None,
+                    terms=False,
+                )
+            ]
+        ),
+        systems_dir=tmp_path,
+        data_dir=native_store.directory,
+        uploads_dir=tmp_path / "uploads",
+    )
+
+
+@pytest.fixture
+def ports_only_server(ports_only: ServerContext) -> FastMCP:
+    return build_server(ports_only)
+
+
+async def _built(server: FastMCP) -> tuple[str, str]:
+    """A cup on the fixture background, its steel input and its carbon dioxide output, and the
+    id of the method a search for climate answers first."""
+    async with Client(server) as client:
+        created = await client.call_tool(
+            "create_product_system", {"name": "cup", "database": FIXTURE_DB}
+        )
+        system_id = created.structured_content["value"]["id"]
+        await client.call_tool(
+            "create_process",
+            {
+                "product_system_id": system_id,
+                "code": "cup",
+                "name": "cup",
+                "unit": "kilogram",
+                "reference_product": "cup",
+            },
+        )
+        await client.call_tool(
+            "update_product_system", {"product_system_id": system_id, "reference_process": "cup"}
+        )
+        await client.call_tool(
+            "create_exchange",
+            {
+                "product_system_id": system_id,
+                "code": "cup",
+                "type": "product",
+                "amount": 0.5,
+                "input": {
+                    "kind": "background",
+                    "database": FIXTURE_DB,
+                    "id": FIXTURE_CODES["steel"],
+                },
+            },
+        )
+        await client.call_tool(
+            "create_exchange",
+            {
+                "product_system_id": system_id,
+                "code": "cup",
+                "type": "elementary",
+                "amount": 0.1,
+                "input": {
+                    "kind": "elementary_flow",
+                    "database": FIXTURE_BIO,
+                    "id": FIXTURE_FLOWS["co2"],
+                },
+            },
+        )
+        methods = await client.call_tool(
+            "search_methods", {"database": FIXTURE_DB, "query": "climate"}
+        )
+        method_id = methods.structured_content["items"][0]["id"]
+    return system_id, method_id
+
+
+@pytest.fixture
+async def cup(ports_only_server: FastMCP) -> tuple[str, str]:
+    return await _built(ports_only_server)

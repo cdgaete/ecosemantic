@@ -1,6 +1,9 @@
-import { useState } from 'react'
-import { useCompartments, useInventory } from '@/api/queries'
-import type { InventoryRow } from '@/api/types'
+import { useQueries } from '@tanstack/react-query'
+import { useState, type ReactNode } from 'react'
+import { api } from '@/api/client'
+import { forever, keys, useCompartments, useInventory } from '@/api/queries'
+import type { InventoryArguments, InventoryOrder, InventoryRow, LinkedProcessRef, ProductSystem, Side } from '@/api/types'
+import { namedWithLocation } from '@/editors/exchangeColumns'
 import { formatAmount } from '@/lib/format'
 import { RequestAction } from '@/requests/RequestAction'
 import { DataTable, type Column } from '@/window/DataTable'
@@ -11,7 +14,7 @@ import { Section } from '@/window/Section'
 import { demandOf } from './params'
 import type { Result } from './ResultsEditor'
 
-const columns: Column<InventoryRow>[] = [
+const BASE_COLUMNS: Column<InventoryRow>[] = [
   {
     key: 'name',
     header: 'Name',
@@ -26,25 +29,138 @@ const columns: Column<InventoryRow>[] = [
   { key: 'sub', header: 'Sub-compartment', folds: true, render: (r) => r.sub_compartment ?? '' },
   { key: 'amount', header: 'Amount', align: 'right', render: (r) => formatAmount(r.amount) },
   { key: 'unit', header: 'Unit', render: (r) => r.unit },
-  { key: 'source', header: 'Dominant process', folds: true, render: (r) => r.source?.code ?? '' },
 ]
+
+interface AtVersion {
+  name: string | null
+  location: string | null
+  error: string | null
+}
+
+function linkKey(link: LinkedProcessRef): string {
+  return `${link.product_system_id}:${link.at_hash}:${link.code}`
+}
+
+function distinctLinks(rows: InventoryRow[]): LinkedProcessRef[] {
+  const links = new Map<string, LinkedProcessRef>()
+  for (const row of rows) if (row.source?.kind === 'linked') links.set(linkKey(row.source), row.source)
+  return [...links.values()]
+}
+
+function namedSource(row: InventoryRow, system: ProductSystem | undefined, at: Map<string, AtVersion>): ReactNode {
+  const source = row.source
+  if (source === null) return ''
+  if (source.kind === 'foreground') {
+    const process = system?.processes.find((p) => p.code === source.code)
+    return <span title={source.code}>{process === undefined ? source.code : namedWithLocation(process.name, process.location)}</span>
+  }
+  const read = at.get(linkKey(source))
+  if (read === undefined) return <span title={source.code}>{source.code}</span>
+  if (read.error !== null) return <span title={source.code}>{read.error}</span>
+  if (read.name === null) return <span title={source.code}>{source.code}</span>
+  return <span title={source.code}>{namedWithLocation(read.name, read.location)}</span>
+}
+
+const ORDER_OPTIONS: { value: InventoryOrder; label: string }[] = [
+  { value: 'compartment', label: 'compartment, then name' },
+  { value: 'amount', label: 'largest amount first' },
+]
+
+function SideTable({
+  id,
+  hash,
+  side,
+  title,
+  body,
+  enabled,
+  waiting,
+  sectionKey,
+  actions,
+  system,
+}: {
+  id: string
+  hash: string
+  side: Side
+  title: string
+  body: Omit<InventoryArguments, 'side' | 'cursor'>
+  enabled: boolean
+  waiting: string
+  sectionKey: string
+  actions: ReactNode
+  system: ProductSystem | undefined
+}) {
+  const [cursor, setCursor] = useState<string | undefined>()
+  const [earlier, setEarlier] = useState<(string | undefined)[]>([])
+  const rows = useInventory(id, hash, { ...body, side, cursor }, enabled)
+  const items = rows.data?.items ?? []
+  const links = distinctLinks(items)
+  const versions = useQueries({
+    queries: links.map((link) => ({ queryKey: keys.version(link.product_system_id, link.at_hash), queryFn: () => api.version(link.product_system_id, link.at_hash), ...forever })),
+  })
+  const at = new Map<string, AtVersion>()
+  links.forEach((link, i) => {
+    const answer = versions[i]
+    if (answer.isPending) return
+    const process = answer.data?.processes.find((held) => held.code === link.code)
+    at.set(linkKey(link), { name: process?.name ?? null, location: process?.location ?? null, error: answer.error?.message ?? null })
+  })
+  const columns: Column<InventoryRow>[] = [
+    ...BASE_COLUMNS,
+    { key: 'source', header: 'Dominant process', folds: true, render: (r) => namedSource(r, system, at) },
+  ]
+  return (
+    <Section title={title} sectionKey={sectionKey} actions={actions}>
+      <DataTable columns={columns} rows={items} rowKey={(r) => r.flow.id} empty={rows.data ? `No ${title.toLowerCase()} on this page.` : waiting} />
+      {rows.error ? <p className="text-xs text-destructive">{rows.error.message}</p> : null}
+      <Hint of={rows.data} />
+      <div className="flex gap-3 text-xs">
+        {earlier.length > 0 ? (
+          <button
+            type="button"
+            className="text-accent"
+            onClick={() => {
+              setCursor(earlier.at(-1))
+              setEarlier(earlier.slice(0, -1))
+            }}
+          >
+            Previous page
+          </button>
+        ) : null}
+        {rows.data?.has_more ? (
+          <button
+            type="button"
+            className="text-accent"
+            onClick={() => {
+              setEarlier([...earlier, cursor])
+              setCursor(rows.data?.next_cursor ?? undefined)
+            }}
+          >
+            Next page
+          </button>
+        ) : null}
+      </div>
+    </Section>
+  )
+}
 
 export function InventoryPage({ result }: { result: Result }) {
   const { id, params, system, hash, root, stale, waiting } = result
   const [compartment, setCompartment] = useState('')
   const [typed, setTyped] = useState('')
   const [query, setQuery] = useState('')
-  const [cursor, setCursor] = useState<string | undefined>()
-  const [earlier, setEarlier] = useState<(string | undefined)[]>([])
-  const restart = () => {
-    setCursor(undefined)
-    setEarlier([])
-  }
+  const [order, setOrder] = useState<InventoryOrder>('compartment')
   const compartments = useCompartments(system?.database.name ?? '')
-  const rows = useInventory(id, hash, { compartment: compartment || undefined, query: query || undefined, limit: 100, cursor, demand: demandOf(params!, root) }, !stale)
-  const items = rows.data?.items ?? []
   const key = (s: string) => `results:${id}:inventory:${s}`
   const action = <RequestAction systemId={id} entity="product_system" entityId={id} />
+  const body = {
+    compartment: compartment || undefined,
+    query: query || undefined,
+    order,
+    limit: 100,
+    demand: demandOf(params!, root),
+  }
+  const table = { id, hash, body, enabled: !stale, waiting, actions: action, system }
+  const resetKey = `${compartment}|${query}|${order}`
   return (
     <>
       <EditorHeader icon="result" page="Inventory results" entity={system?.name ?? ''} />
@@ -55,10 +171,7 @@ export function InventoryPage({ result }: { result: Result }) {
             id="inventory-compartment"
             className="min-w-0 max-w-full rounded-sm border bg-background px-1"
             value={compartment}
-            onChange={(e) => {
-              setCompartment(e.target.value)
-              restart()
-            }}
+            onChange={(e) => setCompartment(e.target.value)}
           >
             <option value="">any</option>
             {(compartments.data ?? []).map((t) => (
@@ -74,7 +187,6 @@ export function InventoryPage({ result }: { result: Result }) {
           onSubmit={(e) => {
             e.preventDefault()
             setQuery(typed)
-            restart()
           }}
         >
           <label htmlFor="inventory-query" className="flex items-center gap-1">
@@ -85,41 +197,24 @@ export function InventoryPage({ result }: { result: Result }) {
             Search
           </button>
         </form>
-        {rows.error ? <span className="text-destructive">{rows.error.message}</span> : null}
+        <label className="flex min-w-0 max-w-full items-center gap-1">
+          Order
+          <select
+            id="inventory-order"
+            className="min-w-0 max-w-full rounded-sm border bg-background px-1"
+            value={order}
+            onChange={(e) => setOrder(e.target.value as InventoryOrder)}
+          >
+            {ORDER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
-      <Section title="Inputs" sectionKey={key('inputs')} actions={action}>
-        <DataTable columns={columns} rows={items.filter((r) => r.side === 'input')} rowKey={(r) => r.flow.id} empty={rows.data ? 'No input on this page.' : waiting} />
-      </Section>
-      <Section title="Outputs" sectionKey={key('outputs')} actions={action}>
-        <DataTable columns={columns} rows={items.filter((r) => r.side === 'output')} rowKey={(r) => r.flow.id} empty={rows.data ? 'No output on this page.' : waiting} />
-      </Section>
-      <div className="px-4">
-        <Hint of={rows.data} />
-      </div>
-      {earlier.length > 0 ? (
-        <button
-          type="button"
-          className="px-4 text-xs text-accent"
-          onClick={() => {
-            setCursor(earlier.at(-1))
-            setEarlier(earlier.slice(0, -1))
-          }}
-        >
-          Previous page
-        </button>
-      ) : null}
-      {rows.data?.has_more ? (
-        <button
-          type="button"
-          className="px-4 text-xs text-accent"
-          onClick={() => {
-            setEarlier([...earlier, cursor])
-            setCursor(rows.data?.next_cursor ?? undefined)
-          }}
-        >
-          Next page
-        </button>
-      ) : null}
+      <SideTable key={`inputs|${resetKey}`} {...table} side="input" title="Inputs" sectionKey={key('inputs')} />
+      <SideTable key={`outputs|${resetKey}`} {...table} side="output" title="Outputs" sectionKey={key('outputs')} />
     </>
   )
 }

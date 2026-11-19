@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import math
 from pathlib import Path
 
 import pytest
@@ -11,6 +13,7 @@ from ecosemantic.model.entities import ProductSystem
 from ecosemantic.tables.folder import write_folder
 from ecosemantic.tables.reader import apply_inputs
 from tests.tables.test_folder import spaced
+from tests.tables.test_reader import row
 
 
 def test_an_unedited_folder_leaves_the_space_where_it_was(
@@ -67,13 +70,16 @@ def test_a_removed_parameter_row_deletes_the_parameter(
     system = spaced(product_system)
     added = write_folder(tmp_path / "a", system)
     path = added / "inputs" / "input_parameters.csv"
-    path.write_text(path.read_text(encoding="utf-8") + "load_factor,0.8,,\n", encoding="utf-8")
+    path.write_text(
+        path.read_text(encoding="utf-8") + f"{row('load_factor', '0.8')}\n", encoding="utf-8"
+    )
     grown = apply_inputs(system, added)
     assert "load_factor" in {p.name for p in grown.parameters}
     removed = write_folder(tmp_path / "b", grown)
     path = removed / "inputs" / "input_parameters.csv"
     path.write_text(
-        path.read_text(encoding="utf-8").replace("load_factor,0.8,,\n", ""), encoding="utf-8"
+        path.read_text(encoding="utf-8").replace(f"{row('load_factor', '0.8')}\n", ""),
+        encoding="utf-8",
     )
     assert "load_factor" not in {p.name for p in apply_inputs(grown, removed).parameters}
 
@@ -108,7 +114,9 @@ def test_an_added_parameter_row_is_applied(tmp_path: Path, product_system: Produ
     system = spaced(product_system)
     folder = write_folder(tmp_path, system)
     path = folder / "inputs" / "input_parameters.csv"
-    path.write_text(path.read_text(encoding="utf-8") + "load_factor,0.8,,\n", encoding="utf-8")
+    path.write_text(
+        path.read_text(encoding="utf-8") + f"{row('load_factor', '0.8')}\n", encoding="utf-8"
+    )
     changed = apply_inputs(system, folder)
     assert {p.name: p.value for p in changed.parameters}["load_factor"] == 0.8
 
@@ -139,6 +147,28 @@ def test_a_case_column_naming_a_formula_parameter_is_refused_by_the_space(
         "parameter,small,large\nfibre_mass,1.0,2.0\n", encoding="utf-8"
     )
     with pytest.raises(Invalid, match="not literal parameters"):
+        apply_inputs(system, folder)
+
+
+def test_a_tables_return_giving_a_parameter_an_uncertain_exchange_reads_is_refused(
+    tmp_path: Path, product_system: ProductSystem
+) -> None:
+    system = spaced(product_system)
+    folder = write_folder(tmp_path, system)
+    path = folder / "inputs" / "input_parameters.csv"
+    rows = list(csv.DictReader(path.read_text(encoding="utf-8").splitlines()))
+    for cells in rows:
+        if cells["name"] == "fabric_mass":
+            cells |= {
+                "distribution": "lognormal",
+                "loc": repr(math.log(0.2)),
+                "scale": "0.2",
+            }
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]), lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+    with pytest.raises(Invalid, match="an amount takes one spread"):
         apply_inputs(system, folder)
 
 

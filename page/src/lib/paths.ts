@@ -9,6 +9,8 @@ export function useGo() {
 
 export type ExplorerSection = 'datasets' | 'flows' | 'methods' | 'units' | 'locations'
 
+export type SearchKind = 'processes' | 'elementary-flows' | 'methods'
+
 export const paths = {
   home: () => '/',
   system: (id: string) => `/systems/${id}`,
@@ -19,11 +21,20 @@ export const paths = {
   results: (id: string, page: string, search: string) => `/systems/${id}/results/${page}${search}`,
   simulation: (id: string, runId: string) => `/systems/${id}/simulations/${runId}`,
   background: (database: string, ref: string) => `/databases/${database}/processes/${ref}`,
+  dataset: (id: string, database: string, ref: string) => `/systems/${id}/datasets/${database}/${ref}`,
   explorer: (database: string, section: ExplorerSection = 'datasets', search = '') => `/databases/${database}/${section}${search}`,
   flow: (database: string, ref: string) => `/databases/${database}/flows/${ref}`,
   indicator: (database: string, id: string) => `/databases/${database}/methods/${id}`,
+  search: (database: string, kind: SearchKind = 'processes') => `/databases/${database}/search/${kind}`,
   databases: () => '/databases',
   accounts: () => '/accounts',
+}
+
+const DATABASE_ADDRESS = /^\/databases\/([^/]+)(?:\/|$)/
+
+export function databaseOfPath(pathname: string): string | null {
+  const found = DATABASE_ADDRESS.exec(pathname)
+  return found === null ? null : decodeURIComponent(found[1])
 }
 
 export function isActivityPath(pathname: string, id: string): boolean {

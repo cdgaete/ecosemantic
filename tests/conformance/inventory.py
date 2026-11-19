@@ -6,6 +6,7 @@ import pytest
 
 from ecosemantic.errors import MethodNotFound, NotFound
 from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef
+from ecosemantic.ports.inventory import no_flow
 from ecosemantic.ports.types import DatabaseSummary, Factor, SubCompartment
 from tests.fixture_data import CODES, FIXTURE_BIO, FIXTURE_DB, FLOW_IDS
 
@@ -71,17 +72,55 @@ class InventoryConformance:
                 BackgroundRef(database=FIXTURE_DB, id=CODES["steel"][:-1] + "0")
             )
 
+    async def test_a_background_exchange_names_its_suppliers_location(self, inventory) -> None:
+        steel = await inventory.get_process(
+            BackgroundRef(database=FIXTURE_DB, id=CODES["steel"]), exchanges=True
+        )
+        assert steel.exchanges is not None
+        assert [(e.type, e.supplier, e.supplier_location) for e in steel.exchanges] == [
+            ("product", None, None),
+            ("product", "electricity production", "GLO"),
+            ("elementary", None, None),
+            ("elementary", None, None),
+        ]
+
     async def test_flow(self, inventory) -> None:
         flow = await inventory.get_elementary_flow(
             ElementaryFlowRef(database=FIXTURE_BIO, id=FLOW_IDS["water_in"])
         )
-        # a bundle files a natural resource under openLCA's "Resource"
         assert (flow.name, flow.compartment, flow.sub_compartment, flow.unit) == (
             "Water, river",
-            "Resource",
+            "natural resource",
             "in water",
             "cubic meter",
         )
+
+    async def test_a_flow_answers_its_cas_number_and_the_text_set_aside(self, inventory) -> None:
+        co2 = await inventory.get_elementary_flow(
+            ElementaryFlowRef(database=FIXTURE_BIO, id=FLOW_IDS["co2"])
+        )
+        assert (co2.cas_number, co2.cas_as_published) == ("124-38-9", None)
+        [pm] = await inventory.get_elementary_flows(FIXTURE_BIO, [FLOW_IDS["pm"]])
+        assert (pm.cas_number, pm.cas_as_published) == (None, "n.a.")
+
+    async def test_a_flow_the_database_lacks_is_named_by_its_reference(self, inventory) -> None:
+        absent = ElementaryFlowRef(database=FIXTURE_BIO, id=FLOW_IDS["co2"][:-1] + "0")
+        with pytest.raises(NotFound) as raised:
+            await inventory.get_elementary_flow(absent)
+        assert str(raised.value) == str(no_flow(absent))
+
+    async def test_many_flows_in_one_read(self, inventory) -> None:
+        absent = FLOW_IDS["ch4"][:-1] + "0"
+        found = await inventory.get_elementary_flows(
+            FIXTURE_BIO, [FLOW_IDS["co2"], absent, FLOW_IDS["water_in"]]
+        )
+        assert [(flow.ref.id, flow.name) for flow in found] == [
+            (FLOW_IDS["co2"], "Carbon dioxide, fossil"),
+            (FLOW_IDS["water_in"], "Water, river"),
+        ]
+        assert await inventory.get_elementary_flows(FIXTURE_BIO, []) == []
+        with pytest.raises(NotFound, match="'nowhere'"):
+            await inventory.get_elementary_flows("nowhere", [FLOW_IDS["co2"]])
 
     async def test_methods_and_suggestions(self, inventory) -> None:
         methods = await inventory.list_methods(FIXTURE_DB)
@@ -95,19 +134,22 @@ class InventoryConformance:
             await inventory.resolve_method(FIXTURE_DB, "fixture > gwp > Climate Change > GWP 100")
         assert gwp in caught.value.suggestions
 
+    async def test_the_location_vocabulary_names_every_code(self, inventory) -> None:
+        locations = await inventory.list_locations(FIXTURE_DB)
+        assert [(location.code, location.name) for location in locations] == [("GLO", "Global")]
+
     async def test_units_locations_compartments(self, inventory) -> None:
         assert await inventory.list_units(FIXTURE_DB) == [
             "kilogram",
             "kilowatt hour",
             "ton kilometer",
         ]
-        assert await inventory.list_locations(FIXTURE_DB) == ["GLO"]
         compartments = await inventory.list_compartments(FIXTURE_DB)
-        assert {c.name: c.flow_count for c in compartments} == {"air": 3, "Resource": 1}
+        assert {c.name: c.flow_count for c in compartments} == {"air": 3, "natural resource": 1}
         found = {c.name: c.sub_compartments for c in compartments}
         # co2, ch4 and pm are all in air; pm alone is in its sub-compartment
         assert found["air"] == [SubCompartment(name="urban air close to ground", flow_count=1)]
-        assert found["Resource"] == [SubCompartment(name="in water", flow_count=1)]
+        assert found["natural resource"] == [SubCompartment(name="in water", flow_count=1)]
 
     async def test_summarize(self, inventory) -> None:
         assert await inventory.summarize(FIXTURE_DB) == DatabaseSummary(
@@ -179,6 +221,13 @@ class InventoryConformance:
             await inventory.factors(FIXTURE_DB, "m_0000000000")
         with pytest.raises(NotFound, match="'nope'"):
             await inventory.factors("nope", "m_bff077f3bd")
+
+    async def test_a_family_without_sets_answers_none(self, inventory) -> None:
+        assert await inventory.weighting_sets(FIXTURE_DB, "gwp") == []
+
+    async def test_an_unknown_family_is_not_found(self, inventory) -> None:
+        with pytest.raises(NotFound, match="'nowhere'"):
+            await inventory.weighting_sets(FIXTURE_DB, "nowhere")
 
     async def test_an_unknown_scheme_is_not_found(self, inventory) -> None:
         with pytest.raises(NotFound, match="NACE"):

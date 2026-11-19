@@ -14,7 +14,8 @@
               "tuple": [
                 "fixture",
                 "gwp",
-                "climate change > GWP100"
+                "climate change",
+                "GWP100"
               ],
               "unit": "kg CO2-Eq"
             }
@@ -37,7 +38,8 @@
               "tuple": [
                 "fixture",
                 "water",
-                "water use > m3"
+                "water use",
+                "m3"
               ],
               "unit": "m3"
             }

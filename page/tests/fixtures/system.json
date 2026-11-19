@@ -15,6 +15,7 @@
       "elementary_flows": "fixture-biosphere",
       "fingerprint": "ab4a4851ae4bc8a41d356d0da3b12a8727e59dcd7f46776f7016caa670b616d9",
       "name": "fixture",
+      "revision": null,
       "scheme": "olca",
       "system_model": "unit process",
       "version": "1"
@@ -29,6 +30,7 @@
         "description": "frame per widget",
         "formula": null,
         "name": "frame_mass",
+        "uncertainty": null,
         "unit": "kilogram",
         "value": 0.25
       },
@@ -36,6 +38,7 @@
         "description": "",
         "formula": "frame_mass * 2.4",
         "name": "frame_steel",
+        "uncertainty": null,
         "unit": "kilogram",
         "value": null
       }
@@ -193,7 +196,8 @@
             "exchange_id": "2fddb273-5d7d-5b0a-8669-e2f01d474979",
             "input": null,
             "kind": "exchange",
-            "multiplier": 0.5
+            "multiplier": 0.5,
+            "name": null
           }
         ]
       }

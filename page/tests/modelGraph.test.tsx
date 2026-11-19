@@ -107,6 +107,15 @@ describe('model graph', () => {
     expect(unset.container.querySelector('[class*="outline-[2.5px]"]')).toBeNull()
   })
 
+  it("opens a background input from its card's row beside the graph, under the system's own address", async () => {
+    const { container } = renderGraph(doc)
+    await waitFor(() => expect(container.querySelector('.react-flow__node[data-id="widget"]')).not.toBeNull())
+    const card = within(container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    const steel = doc.processes.find((p) => p.code === 'widget')!.exchanges.find((e) => e.name === 'steel')!
+    const input = steel.input as { database: string; id: string }
+    await waitFor(() => expect(card.getByText('steel').closest('a')?.getAttribute('href')).toBe(`/systems/${doc.id}/datasets/${input.database}/${input.id}`))
+  })
+
   it('folds the inputs of a card past six behind a link to its input table, at the card\'s own height', async () => {
     const widget = doc.processes.find((p) => p.code === 'widget')!
     const input = widget.exchanges.find((e) => e.type !== 'production')!

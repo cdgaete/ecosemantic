@@ -27,8 +27,8 @@ from tests.package.conftest import AGENT, BASE_DB, NOW, Bench
 
 def _methods(database: str) -> list[Method]:
     return [
-        Method.of((database, METHOD, "climate change"), "kg CO2-Eq"),
-        Method.of((database, METHOD, "water use"), "m3"),
+        Method.of((database, METHOD, "climate change", "climate change"), "kg CO2-Eq"),
+        Method.of((database, METHOD, "water use", "water use"), "m3"),
     ]
 
 

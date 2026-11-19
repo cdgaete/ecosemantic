@@ -4,7 +4,7 @@ import { GraphPage } from '@/editors/system/GraphPage'
 import { useGo } from '@/lib/paths'
 import { useUi } from '@/store/ui'
 import { InSlot } from './slots'
-import { useCanvasState } from './useCanvasState'
+import { useCanvasState, useCanvasVariant } from './useCanvasState'
 
 function FollowSystem({ id }: { id: string }) {
   const go = useGo()
@@ -16,14 +16,15 @@ function VersionCanvas({ id, hash }: { id: string; hash: string }) {
   const read = useVersion(id, hash)
   if (read.error) return <p className="p-4 text-destructive">{read.error.message}</p>
   if (!read.data) return <p className="p-4 text-muted-foreground">Loading…</p>
-  return <GraphPage view={{ id, system: read.data, openRequests: 0, version: hash }} />
+  return <GraphPage view={{ id, system: read.data, openRequests: 0, version: hash, state: null }} />
 }
 
 function LiveCanvas({ id }: { id: string }) {
   const read = useSystem(id)
+  const state = useCanvasVariant(read.data?.value)
   if (read.error) return <p className="p-4 text-destructive">{read.error.message}</p>
   if (!read.data) return <p className="p-4 text-muted-foreground">Loading…</p>
-  return <GraphPage view={{ id, system: read.data.value, openRequests: read.data.open_requests, version: null }} />
+  return <GraphPage view={{ id, system: read.data.value, openRequests: read.data.open_requests, version: null, state }} />
 }
 
 export function Canvas({ systemId }: { systemId: string }) {

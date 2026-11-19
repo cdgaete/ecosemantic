@@ -31,17 +31,36 @@ export function elementaryRefs<T extends { input: ExchangeInput | null }>(rows: 
 }
 
 export function useElementaryFlows(named: NamedFlow[]): FlowSides {
+  const byDatabase = new Map<string, NamedFlow[]>()
+  for (const flow of named) {
+    const held = byDatabase.get(flow.ref.database) ?? []
+    held.push(flow)
+    byDatabase.set(flow.ref.database, held)
+  }
+  const grouped = [...byDatabase.entries()]
   const answers = useQueries({
-    queries: named.map(({ ref }) => ({ queryKey: keys.flow(ref.database, ref.id), queryFn: () => api.elementaryFlow(ref.database, ref.id), ...forever })),
+    queries: grouped.map(([database, refs]) => ({
+      queryKey: keys.flows(database, refs.map(({ ref }) => ref.id)),
+      queryFn: () => api.elementaryFlows(database, refs.map(({ ref }) => ref.id)),
+      ...forever,
+    })),
   })
   const flows: Record<string, FlowSide> = {}
   const errors: string[] = []
   answers.forEach((answer, i) => {
-    const { ref, name } = named[i]
+    const [database, refs] = grouped[i]
     if (answer.data) {
-      flows[ref.id] = { side: answer.data.value.side, compartment: answer.data.value.compartment, flow_type: answer.data.value.flow_type }
+      const found = new Map(answer.data.value.map((flow) => [flow.ref.id, flow]))
+      for (const { ref, name } of refs) {
+        const flow = found.get(ref.id)
+        if (!flow) {
+          errors.push(`${name}: no flow '${ref.id}' in '${ref.database}'`)
+          continue
+        }
+        flows[ref.id] = { side: flow.side, compartment: flow.compartment, flow_type: flow.flow_type }
+      }
     }
-    if (answer.error) errors.push(`${name}: ${answer.error.message}`)
+    if (answer.error) errors.push(`${database}: ${answer.error.message}`)
   })
   return { flows, errors }
 }

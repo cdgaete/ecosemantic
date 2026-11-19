@@ -11,8 +11,8 @@ from ecosemantic.ports.types import MonteCarloConfig, System
 from tests.fixture_data import CODES, FIXTURE_DB
 
 # the fixture's method as its bundle keys it: the category and the indicator in one name
-GWP_METHOD = Method.of(("fixture", "gwp", "climate change > GWP100"), "kg CO2-Eq")
-WATER_METHOD = Method.of(("fixture", "water", "water use > m3"), "m3")
+GWP_METHOD = Method.of(("fixture", "gwp", "climate change", "GWP100"), "kg CO2-Eq")
+WATER_METHOD = Method.of(("fixture", "water", "water use", "m3"), "m3")
 WIDGET = [DemandItem(ref=ForegroundRef(code="widget"), amount=1.0)]
 
 
@@ -45,9 +45,8 @@ class CalculationConformance:
         assert [(f.compartment, f.sub_compartment) for f in found.items] == [("air", None)] * 2
         tap = [DemandItem(ref=BackgroundRef(database=FIXTURE_DB, id=CODES["water"]), amount=1.0)]
         drawn = await calculation.flow_hotspots(System(database=FIXTURE_DB), tap, WATER_METHOD)
-        # a bundle files a natural resource under openLCA's "Resource"
         assert [(f.name, f.compartment, f.sub_compartment) for f in drawn.items] == [
-            ("Water, river", "Resource", "in water")
+            ("Water, river", "natural resource", "in water")
         ]
 
     async def test_a_flat_list_accounts_for_every_part_it_does_not_show(

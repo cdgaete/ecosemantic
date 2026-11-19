@@ -1,5 +1,5 @@
 import type { Method } from '@/api/types'
-import { categoryLabel, formatAmount, formatAgo, formatShare, methodById, shortHash } from '@/lib/format'
+import { categoryLabel, cutNotice, formatAmount, formatAgo, formatShare, methodById, methodLabel, shortHash } from '@/lib/format'
 
 describe('formatAmount', () => {
   it('rounds by magnitude', () => {
@@ -14,6 +14,19 @@ describe('formatAmount', () => {
 describe('formatShare', () => {
   it('shows one decimal of a percentage', () => {
     expect(formatShare(0.5412)).toBe('54.1 %')
+  })
+
+  it('draws a dash where there is no share', () => {
+    expect(formatShare(null)).toBe('–')
+  })
+})
+
+describe('cutNotice', () => {
+  it('says no share where the total is 0', () => {
+    const notice = cutNotice({ cutoff: 0.01, below: 2, share: null, below_score: -0.02, unlisted: 1, unlisted_share: null, unlisted_score: 0.03 })
+    expect(notice).toBe(
+      '2 items under the 1.0 % cut-off are not shown, together no share of a total of 0. 1 item that reaches the 1.0 % cut-off is past the end of the list, together no share of a total of 0.',
+    )
   })
 })
 
@@ -31,8 +44,20 @@ describe('categoryLabel', () => {
     expect(categoryLabel(method)).toBe('climate change: total · GWP20')
   })
 
-  it('names a three-part method by its category', () => {
-    expect(categoryLabel({ ...method, indicator: '' })).toBe('climate change: total')
+  it('names a method whose indicator is its category once', () => {
+    expect(categoryLabel({ ...method, indicator: 'climate change: total' })).toBe('climate change: total')
+  })
+})
+
+describe('methodLabel', () => {
+  const method: Method = { id: 'm_1', tuple: ['x', 'IPCC 2021', 'climate change: total', 'GWP20'], spec: 'x > IPCC 2021 > climate change: total > GWP20', unit: 'kg CO2-Eq', impact_method: 'IPCC 2021', impact_category: 'climate change: total', indicator: 'GWP20' }
+
+  it('names the family above the category and the indicator', () => {
+    expect(methodLabel(method)).toBe('IPCC 2021 › climate change: total · GWP20')
+  })
+
+  it('names a method whose indicator is its category once', () => {
+    expect(methodLabel({ ...method, indicator: 'climate change: total' })).toBe('IPCC 2021 › climate change: total')
   })
 })
 

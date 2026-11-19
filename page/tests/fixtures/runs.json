@@ -22,8 +22,8 @@
         }
       ],
       "error": null,
-      "finished_at": "2026-11-17T01:07:41.726597Z",
-      "id": "eaed49b3-66ab-418b-999d-328141237a82",
+      "finished_at": "2026-11-19T15:55:51.422786Z",
+      "id": "b287fe3e-592a-4ad9-ba18-41b245cd267c",
       "methods": [
         {
           "id": "m_bff077f3bd",
@@ -34,22 +34,24 @@
           "tuple": [
             "fixture",
             "gwp",
-            "climate change > GWP100"
+            "climate change",
+            "GWP100"
           ],
           "unit": "kg CO2-Eq"
         }
       ],
       "open": false,
-      "pid": 1532591,
-      "posted_at": "2026-11-17T01:07:41.314835Z",
+      "pid": 318305,
+      "posted_at": "2026-11-19T15:55:50.988700Z",
       "product_system_id": "bb309f67-e625-53b4-8e7c-3062610d2de0",
       "progress": {
         "iterations": 6,
         "worst_rel_se": 0.008721077974733555
       },
-      "started_at": "2026-11-17T01:07:41.710653Z",
+      "started_at": "2026-11-19T15:55:51.405179Z",
       "status": "done",
-      "treatments_run_backwards": []
+      "treatments_run_backwards": [],
+      "weighting_sets": []
     }
   ],
   "view_url": null

@@ -5,21 +5,23 @@ import { formatAmount, shortHash } from '@/lib/format'
 import { paths } from '@/lib/paths'
 import { AppLink } from '@/lib/router'
 import { cn } from '@/lib/utils'
+import { useUi } from '@/store/ui'
 import { Icon } from '@/window/Icon'
 import type { LinkedNodeType } from './build'
 import { CardToolbar, LinkedMenuItems } from './CardMenu'
 import { detailAt } from './layout'
 
-function LinkedNodeComponent({ id, data }: NodeProps<LinkedNodeType>) {
+function LinkedNodeComponent({ id, data, selected }: NodeProps<LinkedNodeType>) {
   const systems = useSystems()
   const name = systems.data?.value.find((s) => s.id === data.productSystemId)?.name ?? data.productSystemId
   const detail = useStore((s) => detailAt(s.transform[2]))
+  const noProcessChosen = useUi((s) => s.chosenProcess === null)
   const { placement, card } = data
   const output = placement.scaled === null ? undefined : Object.values(placement.scaled)[0]
   const target = data.atHash === null ? paths.system(data.productSystemId) : paths.version(data.productSystemId, data.atHash)
   return (
     <>
-      <CardToolbar size={{ width: card.width, height: placement.height }}>
+      <CardToolbar size={{ width: card.width, height: placement.height }} shown={selected && noProcessChosen}>
         <LinkedMenuItems to={target} node={id} />
       </CardToolbar>
       <div style={{ width: card.width, height: placement.height }} className="overflow-hidden rounded-xl outline outline-[1.5px] -outline-offset-[1.5px] outline-dashed outline-node-border bg-muted/40 text-xs shadow-sm">

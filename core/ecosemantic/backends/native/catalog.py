@@ -21,7 +21,7 @@ from ecosemantic.ports.types import FLOW_TYPES, Side
 Kind = Literal["process", "flow", "method"]
 FIELDS: dict[Kind, tuple[str, ...]] = {
     "process": ("name", "reference_product"),
-    "flow": ("name", "compartment", "sub_compartment", "cas"),
+    "flow": ("name", "compartment", "sub_compartment", "cas", "cas_as_published"),
     "method": ("spec",),
 }
 _EXCHANGE_TYPE: dict[ExchangeKind, ExchangeType] = {
@@ -36,12 +36,17 @@ CREATE TABLE processes(
     location VARCHAR, unit VARCHAR, classifications VARCHAR[], comment VARCHAR, url VARCHAR);
 CREATE TABLE exchanges(
     process VARCHAR, position INTEGER, type VARCHAR, side VARCHAR, "reference" BOOLEAN,
-    input VARCHAR, flow VARCHAR, supplier VARCHAR, amount DOUBLE, unit VARCHAR,
-    cut_off VARCHAR);
+    input VARCHAR, flow VARCHAR, supplier VARCHAR, supplier_location VARCHAR, amount DOUBLE,
+    unit VARCHAR, cut_off VARCHAR);
 CREATE TABLE flows(
     "row" INTEGER, code VARCHAR, name VARCHAR, compartment VARCHAR, sub_compartment VARCHAR,
-    unit VARCHAR, flow_type VARCHAR, cas VARCHAR, synonyms VARCHAR[]);
+    unit VARCHAR, flow_type VARCHAR, cas VARCHAR, cas_as_published VARCHAR,
+    synonyms VARCHAR[]);
 CREATE TABLE methods("row" INTEGER, key VARCHAR[], unit VARCHAR);
+CREATE TABLE weighting_sets("row" INTEGER, family VARCHAR, name VARCHAR, unit VARCHAR);
+CREATE TABLE weighting_factors(
+    "row" INTEGER, position INTEGER, key VARCHAR[], normalisation DOUBLE, weighting DOUBLE);
+CREATE TABLE locations(code VARCHAR, name VARCHAR);
 CREATE TABLE terms(kind VARCHAR, "row" INTEGER, field INTEGER, position INTEGER, term VARCHAR);
 CREATE TABLE lengths(kind VARCHAR, "row" INTEGER, tokens INTEGER);
 """
@@ -51,15 +56,17 @@ CREATE INDEX exchanges_process ON exchanges(process);
 CREATE INDEX flows_code ON flows(code);
 CREATE INDEX terms_term ON terms(term);
 """
-TABLES = ("processes", "exchanges", "flows", "methods", "terms", "lengths")
-
-
-def compartments(categories: Sequence[str]) -> tuple[str, str | None]:
-    """The compartment and sub-compartment a flow's categories name: the first, and the rest
-    joined by `/`."""
-    compartment = str(categories[0]) if categories else ""
-    rest = "/".join(str(c) for c in categories[1:]) if len(categories) > 1 else None
-    return compartment, rest
+TABLES = (
+    "processes",
+    "exchanges",
+    "flows",
+    "methods",
+    "weighting_sets",
+    "weighting_factors",
+    "locations",
+    "terms",
+    "lengths",
+)
 
 
 def _classification(value: object) -> str:
@@ -93,6 +100,9 @@ class Rows:
     exchanges: Table
     flows: Table
     methods: Table
+    weighting_sets: Table
+    weighting_factors: Table
+    locations: Table
     terms: Table
     lengths: Table
 
@@ -106,11 +116,20 @@ def _searched(rows: Rows, kind: Kind, row: int, texts: Sequence[str | None]) -> 
     rows.lengths.add(kind, row, count)
 
 
+@dataclass(frozen=True)
+class _Named:
+    """A code's own name, and the location of the background process it names, none for a
+    flow."""
+
+    name: str
+    location: str | None
+
+
 def _exchanges(
     rows: Rows,
     code: str,
     dataset: Dataset,
-    names: Mapping[str, tuple[str, str]],
+    named: Mapping[str, _Named],
     dropped: Sequence[Unlinked],
 ) -> None:
     """One row per exchange of a dataset, its reference exchange among them with the amount the
@@ -128,7 +147,8 @@ def _exchanges(
             reference,
             target,
             str(exchange["name"]),
-            names[target][0] if kind == "technosphere" else None,
+            named[target].name if kind == "technosphere" else None,
+            named[target].location if kind == "technosphere" else None,
             abs(amount) if reference else amount,
             str(exchange["unit"]),
             None,
@@ -142,6 +162,7 @@ def _exchanges(
             False,
             None,
             record.flow,
+            None,
             None,
             record.amount,
             record.unit,
@@ -176,6 +197,7 @@ def catalog_rows(imported: Import, dropped: Sequence[Unlinked] = ()) -> Rows:
                 "input",
                 "flow",
                 "supplier",
+                "supplier_location",
                 "amount",
                 "unit",
                 "cut_off",
@@ -191,25 +213,29 @@ def catalog_rows(imported: Import, dropped: Sequence[Unlinked] = ()) -> Rows:
                 "unit",
                 "flow_type",
                 "cas",
+                "cas_as_published",
                 "synonyms",
             )
         ),
         methods=Table(("row", "key", "unit")),
+        weighting_sets=Table(("row", "family", "name", "unit")),
+        weighting_factors=Table(("row", "position", "key", "normalisation", "weighting")),
+        locations=Table(("code", "name")),
         terms=Table(("kind", "row", "field", "position", "term")),
         lengths=Table(("kind", "row", "tokens")),
     )
-    names: dict[str, tuple[str, str]] = {}
+    named: dict[str, _Named] = {}
     dropped_by_dataset: dict[str, list[Unlinked]] = {}
     for record in dropped:
         dropped_by_dataset.setdefault(record.dataset, []).append(record)
     for (_, code), dataset in imported.datasets.items():
-        names[code] = (str(dataset["name"]), str(dataset["unit"]))
+        named[code] = _Named(str(dataset["name"]), cast("str | None", dataset.get("location")))
     for (_, code), flow in imported.flows.items():
         if flow["type"] not in FLOW_TYPES:
             raise NotSupported(
                 f"flow type {flow['type']!r} of {flow['name']!r} is not one the port names"
             )
-        names[code] = (str(flow["name"]), str(flow["unit"]))
+        named[code] = _Named(str(flow["name"]), None)
     for row, ((_, code), dataset) in enumerate(imported.datasets.items()):
         name, product = str(dataset["name"]), str(dataset["reference product"])
         rows.processes.add(
@@ -223,11 +249,13 @@ def catalog_rows(imported: Import, dropped: Sequence[Unlinked] = ()) -> Rows:
             dataset.get("comment"),
             dataset.get("url"),
         )
-        _exchanges(rows, code, dataset, names, dropped_by_dataset.get(code, []))
+        _exchanges(rows, code, dataset, named, dropped_by_dataset.get(code, []))
         _searched(rows, "process", row, (name, product))
     for row, ((_, code), flow) in enumerate(imported.flows.items()):
-        compartment, sub_compartment = compartments(cast(Sequence[str], flow["categories"]))
+        compartment = str(flow["compartment"])
+        sub_compartment = cast("str | None", flow["sub_compartment"])
         cas = cast("str | None", flow.get("CAS number"))
+        cas_as_published = cast("str | None", flow.get("CAS as published"))
         rows.flows.add(
             row,
             code,
@@ -237,13 +265,25 @@ def catalog_rows(imported: Import, dropped: Sequence[Unlinked] = ()) -> Rows:
             flow["unit"],
             flow["type"],
             cas,
+            cas_as_published,
             list(cast(list[str], flow.get("synonyms") or [])),
         )
-        _searched(rows, "flow", row, (str(flow["name"]), compartment, sub_compartment, cas))
+        _searched(
+            rows,
+            "flow",
+            row,
+            (str(flow["name"]), compartment, sub_compartment, cas or cas_as_published),
+        )
     for row, imported_method in enumerate(imported.methods):
         method = Method.of(imported_method.key, imported_method.unit)
         rows.methods.add(row, list(method.tuple), method.unit)
         _searched(rows, "method", row, (method.spec,))
+    for row, weighting in enumerate(imported.weightings):
+        rows.weighting_sets.add(row, weighting.family, weighting.name, weighting.unit)
+        for position, (key, normalisation, weight) in enumerate(weighting.factors):
+            rows.weighting_factors.add(row, position, list(key), normalisation, weight)
+    for code, name in imported.locations.items():
+        rows.locations.add(code, name)
     return rows
 
 

@@ -3,26 +3,32 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import cast
 
 from ecosemantic.backends.native.store import NativeStore
 from ecosemantic.errors import NotFound
 from ecosemantic.model.entities import ExchangeType, Method, method_named
 from ecosemantic.model.refs import BackgroundRef, Database, ElementaryFlowRef
+from ecosemantic.ports.inventory import no_flow
 from ecosemantic.ports.types import (
     BackgroundExchange,
     BackgroundProcess,
     ClassificationScheme,
     ClassificationValue,
     Compartment,
+    CompartmentName,
     DatabaseSummary,
     ElementaryFlow,
     Factor,
+    Location,
     Page,
+    WeightingFactor,
+    WeightingSet,
     factor_page,
 )
 
 _UNITS = "SELECT DISTINCT unit FROM processes"
-_LOCATIONS = "SELECT DISTINCT location FROM processes WHERE location IS NOT NULL"
+_LOCATIONS = "SELECT code, name FROM locations ORDER BY code"
 _SCHEME = "split_part(value, ': ', 1)"
 _CLASSIFICATIONS = (
     f"SELECT {_SCHEME} AS scheme, count(DISTINCT native_id) AS processes,"
@@ -35,10 +41,40 @@ _CLASSIFICATION_VALUES = (
     " CROSS JOIN unnest(processes.classifications) AS stored(value)"
     f" WHERE {_SCHEME} = ? GROUP BY value ORDER BY value"
 )
+_WEIGHTING_SETS = 'SELECT "row", name, unit FROM weighting_sets WHERE family = ? ORDER BY "row"'
+_WEIGHTING_FACTORS = (
+    'SELECT f."row", f.key, f.normalisation, f.weighting FROM weighting_factors AS f'
+    ' JOIN weighting_sets AS s ON s."row" = f."row"'
+    ' WHERE s.family = ? ORDER BY f."row", f.position'
+)
 _FACTOR_FLOWS = (
     "SELECT code, name, compartment, sub_compartment, unit FROM flows"
     " WHERE code IN (SELECT unnest(?::VARCHAR[]))"
 )
+_FLOWS = (
+    "SELECT code, name, compartment, sub_compartment, unit, flow_type, cas, cas_as_published,"
+    " synonyms FROM flows WHERE code IN (SELECT unnest(?::VARCHAR[]))"
+)
+_FLOW = (
+    "SELECT code, name, compartment, sub_compartment, unit, flow_type, cas, cas_as_published,"
+    " synonyms FROM flows WHERE code = ?"
+)
+
+
+def _flow(database: str, row: tuple) -> ElementaryFlow:
+    """One row of the flows table as the flow it describes in the database given."""
+    code, name, compartment, sub_compartment, unit, flow_type, cas, published, synonyms = row
+    return ElementaryFlow(
+        ref=ElementaryFlowRef(database=database, id=code),
+        name=name,
+        compartment=cast(CompartmentName, compartment),
+        sub_compartment=sub_compartment,
+        unit=unit,
+        flow_type=flow_type,
+        cas_number=cas,
+        cas_as_published=published,
+        synonyms=list(synonyms),
+    )
 
 
 def _input(
@@ -80,8 +116,8 @@ class NativeInventory:
             listed = None
             if exchanges:
                 rows = catalog.execute(
-                    'SELECT type, side, "reference", input, flow, supplier, amount, unit, cut_off'
-                    " FROM exchanges WHERE process = ? ORDER BY position",
+                    'SELECT type, side, "reference", input, flow, supplier, supplier_location,'
+                    " amount, unit, cut_off FROM exchanges WHERE process = ? ORDER BY position",
                     [ref.id],
                 ).fetchall()
                 listed = [
@@ -92,11 +128,23 @@ class NativeInventory:
                         reference=reference,
                         flow=flow,
                         supplier=supplier,
+                        supplier_location=supplier_location,
                         amount=amount,
                         unit=unit,
                         cut_off=cut_off,
                     )
-                    for kind, side, reference, target, flow, supplier, amount, unit, cut_off in rows
+                    for (
+                        kind,
+                        side,
+                        reference,
+                        target,
+                        flow,
+                        supplier,
+                        supplier_location,
+                        amount,
+                        unit,
+                        cut_off,
+                    ) in rows
                 ]
             return BackgroundProcess(
                 ref=ref,
@@ -158,28 +206,22 @@ class NativeInventory:
         owner = self.store.owner_of_elementary_flows(ref.database)
 
         def read() -> ElementaryFlow:
-            found = (
-                self.store.catalog(owner)
-                .execute(
-                    "SELECT name, compartment, sub_compartment, unit, flow_type, cas, synonyms"
-                    " FROM flows WHERE code = ?",
-                    [ref.id],
-                )
-                .fetchone()
-            )
+            found = self.store.catalog(owner).execute(_FLOW, [ref.id]).fetchone()
             if found is None:
-                raise NotFound(f"no flow {ref.id!r} in {ref.database!r}")
-            name, compartment, sub_compartment, unit, flow_type, cas, synonyms = found
-            return ElementaryFlow(
-                ref=ref,
-                name=name,
-                compartment=compartment,
-                sub_compartment=sub_compartment,
-                unit=unit,
-                flow_type=flow_type,
-                cas_number=cas,
-                synonyms=list(synonyms),
-            )
+                raise no_flow(ref)
+            return _flow(ref.database, found)
+
+        return await self.store.run(owner, read)
+
+    async def get_elementary_flows(self, database: str, ids: Sequence[str]) -> list[ElementaryFlow]:
+        """One flow per id the database holds, in the order given; an id it does not hold is left
+        out, and NotFound for a name no served database uses for its flows."""
+        owner = self.store.owner_of_elementary_flows(database)
+
+        def read() -> list[ElementaryFlow]:
+            rows = self.store.catalog(owner).execute(_FLOWS, [list(ids)]).fetchall()
+            held = {row[0]: row for row in rows}
+            return [_flow(database, held[code]) for code in ids if code in held]
 
         return await self.store.run(owner, read)
 
@@ -196,6 +238,36 @@ class NativeInventory:
     async def resolve_method(self, database: str, reference: str) -> Method:
         return method_named(await self.list_methods(database), database, reference)
 
+    async def weighting_sets(self, database: str, impact_method: str) -> list[WeightingSet]:
+        """Every normalisation and weighting set of a method family, in the bundle's order, each
+        factor naming its category by the method's id and a set the bundle gives no factor an empty
+        list; NotFound when the database holds no method of that family."""
+        listed = await self.list_methods(database, impact_method)
+        if not listed:
+            raise NotFound(f"no impact method {impact_method!r} in {database!r}")
+        ids = {method.tuple: method.id for method in listed}
+
+        def read() -> list[WeightingSet]:
+            catalog = self.store.catalog(database)
+            found = catalog.execute(_WEIGHTING_SETS, [impact_method]).fetchall()
+            sets = {
+                row: WeightingSet(impact_method=impact_method, name=name, unit=unit, factors=[])
+                for row, name, unit in found
+            }
+            factors = catalog.execute(_WEIGHTING_FACTORS, [impact_method]).fetchall()
+            for row, key, normalisation, weighting in factors:
+                method_id = ids.get(tuple(key))
+                if method_id is None:
+                    raise NotFound(f"no method {tuple(key)!r} in {database!r}")
+                sets[row].factors.append(
+                    WeightingFactor(
+                        method_id=method_id, normalisation=normalisation, weighting=weighting
+                    )
+                )
+            return [sets[row] for row, _name, _unit in found]
+
+        return await self.store.run(database, read)
+
     async def _values(self, database: str, statement: str) -> list[str]:
         rows = await self.store.run(
             database, lambda: self.store.catalog(database).execute(statement).fetchall()
@@ -205,24 +277,28 @@ class NativeInventory:
     async def list_units(self, database: str) -> list[str]:
         return await self._values(database, _UNITS)
 
-    async def list_locations(self, database: str) -> list[str]:
-        return await self._values(database, _LOCATIONS)
+    async def list_locations(self, database: str) -> list[Location]:
+        rows = await self.store.run(
+            database, lambda: self.store.catalog(database).execute(_LOCATIONS).fetchall()
+        )
+        return [Location(code=code, name=name) for code, name in rows]
 
     async def summarize(self, database: str) -> DatabaseSummary:
-        def read() -> tuple[int, int, int]:
+        def read() -> tuple[int, int, int, int]:
             catalog = self.store.catalog(database)
             [(processes,)] = catalog.execute("SELECT count(*) FROM processes").fetchall()
             [(flows,)] = catalog.execute("SELECT count(*) FROM flows").fetchall()
             [(methods,)] = catalog.execute("SELECT count(*) FROM methods").fetchall()
-            return processes, flows, methods
+            [(locations,)] = catalog.execute("SELECT count(*) FROM locations").fetchall()
+            return processes, flows, methods, locations
 
-        processes, elementary_flows, indicators = await self.store.run(database, read)
+        processes, elementary_flows, indicators, locations = await self.store.run(database, read)
         return DatabaseSummary(
             processes=processes,
             elementary_flows=elementary_flows,
             indicators=indicators,
             units=len(await self.list_units(database)),
-            locations=len(await self.list_locations(database)),
+            locations=locations,
         )
 
     async def list_classifications(self, database: str) -> list[ClassificationScheme]:
@@ -254,7 +330,9 @@ class NativeInventory:
                 .fetchall()
             ),
         )
-        return Compartment.tally((compartment, sub) for compartment, sub in rows)
+        return Compartment.tally(
+            (cast(CompartmentName, compartment), sub) for compartment, sub in rows
+        )
 
     async def factors(
         self,
@@ -279,12 +357,12 @@ class NativeInventory:
             }
             missing = [code for code, _ in factors if code not in described]
             if missing:
-                raise NotFound(f"no flow {missing[0]!r} in {elementary_flows!r}")
+                raise no_flow(ElementaryFlowRef(database=elementary_flows, id=missing[0]))
             return [
                 Factor(
                     flow=ElementaryFlowRef(database=elementary_flows, id=code),
                     name=described[code][0],
-                    compartment=described[code][1],
+                    compartment=cast(CompartmentName, described[code][1]),
                     sub_compartment=described[code][2],
                     unit=described[code][3],
                     factor=factor,

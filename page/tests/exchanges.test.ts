@@ -14,6 +14,7 @@ describe('splitBackgroundExchanges', () => {
     reference: false,
     side: 'input',
     supplier: null,
+    supplier_location: null,
     type: 'product',
     unit: 'kilogram',
   }
@@ -38,9 +39,18 @@ describe('splitBackgroundExchanges', () => {
 })
 
 describe('describeUncertainty', () => {
-  it('names the distribution and its parameters', () => {
-    expect(describeUncertainty(null)).toBe('none')
-    expect(describeUncertainty({ type: 'lognormal', params: { loc: -1.2, scale: 0.2 } })).toBe('lognormal · loc −1.2, scale 0.2')
-    expect(describeUncertainty({ type: 'triangular', params: { minimum: 1.05, loc: 1.1, maximum: 1.2 } })).toBe('triangular · minimum 1.05, loc 1.1, maximum 1.2')
+  it('states each distribution the way a practitioner does, in the amount unit', () => {
+    expect(describeUncertainty(null, 'km')).toBe('none')
+    expect(describeUncertainty({ type: 'uniform', params: { minimum: 50, maximum: 300 } }, 'km')).toBe('uniform, 50 to 300 km')
+    expect(describeUncertainty({ type: 'triangular', params: { minimum: 50, loc: 120, maximum: 300 } }, 'km')).toBe('triangular, 50 to 300 km, mode 120')
+    expect(describeUncertainty({ type: 'normal', params: { loc: 100, scale: 2 } }, 'km')).toBe('normal, sd 2 km')
+    expect(describeUncertainty({ type: 'lognormal', params: { loc: 0, scale: 0.1823 } }, '')).toBe('lognormal, GSD² 1.44')
+  })
+
+  it('adds the bound a lognormal or a normal states, both ends or one', () => {
+    const bounded = { loc: 0, scale: 0.1823, minimum: 0.8, maximum: 1.6 }
+    expect(describeUncertainty({ type: 'lognormal', params: bounded }, '')).toBe('lognormal, GSD² 1.44, bounded 0.8 to 1.6')
+    expect(describeUncertainty({ type: 'lognormal', params: { loc: 0, scale: 0.1823, minimum: 0.8 } }, '')).toBe('lognormal, GSD² 1.44, at least 0.8')
+    expect(describeUncertainty({ type: 'normal', params: { loc: 2, scale: 0.5, maximum: 4 } }, 'kg')).toBe('normal, sd 0.5 kg, at most 4 kg')
   })
 })

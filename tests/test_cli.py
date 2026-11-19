@@ -310,7 +310,14 @@ def test_setup_openlca_names_the_factors_set_apart(
     )
     summary = json.loads(out)
     assert code == 0, err
-    assert summary["set_apart"] == [{"method": METHOD, "category": "climate change", "factors": 1}]
+    assert summary["set_apart"] == [
+        {
+            "method": METHOD,
+            "category": "climate change",
+            "indicator": "climate change",
+            "factors": 1,
+        }
+    ]
 
 
 def test_setup_prints_its_steps_on_stderr_and_its_answer_alone_on_stdout(
@@ -399,6 +406,7 @@ def test_setup_summaries_share_their_keys(
         "cut_off",
         "directory",
         "set_apart",
+        "cas_set_aside",
     )
     assert tuple(openlca) == shared
     assert tuple(uslci) == (*shared, "sources", "notices")

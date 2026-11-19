@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
@@ -15,6 +16,7 @@ from ecosemantic.databases.bafu.probe import Probe, probe
 from ecosemantic.databases.bafu.profile import RELEASES, read_profile, recorded
 from ecosemantic.databases.bafu.validate import Counted, record, validate
 from ecosemantic.databases.command import Command
+from ecosemantic.databases.revision import listed_corrections
 
 
 def _download(args: argparse.Namespace) -> dict[str, object] | Terms:
@@ -52,10 +54,18 @@ def _fetched(version: str) -> Path:
 
 
 def _build(args: argparse.Namespace) -> Built:
-    """Build the zolca given, or the one the release's profile pins, into one bundle under
-    `--out`."""
+    """Build the zolca given, or the one the release's profile pins, into one bundle under `--out`,
+    at the revision and with the corrections the release's profile names."""
+    profile = read_profile(args.version)
     zolca = Path(args.zolca) if args.zolca is not None else _fetched(args.version)
-    return build(zolca, version=args.version, out_dir=Path(args.out))
+    return build(
+        zolca,
+        version=args.version,
+        out_dir=Path(args.out),
+        revision=profile.revision,
+        corrections=listed_corrections(RELEASES, profile.corrections),
+        now=datetime.now(UTC),
+    )
 
 
 def _validate(args: argparse.Namespace) -> Counted:

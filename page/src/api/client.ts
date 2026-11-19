@@ -11,7 +11,6 @@ import type {
   ContributionResult,
   Credential,
   CredentialKind,
-  Database,
   DatabaseSource,
   DatabaseSummary,
   ElementaryFlow,
@@ -24,6 +23,7 @@ import type {
   InventoryListing,
   Install,
   InstallDraft,
+  ListedDatabase,
   Listing,
   LogEntry,
   ParameterSpace,
@@ -43,7 +43,9 @@ import type {
   StartRunArguments,
   SystemCard,
   SystemRead,
+  SystemRow,
   Term,
+  Unchanged,
   ValidationReport,
   Value,
   VocabularyKind,
@@ -89,6 +91,17 @@ export function withoutToken(path: string): string {
   return rest ? `${base}?${rest}` : base
 }
 
+export interface ResultFile {
+  blob: Blob
+  name: string
+}
+
+function fileNamed(disposition: string | null): string {
+  const named = /filename="([^"]+)"/.exec(disposition ?? '')
+  if (named === null) throw new Error('the server named no file')
+  return named[1]
+}
+
 const inflight = new Map<number, number>()
 let calls = 0
 
@@ -124,7 +137,7 @@ function query(params: Record<string, string | number | undefined>): string {
 const systems = '/api/product-systems'
 const databases = '/api/databases'
 
-async function postForm(path: string, field: string, file: File, actor: string, stated: Record<string, string> = {}): Promise<LogEntry> {
+async function postForm(path: string, field: string, file: File, actor: string, stated: Record<string, string> = {}): Promise<LogEntry | Unchanged> {
   const form = new FormData()
   form.set(field, file)
   form.set('actor', actor)
@@ -132,11 +145,11 @@ async function postForm(path: string, field: string, file: File, actor: string, 
   const response = await fetch(withToken(path), { method: 'POST', body: form })
   const body: unknown = await response.json()
   if (!response.ok) throw new ApiError(response.status, body as ErrorEnvelope)
-  return body as LogEntry
+  return body as LogEntry | Unchanged
 }
 
 export const api = {
-  databases: () => call<Answer<Database[]>>(databases),
+  databases: () => call<Answer<ListedDatabase[]>>(databases),
   vocabulary: (database: string, kind: VocabularyKind) => call<Answer<Term[]>>(`${databases}/${database}/vocabulary/${kind}`),
   searchProcesses: (database: string, params: { query: string; location?: string; unit?: string; limit?: number; cursor?: string }) =>
     call<Listing<ProcessHit>>(`${databases}/${database}/processes${query(params)}`),
@@ -146,6 +159,8 @@ export const api = {
     call<Listing<Method>>(`${databases}/${database}/methods${query(params)}`),
   backgroundProcess: (database: string, ref: string) => call<Answer<BackgroundProcess>>(`${databases}/${database}/processes/${ref}`),
   elementaryFlow: (database: string, id: string) => call<Answer<ElementaryFlow>>(`${databases}/${database}/elementary-flows/${id}`),
+  elementaryFlows: (database: string, ids: string[]) =>
+    call<Answer<ElementaryFlow[]>>(`${databases}/${database}/elementary-flows/read`, { method: 'POST', body: JSON.stringify({ ids }) }),
   summary: (database: string) =>
     call<Answer<DatabaseSummary>>(`${databases}/${encodeURIComponent(database)}/summary`),
   schemes: (database: string) =>
@@ -154,13 +169,13 @@ export const api = {
     call<Answer<ClassificationNode[]>>(
       `${databases}/${encodeURIComponent(database)}/classifications/${encodeURIComponent(scheme)}`,
     ),
-  underNode: (database: string, scheme: string, params: { node: string; query?: string; limit?: number; cursor?: string }) =>
+  underNode: (database: string, scheme: string, params: { node: string; query?: string; limit?: number; cursor?: string; item?: string }) =>
     call<Answer<Page<ProcessHit>>>(
       `${databases}/${encodeURIComponent(database)}/classifications/${encodeURIComponent(scheme)}/processes${query(params)}`,
     ),
   compartments: (database: string) =>
     call<Answer<Compartment[]>>(`${databases}/${encodeURIComponent(database)}/compartments`),
-  flowsIn: (database: string, compartment: string, params: { sub_compartment?: string; query?: string; limit?: number; cursor?: string }) =>
+  flowsIn: (database: string, compartment: string, params: { sub_compartment?: string; query?: string; limit?: number; cursor?: string; item?: string }) =>
     call<Answer<Page<ElementaryFlowHit>>>(
       `${databases}/${encodeURIComponent(database)}/compartments/${encodeURIComponent(compartment)}/flows${query(params)}`,
     ),
@@ -171,9 +186,10 @@ export const api = {
       `${databases}/${encodeURIComponent(database)}/impact-methods/${encodeURIComponent(id)}/factors${query(params)}`,
     ),
   systems: (signal?: AbortSignal) => call<Answer<SystemCard[]>>(systems, { signal }),
+  home: (signal?: AbortSignal) => call<Answer<SystemRow[]>>('/api/home', { signal }),
   system: (id: string, signal?: AbortSignal) => call<SystemRead>(`${systems}/${id}`, { signal }),
   systemAs: (id: string, variant: string) => call<SystemRead>(`${systems}/${id}?variant=${encodeURIComponent(variant)}`),
-  parameters: (id: string, hash?: string) => call<Answer<ParameterSpace>>(`${systems}/${id}/parameters${query({ hash })}`),
+  parameters: (id: string, hash?: string, variant?: string) => call<Answer<ParameterSpace>>(`${systems}/${id}/parameters${query({ hash, variant })}`),
   log: (id: string, signal?: AbortSignal) => call<Answer<LogEntry[]>>(`${systems}/${id}/log`, { signal }),
   version: (id: string, hash: string) => call<ProductSystem>(`${systems}/${id}/versions/${hash}`),
   validation: (id: string, target?: string, signal?: AbortSignal) => call<Answer<ValidationReport>>(`${systems}/${id}/validation${query({ target })}`, { signal }),
@@ -226,9 +242,10 @@ export const api = {
   returnPackage: (id: string, file: File, actor: string, atEntry: string) =>
     postForm(`${systems}/${id}/return`, 'package', file, actor, atEntry ? { at_entry: atEntry } : {}),
   returnTables: (id: string, file: File, actor: string) => postForm(`${systems}/${id}/tables`, 'tables', file, actor),
-  resultZip: async (id: string, kind: 'impact' | 'contributions' | 'inventory', body: object): Promise<Blob> => {
+  resultZip: async (id: string, kind: 'impact' | 'contributions' | 'inventory', body: object): Promise<ResultFile> => {
     const response = await fetch(withToken(`${systems}/${id}/${kind}.zip`), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
     if (!response.ok) throw new ApiError(response.status, (await response.json()) as ErrorEnvelope)
-    return response.blob()
+    const name = fileNamed(response.headers.get('content-disposition'))
+    return { blob: await response.blob(), name }
   },
 }

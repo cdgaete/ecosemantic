@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from ecosemantic.databases import profiles
 
@@ -36,12 +36,14 @@ class Column(BaseModel):
 
 
 class Total(BaseModel):
-    """The workbook column that sums one method's categories."""
+    """The workbook column that holds one method's total, and the weighting set of that method's
+    family it is computed through."""
 
     model_config = ConfigDict(frozen=True)
 
     header: str
     method: str
+    weighting_set: str
 
 
 class Validated(BaseModel):
@@ -58,8 +60,8 @@ class Validated(BaseModel):
 
 class Profile(BaseModel):
     """One BAFU release's pinned facts: its inventory and results packs, the workbook's columns and
-    total, the file names of its two lists, and the tolerance and counts a validated run
-    recorded."""
+    total, the file names of its two lists, the revision EcoSemantic builds it at and the
+    correction list it records, and the tolerance and counts a validated run recorded."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -72,6 +74,8 @@ class Profile(BaseModel):
     total: Total
     unlinked: str
     differences: str
+    revision: int = Field(ge=1)
+    corrections: str | None = None
     tolerance: float
     validated: Validated | None = None
 

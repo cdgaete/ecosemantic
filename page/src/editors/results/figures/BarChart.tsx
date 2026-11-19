@@ -1,6 +1,6 @@
 import { formatAmount, formatShare } from '@/lib/format'
 
-export function BarChart({ rows, unit }: { rows: { label: string; value: number; share: number }[]; unit: string }) {
+export function BarChart({ rows, unit }: { rows: { label: string; value: number; share: number | null }[]; unit: string }) {
   const top = Math.max(...rows.map((r) => Math.abs(r.value)), Number.MIN_VALUE)
   return (
     <div className="grid max-w-3xl grid-cols-[minmax(140px,1fr)_3fr_auto_auto] items-center gap-x-2 gap-y-1 text-xs">

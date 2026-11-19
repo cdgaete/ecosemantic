@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -30,6 +31,9 @@ from tests.databases.bafu.test_download import (
 from tests.databases.zolca.fixture import FIXTURES
 
 VERSION = "2026-v1"
+
+NOW = datetime(2026, 1, 1, tzinfo=UTC)
+
 ZOLCA = FIXTURES / "openlca.zip"
 FLOW_ID = "an-input"
 FLOW_NAME = "an input"
@@ -89,7 +93,9 @@ def session_for(server: StubNexus) -> type:
 
 def a_process(tmp_path: Path) -> str:
     """The id of one process the fixture's bundle holds."""
-    built = build(ZOLCA, version="probe", out_dir=tmp_path / "probe")
+    built = build(
+        ZOLCA, version="probe", revision=1, corrections=(), now=NOW, out_dir=tmp_path / "probe"
+    )
     imported = read_background(built.bundle, "bafu-probe", foreground=frozenset())
     _, code = next(iter(imported.datasets))
     return code.split("_", 1)[0]
@@ -153,7 +159,7 @@ def _release(
 
 
 def test_not_applied_counts_what_the_bundle_holds(tmp_path: Path) -> None:
-    built = build(ZOLCA, version="probe", out_dir=tmp_path)
+    built = build(ZOLCA, version="probe", revision=1, corrections=(), now=NOW, out_dir=tmp_path)
     assert not_applied(built.bundle) == NotApplied(
         nw_sets=1,
         dq_entries=1,

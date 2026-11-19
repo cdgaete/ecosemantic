@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 import pytest
@@ -47,6 +48,35 @@ async def _electricity_bottle(client: Client, system_id: str) -> str:
             "type": "product",
             "formula": "elec_kwh",
             "input": {"kind": "background", "database": FIXTURE_DB, "id": CODES["elec"]},
+        },
+    )
+    return made.structured_content["value"]["id"]
+
+
+async def _steel_bottle(client: Client, system_id: str) -> str:
+    """A bottle drawing a kilogram of steel, the system's reference process; returns the
+    exchange id."""
+    await client.call_tool(
+        "create_process",
+        {
+            "product_system_id": system_id,
+            "code": "bottle",
+            "name": "bottle",
+            "unit": "unit",
+            "reference_product": "bottle",
+        },
+    )
+    await client.call_tool(
+        "update_product_system", {"product_system_id": system_id, "reference_process": "bottle"}
+    )
+    made = await client.call_tool(
+        "create_exchange",
+        {
+            "product_system_id": system_id,
+            "code": "bottle",
+            "type": "product",
+            "amount": 1.0,
+            "input": {"kind": "background", "database": FIXTURE_DB, "id": CODES["steel"]},
         },
     )
     return made.structured_content["value"]["id"]
@@ -187,6 +217,75 @@ async def test_a_scenario_is_refused_when_stale_and_calculates_when_rebased(
             client, "rebase_scenario", {"product_system_id": bottle, "name": "half"}
         )
         assert gone["error"] == "not_found"
+
+
+async def test_a_scenario_swap_records_the_suppliers_name_and_applying_it_names_the_exchange(
+    full_server: FastMCP, bottle: str
+) -> None:
+    async with Client(full_server) as client:
+        exchange_id = await _steel_bottle(client, bottle)
+        made = (
+            await client.call_tool(
+                "create_scenario",
+                {
+                    "product_system_id": bottle,
+                    "name": "glass",
+                    "overrides": [
+                        {
+                            "kind": "exchange",
+                            "exchange_id": exchange_id,
+                            "input": {
+                                "kind": "background",
+                                "database": FIXTURE_DB,
+                                "id": CODES["glass"],
+                            },
+                        }
+                    ],
+                },
+            )
+        ).structured_content
+        assert made["value"]["overrides"][0]["name"] == "glass"
+        whole = (
+            await client.call_tool(
+                "get_product_system", {"product_system_id": bottle, "variant": "glass"}
+            )
+        ).structured_content["value"]
+    exchange = next(e for e in whole["processes"][0]["exchanges"] if e["id"] == exchange_id)
+    assert exchange["name"] == "glass"
+    assert exchange["input"] == {
+        "kind": "background",
+        "database": FIXTURE_DB,
+        "id": CODES["glass"],
+    }
+
+
+async def test_a_swap_to_a_supplier_in_another_unit_is_refused(
+    full_server: FastMCP, bottle: str
+) -> None:
+    async with Client(full_server) as client:
+        exchange_id = await _steel_bottle(client, bottle)
+        refused = await _error(
+            client,
+            "create_scenario",
+            {
+                "product_system_id": bottle,
+                "name": "wrong_unit",
+                "overrides": [
+                    {
+                        "kind": "exchange",
+                        "exchange_id": exchange_id,
+                        "input": {
+                            "kind": "background",
+                            "database": FIXTURE_DB,
+                            "id": CODES["elec"],
+                        },
+                    }
+                ],
+            },
+        )
+    assert refused["error"] == "invalid"
+    assert "kilowatt hour" in str(refused["message"])
+    assert "kilogram" in str(refused["message"])
 
 
 async def test_get_parameters_answers_the_space_and_the_matrix(
@@ -346,3 +445,34 @@ async def test_get_parameters_answers_each_derived_parameter_with_its_value(
     # 0.2 × 1.1
     assert values["supplied"] == pytest.approx(0.22)
     assert values["mass"] == 0.2
+
+
+async def test_set_parameters_takes_a_distribution_and_get_parameters_answers_it(
+    full_server: FastMCP, bottle: str
+) -> None:
+    spread = {
+        "type": "lognormal",
+        "params": {"loc": math.log(120.0), "scale": 0.2, "minimum": 80.0, "maximum": 200.0},
+    }
+    async with Client(full_server) as client:
+        await client.call_tool(
+            "set_parameters",
+            {
+                "product_system_id": bottle,
+                "parameters": [
+                    {"name": "transport_km", "value": 120.0, "unit": "km", "uncertainty": spread}
+                ],
+            },
+        )
+        space = (
+            await client.call_tool("get_parameters", {"product_system_id": bottle})
+        ).structured_content["value"]
+    [parameter] = space["parameters"]
+    assert parameter["uncertainty"]["type"] == "lognormal"
+    assert parameter["uncertainty"]["params"] == {
+        "loc": pytest.approx(math.log(120.0)),
+        "scale": 0.2,
+        "minimum": 80.0,
+        "maximum": 200.0,
+    }
+    assert space["values"]["transport_km"] == 120.0

@@ -102,7 +102,7 @@ async def delete_process(context: ServerContext, product_system_id: str, code: s
     return await answer_write(context, code, entry, stored, changed)
 
 
-async def _resolved(
+async def resolved_input(
     context: ServerContext, input: ExchangeInput | None, unit: str | None, name: str | None
 ) -> tuple[str | None, str | None]:
     """The unit and name of a background or elementary input, checked against its provider."""
@@ -142,7 +142,7 @@ async def create_exchange(
     linked = None
     if isinstance(input, SystemRef):
         input, linked = await _pinned_link(context, input)
-    unit, name = await _resolved(context, input, unit, name)
+    unit, name = await resolved_input(context, input, unit, name)
     changed, exchange = add_exchange(
         stored,
         code,
@@ -178,7 +178,7 @@ async def update_exchange(
     stored = await context.storage.get_product_system(as_uuid(product_system_id))
     _, current = stored.exchange(as_uuid(exchange_id))
     if unit is not None:
-        unit, _ = await _resolved(context, current.input, unit, None)
+        unit, _ = await resolved_input(context, current.input, unit, None)
     changed, exchange = patch_exchange(
         stored,
         current.id,
@@ -262,14 +262,19 @@ def register(server: FastMCP, context: ServerContext) -> None:
         description=(
             "An exchange on the process with this code: production (no input), product (a "
             "background process by the ref a search hit carries, or a foreground process by "
-            "code) or elementary (a flow by the ref a search hit carries). Give "
-            "amount or formula; a formula names parameters set_parameters has already "
-            "written. Unit and name default to the provider's and must match its unit. A "
+            "code) or elementary (a flow by the ref a search hit carries). Give an "
+            "amount, a formula, or both as get_product_system answers them, the amount then "
+            "being the one the formula evaluates to; a formula names parameters "
+            "set_parameters has already written. Unit and name default to the provider's "
+            "and must match its unit. A "
             'product input may instead link another product system, {"kind": "system", '
             '"product_system_id": ...}: one unit of its reference process, pinned to its '
             "current state unless at_hash names another, under its base values unless case "
             "names one of its cases. A link that closes a cycle, or that reaches one system "
-            "under two cases, is refused. input and uncertainty are JSON objects, never strings "
+            "under two cases, is refused. An uncertainty is centred on the amount the "
+            "exchange resolves to within a relative 1e-9, and is refused on an exchange whose "
+            "formula reads an uncertain parameter: an amount takes one spread. "
+            "input and uncertainty are JSON objects, never strings "
             'holding JSON: {"kind": "foreground", "code": "mine"}, {"kind": "background", '
             '"database": ..., "id": ...}, {"type": "lognormal", "params": {"loc": ..., '
             '"scale": ...}}.'
@@ -280,8 +285,12 @@ def register(server: FastMCP, context: ServerContext) -> None:
         annotations=WRITE,
         description=(
             "Patch an exchange's amount, formula, name, unit, comment or uncertainty. An "
-            "amount on an exchange with a formula needs 'formula' in clear. Type and input "
-            "are fixed; delete and create to change them."
+            "amount on an exchange that keeps a formula is the one the formula evaluates to; "
+            "an amount of its own needs 'formula' in clear. An uncertainty is centred on the "
+            "amount within a relative 1e-9, and is refused on an exchange whose formula "
+            "reads an uncertain parameter. An amount or a formula given without an "
+            "uncertainty moves the exchange's distribution onto the new amount. Type and "
+            "input are fixed; delete and create to change them."
         ),
     )(boundary(serialised(context.lock)(bound(update_exchange, context))))
     server.tool(

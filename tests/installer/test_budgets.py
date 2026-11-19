@@ -25,7 +25,6 @@ from ecosemantic.backends.native.install import install
 from ecosemantic.backends.native.store import (
     DATABASES_DIR,
     build_dir,
-    migrated_name,
     served_build,
 )
 from ecosemantic.databases.bafu import profile as bafu_profile
@@ -232,7 +231,7 @@ def test_the_budgets_cover_the_longest_paths_the_engine_writes(
     code that writes it. Beneath the databases folder: the longest database name every source's
     profiles produce, ecoinvent, USLCI and BAFU (a database named from a person's own zip is not
     bounded); every file each profiled source's download lands as, the Collaboration Server's cache
-    and Nexus's, with the `.part` written first; a migrated build; an install record; and an
+    and Nexus's, with the `.part` written first; a build; an install record; and an
     uploaded zip. Beneath the models folder: a product system with its versions, its log and its
     lock; a run's record, its worker log and its heartbeat; an agent's activity file; the token; and
     the two nonces."""
@@ -272,11 +271,11 @@ def test_the_budgets_cover_the_longest_paths_the_engine_writes(
     build_id = served_build(databases_dir / DATABASES_DIR / slug(name, "-"))
     assert build_id is not None
     tail = longest_path(build_dir(databases_dir, name, build_id))[0]
-    migrated = build_dir(databases_dir, name, migrated_name("0" * 64)) / tail
+    built = build_dir(databases_dir, name, uuid.uuid4().hex) / tail
     databases_paths = [
         *commons_downloads_of(databases_dir, monkeypatch),
         *nexus_downloads_of(databases_dir, monkeypatch),
-        migrated,
+        built,
         install_dir(databases_dir, uuid.uuid4()) / INSTALL_FILE,
         upload_path(uploads_dir(databases_dir), uuid.uuid4()),
     ]

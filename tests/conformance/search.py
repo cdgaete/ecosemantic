@@ -42,6 +42,12 @@ class SearchConformance:
         methods = await search.methods(FIXTURE_DB, "climate")
         assert [m.spec for m in methods.items] == ["fixture > gwp > climate change > GWP100"]
 
+    async def test_a_hit_answers_its_cas_number_and_the_text_set_aside(self, search) -> None:
+        carbon = await search.elementary_flows(FIXTURE_DB, "carbon dioxide")
+        assert [(h.cas_number, h.cas_as_published) for h in carbon.items] == [("124-38-9", None)]
+        particulate = await search.elementary_flows(FIXTURE_DB, "particulate")
+        assert [(h.cas_number, h.cas_as_published) for h in particulate.items] == [(None, "n.a.")]
+
     async def test_method_paging_says_there_is_more_and_its_cursor_reaches_the_rest(
         self, search
     ) -> None:
@@ -111,6 +117,62 @@ class SearchConformance:
             FIXTURE_DB, "", sub_compartment="urban air close to ground"
         )
         assert [h.name for h in sub.items] == ["Particulate matter"]
+
+    async def test_a_listing_counts_what_its_filter_keeps(self, search) -> None:
+        under_24 = await search.processes(FIXTURE_DB, "", classifications=UNDER_24, limit=2)
+        assert len(under_24.items) == 2 and under_24.total == 3
+        assert (await search.processes(FIXTURE_DB, "steel", classifications=UNDER_24)).total == 1
+        assert (await search.processes(FIXTURE_DB, "production", limit=4)).total == 11
+        assert (await search.elementary_flows(FIXTURE_DB, "", compartment="air")).total == 3
+        assert (await search.methods(FIXTURE_DB, "fixture", limit=1)).total == 2
+        past = await search.processes(FIXTURE_DB, "", classifications=UNDER_24, limit=2, cursor="4")
+        assert past.items == [] and past.total == 3
+
+    async def test_a_listing_in_name_order_keeps_the_order_of_the_unfiltered_one(
+        self, search
+    ) -> None:
+        named = await search.processes(
+            FIXTURE_DB, "production", classifications=UNDER_24, order="name"
+        )
+        assert [hit.name for hit in named.items] == BASIC_METALS
+        flows = await search.elementary_flows(FIXTURE_DB, "fossil", compartment="air", order="name")
+        assert [hit.name for hit in flows.items] == ["Carbon dioxide, fossil", "Methane, fossil"]
+
+    async def test_an_item_answers_the_page_that_holds_it(self, search) -> None:
+        held = await search.processes(
+            FIXTURE_DB, "", classifications=UNDER_24, limit=2, item=CODES["steel"]
+        )
+        assert [hit.name for hit in held.items] == BASIC_METALS[2:]
+        assert held.previous_cursor == "0"
+        assert not held.has_more
+        flow = await search.elementary_flows(
+            FIXTURE_DB, "", compartment="air", limit=2, item=FLOW_IDS["pm"]
+        )
+        assert [hit.name for hit in flow.items] == ["Particulate matter"]
+
+    async def test_an_item_at_the_end_of_a_page_answers_that_page(self, search) -> None:
+        held = await search.processes(
+            FIXTURE_DB, "", classifications=UNDER_24, limit=2, item=CODES["copper"]
+        )
+        assert [hit.name for hit in held.items] == BASIC_METALS[:2]
+        assert held.previous_cursor is None
+        flow = await search.elementary_flows(
+            FIXTURE_DB, "", compartment="air", limit=2, item=FLOW_IDS["ch4"]
+        )
+        assert [hit.name for hit in flow.items] == ["Carbon dioxide, fossil", "Methane, fossil"]
+
+    async def test_an_item_the_listing_does_not_hold_answers_the_first_page(self, search) -> None:
+        absent = await search.processes(
+            FIXTURE_DB, "steel", classifications=UNDER_24, limit=2, item=CODES["copper"]
+        )
+        assert [hit.name for hit in absent.items] == ["steel production"]
+        assert absent.previous_cursor is None
+
+    async def test_a_cursor_names_its_page_whatever_the_item(self, search) -> None:
+        page = await search.processes(
+            FIXTURE_DB, "", classifications=UNDER_24, limit=2, cursor="0", item=CODES["steel"]
+        )
+        assert [hit.name for hit in page.items] == BASIC_METALS[:2]
 
     async def test_a_filter_that_is_no_browsing_filter_does_not_permit_a_query_of_no_term(
         self, search

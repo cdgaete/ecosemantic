@@ -60,7 +60,7 @@ export function RequestsPage({ view }: { view: SystemView }) {
           {view.system.hash === null ? (
             <p className="text-warning">The stored product system carries no hash yet.</p>
           ) : (
-            <RequestForm systemId={view.id} atHash={view.system.hash} onDone={() => undefined} />
+            <RequestForm systemId={view.id} atHash={view.system.hash} system={view.system} onDone={() => undefined} />
           )}
         </Section>
       )}

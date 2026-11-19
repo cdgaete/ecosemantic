@@ -141,9 +141,12 @@ def pinning(
 
 async def held_pins(system: ProductSystem, storage: StoragePort) -> list[Pin]:
     """Each link of the system with what the store holds for it."""
+    refs = pins(system)
+    if not refs:
+        return []
     held = {s.id: s for s in await storage.list_product_systems()}
     found: list[Pin] = []
-    for ref in pins(system):
+    for ref in refs:
         summary = held.get(ref.product_system_id)
         if summary is None:
             found.append(Pin(ref=ref))

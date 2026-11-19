@@ -19,6 +19,7 @@
         "reference": true,
         "side": "output",
         "supplier": null,
+        "supplier_location": null,
         "type": "product",
         "unit": "kilogram"
       },
@@ -34,6 +35,7 @@
         "reference": false,
         "side": "input",
         "supplier": "electricity production",
+        "supplier_location": "GLO",
         "type": "product",
         "unit": "kilowatt hour"
       },
@@ -49,6 +51,7 @@
         "reference": false,
         "side": "output",
         "supplier": null,
+        "supplier_location": null,
         "type": "elementary",
         "unit": "kilogram"
       },
@@ -64,6 +67,7 @@
         "reference": false,
         "side": "output",
         "supplier": null,
+        "supplier_location": null,
         "type": "elementary",
         "unit": "kilogram"
       }

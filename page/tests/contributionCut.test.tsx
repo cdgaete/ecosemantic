@@ -89,6 +89,24 @@ it('shows the total and what the process page list left out, so its rows add to 
   expect(restRow).toHaveTextContent(formatShare(rest / total.value))
 })
 
+it('reads the total and the rest as no share where the total is 0', async () => {
+  const shown = (recorded.value.processes ?? []).slice(0, 2)
+  vi.mocked(api.contributions).mockResolvedValue({
+    ...recorded,
+    value: {
+      ...recorded.value,
+      total: { ...recorded.value.total, value: 0 },
+      processes: shown,
+      cut: { cutoff: 0.01, below: 1, share: null, below_score: -1, unlisted: 0, unlisted_share: null, unlisted_score: 0 },
+    },
+  })
+  renderAt(`/systems/${system.value.id}/results/processes${search}&amount=6`, <App router={false} />)
+  const totalRow = (await screen.findByText('Total')).closest('tr')
+  expect(totalRow).toHaveTextContent('–')
+  const restRow = screen.getByText('Rest').closest('tr')
+  expect(restRow).toHaveTextContent('–')
+})
+
 it('folds the columns the panel cannot hold under each process, rest and total rows alike', async () => {
   renderAt(`/systems/${system.value.id}/results/processes${search}`, <App router={false} />)
   const table = await waitFor(() => screen.getByRole('table'))

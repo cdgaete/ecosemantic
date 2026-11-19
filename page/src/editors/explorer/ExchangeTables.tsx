@@ -2,16 +2,16 @@ import type { ReactNode } from 'react'
 import type { BackgroundExchange } from '@/api/types'
 import { elementaryRefs, useElementaryFlows, type FlowSide } from '@/api/useFlowSides'
 import { splitBackgroundExchanges } from '@/editors/explorer/exchanges'
-import { amountColumn, elementaryProvider, flowColumn, providerColumn, providerLink, unitColumn } from '@/editors/exchangeColumns'
-import { paths } from '@/lib/paths'
+import { amountColumn, elementaryProvider, flowColumn, namedWithLocation, providerColumn, providerLink, unitColumn } from '@/editors/exchangeColumns'
 import { DataTable, type Column } from '@/window/DataTable'
 import { Section } from '@/window/Section'
+import type { DatasetLinks } from './links'
 
-function provider(exchange: BackgroundExchange, flows: Record<string, FlowSide>): ReactNode {
+function provider(exchange: BackgroundExchange, flows: Record<string, FlowSide>, links: DatasetLinks): ReactNode {
   if (exchange.cut_off !== null) return <span className="text-muted-foreground">cut off: {exchange.cut_off}</span>
   const input = exchange.input
   if (!input) return ''
-  if (input.kind === 'background') return exchange.supplier ? providerLink(paths.background(input.database, input.id), 'product', exchange.supplier) : ''
+  if (input.kind === 'background') return exchange.supplier ? providerLink(links.process(input.database, input.id), 'product', namedWithLocation(exchange.supplier, exchange.supplier_location)) : ''
   return elementaryProvider(flows[input.id])
 }
 
@@ -23,18 +23,18 @@ function rowClass(exchange: BackgroundExchange): string {
   return exchange.reference ? 'font-semibold' : ''
 }
 
-export function BackgroundExchangeTables({ database, exchanges, sectionKey }: { database: string; exchanges: BackgroundExchange[]; sectionKey: string }) {
+export function BackgroundExchangeTables({ database, exchanges, sectionKey, links }: { database: string; exchanges: BackgroundExchange[]; sectionKey: string; links: DatasetLinks }) {
   const { flows, errors } = useElementaryFlows(elementaryRefs(exchanges, (exchange) => exchange.flow))
   const split = splitBackgroundExchanges(exchanges)
   const columns: Column<BackgroundExchange>[] = [
     flowColumn(
       (exchange) => exchange.flow,
       (exchange) => (exchange.type === 'elementary' ? 'elementary' : 'product'),
-      (exchange) => (exchange.input?.kind === 'elementary_flow' ? paths.flow(database, exchange.input.id) : null),
+      (exchange) => (exchange.input?.kind === 'elementary_flow' ? links.flow(database, exchange.input.id) : null),
     ),
     amountColumn((exchange) => exchange.amount),
     unitColumn((exchange) => exchange.unit),
-    providerColumn((exchange) => provider(exchange, flows)),
+    providerColumn((exchange) => provider(exchange, flows, links)),
   ]
   return (
     <>

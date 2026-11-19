@@ -108,6 +108,7 @@ from ecosemantic.ports.types import (
     ElementaryFlowHit,
     FlowType,
     Install,
+    InventoryOrder,
     Limit,
     LogEntry,
     MonteCarloConfig,
@@ -116,6 +117,7 @@ from ecosemantic.ports.types import (
     Resolution,
     Run,
     RunState,
+    Side,
     SourceName,
 )
 
@@ -642,6 +644,8 @@ class ProductSystem:
     def calculate_inventory(
         self,
         demand: list[DemandItem] | None = None,
+        side: Side | None = None,
+        order: InventoryOrder = "compartment",
         compartment: str | None = None,
         query: str | None = None,
         limit: Limit = 100,
@@ -652,6 +656,8 @@ class ProductSystem:
             calculate_inventory,
             product_system_id=str(self.id),
             demand=demand,
+            side=side,
+            order=order,
             compartment=compartment,
             query=query,
             limit=limit,

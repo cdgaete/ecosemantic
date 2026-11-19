@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
+from ecosemantic.errors import NotFound
 from ecosemantic.model.entities import Method
 from ecosemantic.model.refs import BackgroundRef, Database, ElementaryFlowRef
 from ecosemantic.ports.types import (
@@ -15,8 +16,15 @@ from ecosemantic.ports.types import (
     DatabaseSummary,
     ElementaryFlow,
     Factor,
+    Location,
     Page,
+    WeightingSet,
 )
+
+
+def no_flow(ref: ElementaryFlowRef) -> NotFound:
+    """The miss every inventory raises for a flow a database it serves does not hold."""
+    return NotFound(f"no flow {ref.id!r} in {ref.database!r}")
 
 
 @runtime_checkable
@@ -31,6 +39,10 @@ class InventoryPort(Protocol):
 
     async def get_elementary_flow(self, ref: ElementaryFlowRef) -> ElementaryFlow: ...
 
+    async def get_elementary_flows(
+        self, database: str, ids: Sequence[str]
+    ) -> list[ElementaryFlow]: ...
+
     async def missing(
         self, refs: Sequence[BackgroundRef | ElementaryFlowRef]
     ) -> list[BackgroundRef | ElementaryFlowRef]: ...
@@ -41,11 +53,13 @@ class InventoryPort(Protocol):
         self, database: str, impact_method: str | None = None
     ) -> list[Method]: ...
 
+    async def weighting_sets(self, database: str, impact_method: str) -> list[WeightingSet]: ...
+
     async def resolve_method(self, database: str, reference: str) -> Method: ...
 
     async def list_units(self, database: str) -> list[str]: ...
 
-    async def list_locations(self, database: str) -> list[str]: ...
+    async def list_locations(self, database: str) -> list[Location]: ...
 
     async def list_compartments(self, database: str) -> list[Compartment]: ...
 

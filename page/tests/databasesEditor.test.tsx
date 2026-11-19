@@ -2,7 +2,7 @@ import { focusManager } from '@tanstack/react-query'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { Screens } from '@/App'
 import { api, ApiError } from '@/api/client'
-import type { AccountEntry, Answer, DatabaseSource, Install } from '@/api/types'
+import type { AccountEntry, Answer, DatabaseSource, Install, ListedDatabase } from '@/api/types'
 import databases from './fixtures/databases.json'
 import installs from './fixtures/installs.json'
 import server from './fixtures/server.json'
@@ -65,6 +65,23 @@ it('lists the installed databases and the sources', async () => {
     expect(within(table).getByText(database.fingerprint.slice(0, 12))).toBeInTheDocument()
   }
   for (const source of offered.value) expect(await screen.findByRole('button', { name: new RegExp(source.name) })).toBeInTheDocument()
+})
+
+it('shows the revision beside the version, and the version alone where it has none', async () => {
+  const held = databases as unknown as Answer<ListedDatabase[]>
+  const [plain, revised] = held.value
+  vi.mocked(api.databases).mockResolvedValue({
+    ...held,
+    value: [
+      { ...plain, version: '1.2026-09.0', revision: null },
+      { ...revised, version: '1.2026-09.0', revision: 1 },
+    ],
+  })
+  renderAt('/databases', <Screens />)
+  const table = await screen.findByRole('table')
+  expect(await within(table).findByText('1.2026-09.0')).toBeInTheDocument()
+  expect(within(table).getByText('1.2026-09.0 · revision 1')).toBeInTheDocument()
+  expect(within(table).queryByText('1.2026-09.0 · revision null')).toBeNull()
 })
 
 it("links each installed database's name to its explorer", async () => {

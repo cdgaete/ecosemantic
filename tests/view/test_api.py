@@ -29,7 +29,7 @@ from ecosemantic.model.refs import DemandItem, ElementaryFlowRef
 from ecosemantic.ports.types import InventoryRow, Layout, MonteCarloConfig, Spot, System
 from ecosemantic.view.api import call_tool
 from ecosemantic.view.app import build_view
-from tests.fixture_data import FIXTURE_BIO, FIXTURE_DB, FLOW_IDS, GWP
+from tests.fixture_data import CODES, FIXTURE_BIO, FIXTURE_DB, FLOW_IDS, GWP
 
 GWP_ID = method_id(" > ".join(GWP))
 NOWHERE = Path("/nonexistent-static")
@@ -105,6 +105,19 @@ def test_discovery_routes(client: TestClient) -> None:
     assert process["exchanges"] is not None
     methods = client.get(f"/api/databases/{FIXTURE_DB}/methods", params={"query": "GWP"}).json()
     assert methods["items"]
+
+
+def test_the_process_route_names_each_supplier_s_location(client: TestClient) -> None:
+    answered = client.get(f"/api/databases/{FIXTURE_DB}/processes/{CODES['steel']}").json()["value"]
+    assert [
+        (exchange["type"], exchange["supplier"], exchange["supplier_location"])
+        for exchange in answered["exchanges"]
+    ] == [
+        ("product", None, None),
+        ("product", "electricity production", "GLO"),
+        ("elementary", None, None),
+        ("elementary", None, None),
+    ]
 
 
 def test_calculation_routes(client: TestClient, fixture_system_stored: ProductSystem) -> None:
@@ -195,9 +208,9 @@ class RefusingCalculation:
             InventoryRow(
                 flow=ref,
                 name="Unplaced",
-                compartment="economic",
-                sub_compartment="waste",
-                flow_type="economic",
+                compartment="inventory indicator",
+                sub_compartment="unspecified",
+                flow_type="inventory indicator",
                 unit="kilogram",
                 amount=1.0,
             )
@@ -230,6 +243,37 @@ def test_the_parameters_route_answers_the_space_and_a_past_version(
     assert at.status_code == 200 and "matrix" in at.json()["value"]
     missing = client.get(f"/api/product-systems/{system_id}/parameters?hash={'0' * 64}")
     assert missing.status_code == 404 and missing.json()["error"] == "not_found"
+
+
+async def test_the_parameters_route_answers_the_space_under_a_variant(
+    client: TestClient, context: ServerContext, fixture_system_stored: ProductSystem
+) -> None:
+    system = fixture_system_stored.model_copy(deep=True, update={"hash": None})
+    system.id = uuid.uuid5(system.id, "parameters-variant")
+    system.parameters = [
+        Parameter(name="frame_mass", value=0.25),
+        Parameter(name="frame_steel", formula="frame_mass * 2.4"),
+    ]
+    system.cases = [Case(name="heavy", values={"frame_mass": 0.5})]
+    await context.storage.put_product_system(system, context.actor, "created")
+    base = f"/api/product-systems/{system.id}/parameters"
+    heavy = client.get(f"{base}?variant=heavy")
+    assert heavy.status_code == 200
+    space = heavy.json()["value"]
+    assert {p["name"]: p["value"] for p in space["parameters"]}["frame_mass"] == 0.5
+    assert space["values"]["frame_steel"] == pytest.approx(0.5 * 2.4)
+    stored = client.get(base).json()["value"]
+    assert {p["name"]: p["value"] for p in stored["parameters"]}["frame_mass"] == 0.25
+    assert stored["values"]["frame_steel"] == pytest.approx(0.25 * 2.4)
+
+
+def test_a_hash_and_a_variant_together_are_refused(
+    client: TestClient, fixture_system_stored: ProductSystem
+) -> None:
+    base = f"/api/product-systems/{fixture_system_stored.id}/parameters"
+    refused = client.get(f"{base}?hash={'0' * 64}&variant=heavy")
+    assert refused.status_code == 400
+    assert refused.json()["message"] == "name a hash or a variant, not both"
 
 
 def settled(client: TestClient, run_id: str, seconds: float = 120) -> dict[str, object]:
@@ -287,7 +331,9 @@ def test_an_unknown_run_is_not_found(client: TestClient) -> None:
     assert response.status_code == 404 and response.json()["message"] == f"no run {unknown}"
 
 
-async def test_a_tool_that_fails_its_own_validation_answers_an_envelope() -> None:
+async def test_a_tool_that_fails_its_own_validation_answers_an_envelope(
+    context: ServerContext,
+) -> None:
     server = FastMCP("probe")
 
     @server.tool(name="broken")
@@ -295,7 +341,7 @@ async def test_a_tool_that_fails_its_own_validation_answers_an_envelope() -> Non
         Method.model_validate({})
         return "unreachable"
 
-    response = await call_tool(server, "broken", {})
+    response = await call_tool(server, context, "broken", {})
     assert response.status_code == 400
     assert json.loads(bytes(response.body))["error"] == "invalid"
 
@@ -363,10 +409,14 @@ async def test_releasing_the_layout_is_one_arrange_graph_call_releasing_all_unde
     calls: list[tuple[str, dict[str, object]]] = []
 
     async def spy(
-        server: FastMCP, name: str, arguments: Mapping[str, JsonValue], started: bool = False
+        server: FastMCP,
+        context: ServerContext,
+        name: str,
+        arguments: Mapping[str, JsonValue],
+        started: bool = False,
     ) -> Response:
         calls.append((name, dict(arguments)))
-        return await call_tool(server, name, arguments, started)
+        return await call_tool(server, context, name, arguments, started)
 
     monkeypatch.setattr("ecosemantic.view.api.call_tool", spy)
     with TestClient(build_view(context, full_server, static=NOWHERE)) as client:

@@ -4,6 +4,8 @@ import { App, Screens } from '@/App'
 import { api } from '@/api/client'
 import type { Answer, Run } from '@/api/types'
 import { formatAgo } from '@/lib/format'
+import type { ProductSystem, SystemRead } from '@/api/types'
+import { useUi } from '@/store/ui'
 import system from './fixtures/system.json'
 import validation from './fixtures/validation.json'
 import anchors from './fixtures/anchors.json'
@@ -29,6 +31,11 @@ vi.mock('@/api/client', async (importOriginal) => {
       log: vi.fn(async () => log),
       requests: vi.fn(async () => requests),
       runs: vi.fn(async () => runs),
+      systemAs: vi.fn(async (_id: string, variant: string) => {
+        const base = system.value as ProductSystem
+        const varied = variant !== 'heavy' ? base : { ...base, name: `${base.name} under the case` }
+        return { ...(system as SystemRead), value: varied, open_requests: 0 }
+      }),
     },
   }
 })
@@ -94,5 +101,24 @@ describe('system editor', () => {
     const changed = requests.value[1]
     const changedRow = (await screen.findByText(changed.message)).closest('li') as HTMLElement
     expect(within(changedRow).getByText('Ask for a change to')).toBeInTheDocument()
+  })
+
+  it('names the state the canvas shows on general information and on statistics', async () => {
+    useUi.setState({ canvasSystemId: system.value.id, canvasVariant: 'heavy' })
+    const general = renderAt(`/systems/${system.value.id}/general`, <App router={false} />)
+    expect(await screen.findByText('Under case heavy')).toBeInTheDocument()
+    expect(vi.mocked(api.systemAs)).toHaveBeenCalledWith(system.value.id, 'heavy')
+    general.unmount()
+    renderAt(`/systems/${system.value.id}/statistics`, <App router={false} />)
+    expect(await screen.findByText('Under case heavy')).toBeInTheDocument()
+    useUi.setState({ canvasVariant: null })
+  })
+
+  it('names no state on the log page', async () => {
+    useUi.setState({ canvasSystemId: system.value.id, canvasVariant: 'heavy' })
+    renderAt(`/systems/${system.value.id}/log`, <App router={false} />)
+    await waitFor(() => expect(screen.getByText('Entries')).toBeInTheDocument())
+    expect(screen.queryByText(/^Under (case|scenario) /)).toBeNull()
+    useUi.setState({ canvasVariant: null })
   })
 })

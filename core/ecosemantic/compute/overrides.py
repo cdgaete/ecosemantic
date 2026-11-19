@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ecosemantic.compute.parameters import materialize, refuse_zero_production
+from ecosemantic.compute.parameters import followed, materialize, refuse_zero_production
 from ecosemantic.errors import Invalid, StaleScenario
 from ecosemantic.model.canonical import base_pin, stale
 from ecosemantic.model.entities import (
@@ -19,6 +19,7 @@ def _set_parameter(product_system: ProductSystem, name: str, value: float) -> No
     parameter = product_system.parameter(name)
     if parameter.formula is not None:
         raise Invalid(f"parameter {name!r} is derived and cannot be set")
+    parameter.uncertainty = followed(parameter.uncertainty, value, f"parameter {name!r}")
     parameter.value = value
 
 
@@ -58,7 +59,9 @@ def apply_variant(product_system: ProductSystem, name: str) -> ProductSystem:
 
 
 def apply_scenario(product_system: ProductSystem, scenario: Scenario) -> ProductSystem:
-    """Parameter overrides, then materialisation, then exchange overrides."""
+    """Parameter overrides, then materialisation, then exchange overrides. A multiplier keeps an
+    exchange's formula as `(formula) * multiplier`, so an amount a parameter drives keeps that
+    parameter's spread, scaled."""
     out = product_system.model_copy(deep=True)
     for override in scenario.overrides:
         if isinstance(override, ParameterOverride):
@@ -72,12 +75,19 @@ def apply_scenario(product_system: ProductSystem, scenario: Scenario) -> Product
             exchange.formula = None
             exchange.amount = override.amount
         elif override.multiplier is not None:
-            exchange.formula = None
+            if exchange.formula is not None:
+                exchange.formula = f"({exchange.formula}) * {override.multiplier!r}"
             exchange.amount = exchange.amount * override.multiplier
         elif override.input is not None:
             if exchange.type != "product":
                 raise Invalid(f"only technosphere exchanges take an input swap: {exchange.name!r}")
+            if override.name is None:
+                raise Invalid(
+                    f"scenario {scenario.name!r} swaps the input of {exchange.name!r} "
+                    "without naming the supplier it swaps in"
+                )
             if isinstance(override.input, ForegroundRef):
                 out.process(override.input.code)
             exchange.input = override.input
+            exchange.name = override.name
     return refuse_zero_production(out)

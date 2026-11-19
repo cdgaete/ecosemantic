@@ -97,7 +97,9 @@ def test_the_validate_command_prints_the_counts_of_a_clean_build(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     release = build_release(tmp_path / "release")
-    written = build(release, default_profile(release), tmp_path / "out", NOW)
+    written = build(
+        release, default_profile(release), tmp_path / "out", NOW, revision=1, corrections=()
+    )
     _release_ready(monkeypatch, tmp_path, release)
     assert (
         main(
@@ -124,7 +126,9 @@ def test_the_validate_command_exits_one_when_a_score_differs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     release = build_release(tmp_path / "release")
-    written = build(release, default_profile(release), tmp_path / "out", NOW)
+    written = build(
+        release, default_profile(release), tmp_path / "out", NOW, revision=1, corrections=()
+    )
     tamper_cumulative(release, STEEL, factor=1.01)
     _release_ready(monkeypatch, tmp_path, release)
     assert (

@@ -90,10 +90,12 @@ def test_an_entry_of_format_3_is_refused_with_its_remedy(tmp_path: Path, bundle_
     entry = json.loads((build / "entry.json").read_text(encoding="utf-8"))
     held = {"format": 3, "database": entry["database"], "bundle": entry["bundle"]}
     (build / "entry.json").write_text(json.dumps(held), encoding="utf-8")
-    with pytest.raises(Unavailable, match="entry format 3; this store reads format 5") as raised:
+    with pytest.raises(Unavailable, match="entry format 3; this store reads format 6") as raised:
         NativeStore(tmp_path)
     assert raised.value.hint == (
-        "install it again from its bundle with `ecosemantic setup openlca --replace`"
+        "install the database again: `ecosemantic setup <source> --replace` for a source,"
+        " `ecosemantic setup openlca --package <package> --replace` for a package, or"
+        " `install_database` with `replace`"
     )
 
 

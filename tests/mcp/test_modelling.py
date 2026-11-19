@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 
 import pytest
 from fastmcp import Client, FastMCP
@@ -236,6 +237,50 @@ async def test_update_and_delete_an_exchange(full_server: FastMCP, bottle: str) 
         assert [len(p["exchanges"]) for p in whole["processes"]] == [1, 1]
 
 
+async def test_an_exchange_as_the_read_answers_it_writes_back(
+    full_server: FastMCP, bottle: str
+) -> None:
+    async with Client(full_server) as client:
+        await _process(client, bottle, "bottle", "unit")
+        await _process(client, bottle, "cap", "kilogram")
+        args = {
+            "product_system_id": bottle,
+            "code": "bottle",
+            "type": "product",
+            "input": {"kind": "foreground", "code": "cap"},
+        }
+        await client.call_tool("create_exchange", {**args, "formula": "2 * 0.01"})
+        whole = (
+            await client.call_tool("get_product_system", {"product_system_id": bottle})
+        ).structured_content["value"]
+        read = next(p for p in whole["processes"] if p["code"] == "bottle")["exchanges"][1]
+        assert read["formula"] == "2 * 0.01" and read["amount"] == pytest.approx(0.02)
+        again = (
+            await client.call_tool(
+                "create_exchange", {**args, "amount": read["amount"], "formula": read["formula"]}
+            )
+        ).structured_content["value"]
+        assert again["amount"] == read["amount"] and again["formula"] == read["formula"]
+        kept = (
+            await client.call_tool(
+                "update_exchange",
+                {
+                    "product_system_id": bottle,
+                    "exchange_id": again["id"],
+                    "amount": read["amount"],
+                    "formula": read["formula"],
+                    "comment": "as read",
+                },
+            )
+        ).structured_content["value"]
+        assert kept["amount"] == read["amount"] and kept["comment"] == "as read"
+        refused = await _error(
+            client, "create_exchange", {**args, "amount": 0.03, "formula": "2 * 0.01"}
+        )
+        assert refused["error"] == "invalid"
+        assert "amount 0.03 is not what formula '2 * 0.01' evaluates to" in refused["message"]
+
+
 async def test_a_lognormals_written_scale_survives_the_next_write(
     full_server: FastMCP, bottle: str
 ) -> None:
@@ -252,7 +297,7 @@ async def test_a_lognormals_written_scale_survives_the_next_write(
                     "input": {"kind": "background", "database": FIXTURE_DB, "id": CODES["steel"]},
                     "uncertainty": {
                         "type": "lognormal",
-                        "params": {"loc": -2.3, "scale": 0.1823},
+                        "params": {"loc": math.log(0.5), "scale": 0.1823},
                     },
                 },
             )
@@ -266,7 +311,7 @@ async def test_a_lognormals_written_scale_survives_the_next_write(
         ).structured_content["value"]
         read = next(e for p in whole["processes"] for e in p["exchanges"] if e["id"] == made["id"])
         assert read["uncertainty"]["params"]["scale"] == 0.1823
-        assert read["uncertainty"]["params"]["loc"] == -2.3
+        assert read["uncertainty"]["params"]["loc"] == math.log(0.5)
 
 
 async def test_an_object_sent_as_its_json_text_is_refused_naming_what_to_send(
@@ -311,3 +356,43 @@ async def test_an_unknown_argument_answers_the_typed_envelope_with_its_remedy(
     assert "'input'" in message and "exchange_id" in message and "formula" in message
     assert "delete_exchange" in message and "create_exchange" in message
     assert "rebase" in message and "errors.pydantic.dev" not in message
+
+
+async def test_a_distribution_on_an_exchange_reading_an_uncertain_parameter_is_refused(
+    full_server: FastMCP, bottle: str
+) -> None:
+    async with Client(full_server) as client:
+        await _process(client, bottle, "bottle", "unit")
+        await client.call_tool(
+            "set_parameters",
+            {
+                "product_system_id": bottle,
+                "parameters": [
+                    {
+                        "name": "cap_mass",
+                        "value": 0.02,
+                        "uncertainty": {
+                            "type": "normal",
+                            "params": {"loc": 0.02, "scale": 0.002},
+                        },
+                    }
+                ],
+            },
+        )
+        refused = await _error(
+            client,
+            "create_exchange",
+            {
+                "product_system_id": bottle,
+                "code": "bottle",
+                "type": "product",
+                "amount": 0.5,
+                "formula": "cap_mass * 25",
+                "input": {"kind": "background", "database": FIXTURE_DB, "id": CODES["steel"]},
+                "uncertainty": {"type": "normal", "params": {"loc": 0.5, "scale": 0.05}},
+            },
+        )
+        assert refused["error"] == "invalid"
+        message = str(refused["message"])
+        assert "reads the uncertain parameters ['cap_mass']" in message
+        assert "an amount takes one spread: remove one of them" in message

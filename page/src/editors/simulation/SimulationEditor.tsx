@@ -1,7 +1,7 @@
 import { useParams } from 'react-router-dom'
 import { useCancelRun, useRun, useSystem } from '@/api/queries'
 import { useSystemStream } from '@/api/stream'
-import type { Method, MonteCarloResult, ProductSystem, Run, Scope, Stopped } from '@/api/types'
+import type { Drawn, Method, MonteCarloResult, ProductSystem, Run, Scope, Stopped } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { backwardsTreatmentNote, categoryLabel, creditLoopNote, formatAmount, methodById, shortHash, formatAgo } from '@/lib/format'
 import { movedSince } from '@/lib/hashes'
@@ -26,11 +26,23 @@ function demand(run: Run, system: ProductSystem | undefined): string {
   return run.demand.map((d) => `${d.ref.kind === 'foreground' ? (names.get(d.ref.code) ?? d.ref.code) : d.ref.id} × ${formatAmount(d.amount)}`).join('; ')
 }
 
-function atAmount(count: number): string | null {
+function heldAtAmount(count: number): string | null {
   if (count === 0) return null
   return count === 1
-    ? '1 background normal distribution was sampled at its amount, as its standard deviation exceeds it.'
-    : `${count} background normal distributions were sampled at their amount, as their standard deviation exceeds it.`
+    ? '1 background normal distribution held at its amount, its standard deviation exceeding it.'
+    : `${formatAmount(count)} background normal distributions held at their amount, their standard deviation exceeding it.`
+}
+
+function counted(count: number, one: string, many: string): string {
+  return `${formatAmount(count)} ${count === 1 ? one : many}`
+}
+
+function drawnLine({ parameters, foreground, background }: Drawn): string {
+  return [
+    counted(parameters.drawn, 'parameter', 'parameters'),
+    `${formatAmount(foreground.drawn)} of ${counted(foreground.there, 'foreground exchange', 'foreground exchanges')}`,
+    `${formatAmount(background.drawn)} of ${counted(background.there, 'background exchange', 'background exchanges')}`,
+  ].join(', ')
 }
 
 function dropped(result: MonteCarloResult): string | null {
@@ -50,7 +62,12 @@ const STOPPED: Record<Stopped, string> = {
 function ran(result: MonteCarloResult, methods: Method[]): string {
   const taken = result.n + result.dropped_draws.length
   const kept = taken === result.n ? `${result.n} ${result.n === 1 ? 'iteration' : 'iterations'}` : `${result.n} of ${taken} iterations kept`
-  return `${kept}, ${STOPPED[result.stopped]}, gated on ${categoryLabel(methodById(methods, result.gating_method))}`
+  const held = result.gating_method === null ? '' : `, held longest by ${categoryLabel(methodById(methods, result.gating_method))}`
+  return `${kept}, ${STOPPED[result.stopped]}${held}`
+}
+
+function named(ids: string[], methods: Method[]): string {
+  return ids.map((id) => categoryLabel(methodById(methods, id))).join(', ')
 }
 
 function When({ instant }: { instant: string }) {
@@ -72,7 +89,7 @@ export function SimulationEditor() {
   const moved = movedSince(run.at_hash, system?.hash)
   const action = <RequestAction systemId={id} entity="product_system" entityId={id} />
   const worst = run.progress.worst_rel_se === null ? '–' : formatAmount(run.progress.worst_rel_se)
-  const note = run.result ? atAmount(run.result.normals_at_amount) : null
+  const note = run.result ? heldAtAmount(run.result.drawn.background.held) : null
   const drops = run.result ? dropped(run.result) : null
   return (
     <>
@@ -129,15 +146,22 @@ export function SimulationEditor() {
         ))}
         {run.result ? (
           <>
-            <p className="pb-2">{ran(run.result, run.methods)}</p>
+            <p className="pb-2">Drawn: {drawnLine(run.result.drawn)}</p>
             {note ? <p className="pb-2 text-muted-foreground">{note}</p> : null}
+            <p className="pb-2">{ran(run.result, run.methods)}</p>
+            {run.result.constant.length > 0 ? (
+              <p className="pb-2 text-muted-foreground">Met as constant, every draw equal: {named(run.result.constant, run.methods)}.</p>
+            ) : null}
+            {run.result.indistinguishable_from_zero.length > 0 ? (
+              <p className="pb-2 text-muted-foreground">Left out of the stop rule, their median indistinguishable from zero: {named(run.result.indistinguishable_from_zero, run.methods)}.</p>
+            ) : null}
             {drops ? <p className="pb-2 text-warning">{drops}</p> : null}
             {run.result.credit_loops.map((codes) => (
               <p key={codes.join(' ')} className="pb-2 text-warning">
                 {creditLoopNote(codes)}
               </p>
             ))}
-            <SimulationResults result={run.result} methods={run.methods} />
+            <SimulationResults result={run.result} methods={run.methods} systemId={run.product_system_id} />
           </>
         ) : (
           <p className="text-muted-foreground">{run.open ? 'The results appear when the simulation finishes.' : 'This simulation holds no result.'}</p>

@@ -126,7 +126,7 @@ function openImpact() {
 
 it('names each loop holding a credit, in the base and in each variant, above the results', async () => {
   vi.mocked(api.system).mockResolvedValueOnce(system as SystemRead)
-  const variant = { name: 'used', scores: impact.value.scores, deltas: [0], credit_loops: [['frame', 'part', 'widget']], linked_credit_loops: [], treatments_run_backwards: [], uncertainty: null, paired_deltas: null }
+  const variant = { name: 'used', scores: impact.value.scores, deltas: [0], totals: [], total_deltas: [], credit_loops: [['frame', 'part', 'widget']], linked_credit_loops: [], treatments_run_backwards: [], uncertainty: null, paired_deltas: null }
   vi.mocked(api.impact).mockResolvedValueOnce({ ...impact, value: { ...impact.value, credit_loops: [['frame', 'widget']], variants: [variant] } })
   openImpact()
   await waitFor(() => expect(screen.getByText('The loop through frame, widget holds a credit; whether it delivers what it makes is not checked.')).toBeInTheDocument())
@@ -135,7 +135,7 @@ it('names each loop holding a credit, in the base and in each variant, above the
 
 it('names each exchange that runs a treatment backwards, in the base and in each variant, above the results', async () => {
   vi.mocked(api.system).mockResolvedValueOnce(system as SystemRead)
-  const variant = { name: 'used', scores: impact.value.scores, deltas: [0], credit_loops: [], linked_credit_loops: [], treatments_run_backwards: ['widget · steel at 1'], uncertainty: null, paired_deltas: null }
+  const variant = { name: 'used', scores: impact.value.scores, deltas: [0], totals: [], total_deltas: [], credit_loops: [], linked_credit_loops: [], treatments_run_backwards: ['widget · steel at 1'], uncertainty: null, paired_deltas: null }
   vi.mocked(api.impact).mockResolvedValueOnce({ ...impact, value: { ...impact.value, treatments_run_backwards: ['widget · steel at 0.5'], variants: [variant] } })
   openImpact()
   await waitFor(() => expect(screen.getByText('widget · steel at 0.5 sends a positive amount to a treatment, which runs it backwards and counts its emissions as credits; waste goes to a treatment as a negative input.')).toBeInTheDocument())

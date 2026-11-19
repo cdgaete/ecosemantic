@@ -9,7 +9,7 @@ from typing import cast
 
 import yaml
 from ecoinvent_interface import CachedStorage, Settings
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from ecosemantic.databases.ecoinvent.datasets import ZeroSpread
 from ecosemantic.databases.ecoinvent.lcia import LciaLayout, Sheet
@@ -50,8 +50,8 @@ class Validated(BaseModel):
 
 
 class Profile(BaseModel):
-    """One release's pinned facts: the files a build reads, the layouts it names, and the
-    decisions the probe asked for."""
+    """One release's pinned facts: the files a build reads, the layouts it names, the decisions the
+    probe asked for, the revision EcoSemantic builds it at and the correction list it records."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -60,6 +60,8 @@ class Profile(BaseModel):
     files: dict[str, FileHash]
     lcia: LciaLayout
     overview: Sheet
+    revision: int = Field(ge=1)
+    corrections: str | None = None
     zero_spread: ZeroSpread = "refuse"
     expected_unmatched_factors: int = 0
     expected_zero_spread: int = 0
@@ -126,6 +128,7 @@ def default_profile(release: Release) -> Profile:
         },
         lcia=_LCIA,
         overview=_OVERVIEW,
+        revision=1,
     )
 
 

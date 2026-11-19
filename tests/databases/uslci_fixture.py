@@ -35,6 +35,9 @@ flags as false.
   negates: a credit against slag's own production;
 - elementary flows of which one is used and characterised (carbon dioxide), one used and not
   characterised (methane), and one defined and unused (sulfur dioxide);
+- with `unplaced_flow`, one elementary flow more: a megajoule of steam the widget puts out under
+  `Elementary flows/emission/non-FEDEFL`, which no rule places and the release's own correction
+  list files under air;
 - two bridges among them, `Electricity Bridge; GRID` and `Electricity Bridge; NOWHERE`, each putting
   out one megajoule of `electricity` and taking the same megajoule in, the input naming its intended
   provider only inside its `description` as the Commons writes it,
@@ -124,6 +127,8 @@ SCRAP = "Waste Flows/Scrap"
 ENERGY = "Technosphere Flows/Energy"
 FUELS = "Technosphere Flows/Fuels"
 RESERVES = "Elementary flows/Resources/in ground"
+UNPLACED = "Elementary flows/emission/non-FEDEFL"
+CORRECTED_FLOW = "63169cac-1f80-354a-a831-82c2c641aa05"
 UNLINKED_CATEGORY = "Technosphere Flows"
 
 
@@ -160,6 +165,7 @@ FLOWS: dict[str, tuple[str, o.FlowType, str, str]] = {
     "electricity": ("electricity", o.FlowType.PRODUCT_FLOW, ENERGY, "energy"),
     "coal": ("coal", o.FlowType.PRODUCT_FLOW, FUELS, "mass"),
     "crude": ("Crude oil", o.FlowType.ELEMENTARY_FLOW, RESERVES, "energy"),
+    "steam": ("Steam", o.FlowType.ELEMENTARY_FLOW, UNPLACED, "energy"),
 }
 FLOW_NAMES: dict[str, str] = {key: flows[0] for key, flows in FLOWS.items()}
 BRIDGED_ONLY = ("coal", "crude")
@@ -314,7 +320,9 @@ def _property_id(key: str) -> str:
 
 
 def _flow_id(key: str) -> str:
-    return _id("flow", key)
+    """The id of a flow: the fixture's own, and the id the release publishes the corrected flow
+    under."""
+    return CORRECTED_FLOW if key == "steam" else _id("flow", key)
 
 
 BRIDGED_CODES: dict[str, str] = {
@@ -582,18 +590,21 @@ def write_inventory(
     bare_conversion: bool = False,
     dangling_flow: bool = False,
     grid_description: str | None = None,
+    unplaced_flow: bool = False,
 ) -> Path:
-    """Write the synthetic inventory as a schema-3 zip at path and return it. The methane takes
-    its unit under a symbol the core's table lacks when `odd_unit` is set; the water is given in
-    volume with neither a distribution nor a formula when `bare_conversion` is set; the widget
-    takes in a flow the archive does not hold when `dangling_flow` is set; the grid bridge's input
-    carries the description `grid_description` gives it, and the one the Commons writes when it is
-    not given. The flows only the bridged repository holds are not written here."""
+    """Write the synthetic inventory as a schema-3 zip at path and return it. The methane takes its
+    unit under a symbol the core's table lacks when `odd_unit` is set; the water is given in volume
+    with neither a distribution nor a formula when `bare_conversion` is set; the widget takes in a
+    flow the archive does not hold when `dangling_flow` is set; the grid bridge's input carries the
+    description `grid_description` gives it, and the one the Commons writes when it is not given;
+    `unplaced_flow` gives the widget one megajoule of steam out under the category the release
+    files it under and no rule places. The flows only the bridged repository holds are not written
+    here."""
     with ZipWriter(str(path)) as writer:
         _definitions(writer, odd_unit=odd_unit)
         writer.write(o.Location(id=_id("location", "GLO"), name="Global", code="GLO"))
         for key in FLOWS:
-            if key in BRIDGED_ONLY:
+            if key in BRIDGED_ONLY or (key == "steam" and not unplaced_flow):
                 continue
             writer.write(
                 _flow_record(key, description=INVENTORY_RECORD if key == "electricity" else None)
@@ -627,6 +638,8 @@ def write_inventory(
         ]
         if dangling_flow:
             widget.append(_absent())
+        if unplaced_flow:
+            widget.append(_exchange(11, "steam", 1.0, is_input=False))
         writer.write(_process("widget", widget, **_noticed(DISCLAIMER)))
         writer.write(
             _process(

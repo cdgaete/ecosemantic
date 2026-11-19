@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
@@ -9,8 +10,10 @@ from ecosemantic.databases.ecoinvent.masterdata import base_flows
 from ecosemantic.databases.ecoinvent.probe import Probe, probe_read, read_release
 from ecosemantic.databases.ecoinvent.profile import Profile, verify
 from ecosemantic.databases.ecoinvent.release import Release
-from ecosemantic.errors import NotSupported
+from ecosemantic.databases.revision import revise
+from ecosemantic.errors import Conflict, NotSupported
 from ecosemantic.package.base_writer import BaseRows, Written, write_base_bundle
+from ecosemantic.package.manifest import Correction
 
 _LIMIT = 5
 
@@ -38,19 +41,56 @@ def _refusal(found: Probe, profile: Profile) -> NotSupported:
     )
 
 
-def build(release: Release, profile: Profile, out_dir: Path, now: datetime) -> Written:
-    """Probe, refuse anything unknown, and write the release as one bundle."""
+def build(
+    release: Release,
+    profile: Profile,
+    out_dir: Path,
+    now: datetime,
+    *,
+    revision: int,
+    corrections: Sequence[Correction],
+) -> Written:
+    """Probe, refuse anything unknown, and write the release as one bundle: the release with its
+    corrections, read into the canonical shape, at the revision its profile names."""
     verify(release, profile)
     read = read_release(release, profile)
     found = probe_read(release, profile, read)
     if not found.clean(profile):
         raise _refusal(found, profile)
     out_dir.mkdir(parents=True, exist_ok=True)
-    return write_base_bundle(
-        BaseRows(datasets=read.datasets, flows=base_flows(read.master), methods=read.methods),
+    destination = out_dir / f"{read.name}.zip"
+    if destination.exists():
+        raise Conflict(f"{destination.name} exists; name another destination")
+    staged = out_dir / f".{read.name}.staging.zip"
+    staged.unlink(missing_ok=True)
+    written = write_base_bundle(
+        BaseRows(
+            datasets=read.datasets,
+            flows=base_flows(read.master),
+            methods=read.methods,
+            locations=read.master.geographies,
+        ),
         scheme="ecoinvent",
         name=read.name,
         version=release.version,
-        destination=out_dir / f"{read.name}.zip",
+        destination=staged,
         now=now,
+    )
+    try:
+        revise(
+            staged,
+            destination,
+            name=read.name,
+            version=release.version,
+            revision=revision,
+            corrections=corrections,
+            now=now,
+        )
+    finally:
+        staged.unlink(missing_ok=True)
+    return Written(
+        bundle=destination,
+        processes=written.processes,
+        flows=written.flows,
+        methods=written.methods,
     )

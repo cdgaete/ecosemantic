@@ -9,8 +9,10 @@ import threading
 import time
 import uuid
 from collections.abc import AsyncIterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import filelock._api
 import pytest
 from filelock import FileLock
 
@@ -27,6 +29,20 @@ from ecosemantic.ports.types import LogEntry, RequestDraft, StoreChange
 from tests.conformance.storage import PackageConformance, StorageConformance
 from tests.conftest import label_system, tshirt_labelled
 from tests.dict_resolver import DictResolver
+
+
+class _SleepSpy:
+    """Stands in for `filelock._api`'s `time`, recording every poll it waits."""
+
+    def __init__(self, polls: list[float]) -> None:
+        self.polls = polls
+
+    def sleep(self, seconds: float) -> None:
+        self.polls.append(seconds)
+        time.sleep(seconds)
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(time, name)
 
 
 class TestFilesystemStorage(StorageConformance):
@@ -173,6 +189,54 @@ class TestFilesystemStorage(StorageConformance):
         assert time.monotonic() - started >= 1.0
         assert current.id == product_system.id
         assert process.wait(timeout=10) == 0
+
+    async def test_readers_of_one_system_in_this_process_never_poll_the_file_lock(
+        self,
+        storage: FilesystemStorage,
+        product_system: ProductSystem,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        agent = Actor(kind="agent", id="mcp")
+        await storage.put_product_system(product_system, agent, "created")
+        polls: list[float] = []
+        monkeypatch.setattr(filelock._api, "time", _SleepSpy(polls))
+        barrier = threading.Barrier(15)
+
+        def read() -> uuid.UUID:
+            barrier.wait(timeout=30)
+            return asyncio.run(storage.get_product_system(product_system.id)).id
+
+        for _ in range(5):
+            with ThreadPoolExecutor(max_workers=15) as pool:
+                reads = [pool.submit(read) for _ in range(15)]
+                assert {future.result(timeout=30) for future in reads} == {product_system.id}
+
+        assert polls == []
+
+    async def test_a_read_waits_for_another_process_s_lock(
+        self, storage: FilesystemStorage, product_system: ProductSystem
+    ) -> None:
+        agent = Actor(kind="agent", id="mcp")
+        await storage.put_product_system(product_system, agent, "created")
+        lock = FileLock(storage.root / f"{product_system.id}.lock")
+        held = threading.Event()
+        release = threading.Event()
+
+        def hold() -> None:
+            with lock:
+                held.set()
+                release.wait(timeout=10)
+
+        thread = threading.Thread(target=hold, daemon=True)
+        thread.start()
+        assert held.wait(timeout=5)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            read = pool.submit(asyncio.run, storage.get_product_system(product_system.id))
+            await asyncio.sleep(0.3)
+            assert not read.done()
+            release.set()
+            assert (await asyncio.to_thread(read.result, 20)).id == product_system.id
+        thread.join()
 
     async def test_a_sweep_removes_the_lock_file_of_an_id_the_store_does_not_hold(
         self, storage: FilesystemStorage, product_system: ProductSystem

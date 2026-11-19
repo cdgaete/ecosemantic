@@ -158,14 +158,14 @@ describe('client', () => {
     await api.summary('fixture')
     await api.schemes('fixture')
     await api.compartments('fixture')
-    await api.flowsIn('fixture', 'Resource/in water', { sub_compartment: 'in water', limit: 10 })
+    await api.flowsIn('fixture', 'natural resource/in water', { sub_compartment: 'in water', limit: 10 })
     await api.methodTree('fixture')
     const asked = spy.mock.calls.map(([address]) => withoutToken(String(address)))
     expect(asked).toEqual([
       '/api/databases/fixture/summary',
       '/api/databases/fixture/classifications',
       '/api/databases/fixture/compartments',
-      '/api/databases/fixture/compartments/Resource%2Fin%20water/flows?sub_compartment=in+water&limit=10',
+      '/api/databases/fixture/compartments/natural%20resource%2Fin%20water/flows?sub_compartment=in+water&limit=10',
       '/api/databases/fixture/impact-methods',
     ])
   })
@@ -176,11 +176,39 @@ describe('client', () => {
     await expect(api.system('missing')).rejects.toBeInstanceOf(ApiError)
   })
 
-  it('posts a calculation for its files and answers the zip', async () => {
-    const fetched = vi.fn(async () => new Response(new Uint8Array([122, 105, 112]), { status: 200 }))
+  it('a result is saved under the name the server gives', async () => {
+    const fetched = vi.fn(
+      async () =>
+        new Response(new Uint8Array([122, 105, 112]), {
+          status: 200,
+          headers: { 'content-disposition': 'attachment; filename="catodo-de-cobre-chile-ruta-pirometalurgica-aa32c4d5-impact.zip"' },
+        }),
+    )
     vi.stubGlobal('fetch', fetched)
     const answered = await api.resultZip('s1', 'impact', { method_id: 'm1' })
-    expect(answered.size).toBe(3)
+    expect(answered.name).toBe('catodo-de-cobre-chile-ruta-pirometalurgica-aa32c4d5-impact.zip')
+    expect(answered.blob.size).toBe(3)
+    expect(JSON.parse((fetched.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)).toEqual({ method_id: 'm1' })
+    vi.unstubAllGlobals()
+  })
+
+  it('an answer that names no file is refused', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array([122]), { status: 200 })))
+    await expect(api.resultZip('s1', 'impact', { method_id: 'm1' })).rejects.toThrow('the server named no file')
+    vi.unstubAllGlobals()
+  })
+
+  it('posts a calculation for its files and answers the zip', async () => {
+    const fetched = vi.fn(
+      async () =>
+        new Response(new Uint8Array([122, 105, 112]), {
+          status: 200,
+          headers: { 'content-disposition': 'attachment; filename="widget-aa32c4d5-impact.zip"' },
+        }),
+    )
+    vi.stubGlobal('fetch', fetched)
+    const answered = await api.resultZip('s1', 'impact', { method_id: 'm1' })
+    expect(answered.blob.size).toBe(3)
     const [address, init] = fetched.mock.calls[0] as unknown as [string, RequestInit]
     expect(address).toContain('/api/product-systems/s1/impact.zip')
     expect(init.method).toBe('POST')

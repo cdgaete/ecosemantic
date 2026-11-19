@@ -148,6 +148,55 @@ describe('ui store', () => {
     expect(useUi.getState().collapsed.general).toBe(true)
   })
 
+  it('persists the fold of the build timeline and the width the inspector was dragged to', async () => {
+    localStorage.setItem('ecosemantic-page', JSON.stringify({ state: { theme: 'dark' }, version: 5 }))
+    await useUi.persist.rehydrate()
+    expect(useUi.getState().timelineOpen).toBe(true)
+    expect(useUi.getState().inspectorWidth).toBeNull()
+    useUi.getState().setTimelineOpen(false)
+    useUi.getState().setInspectorWidth(612)
+    const saved = JSON.parse(localStorage.getItem('ecosemantic-page') ?? '{}') as { state: { timelineOpen: boolean; inspectorWidth: number | null } }
+    expect(saved.state.timelineOpen).toBe(false)
+    expect(saved.state.inspectorWidth).toBe(612)
+    useUi.setState({ timelineOpen: true, inspectorWidth: null })
+    localStorage.removeItem('ecosemantic-page')
+  })
+
+  it('persists the place the canvas tools were dropped at', async () => {
+    localStorage.setItem('ecosemantic-page', JSON.stringify({ state: { theme: 'dark' }, version: 5 }))
+    await useUi.persist.rehydrate()
+    expect(useUi.getState().toolsOffset).toBeNull()
+    useUi.getState().setToolsOffset({ x: -120, y: 340 })
+    const saved = JSON.parse(localStorage.getItem('ecosemantic-page') ?? '{}') as { state: { toolsOffset: { x: number; y: number } | null } }
+    expect(saved.state.toolsOffset).toEqual({ x: -120, y: 340 })
+    useUi.setState({ toolsOffset: null })
+    localStorage.removeItem('ecosemantic-page')
+  })
+
+  it('persists the databases a person folded and opened', async () => {
+    useUi.setState({ navDatabases: {} })
+    localStorage.setItem('ecosemantic-page', JSON.stringify({ state: { theme: 'dark' }, version: 5 }))
+    await useUi.persist.rehydrate()
+    expect(useUi.getState().navDatabases).toEqual({})
+    useUi.getState().toggleNavDatabase('fixture')
+    expect(useUi.getState().navDatabases).toEqual({ fixture: true })
+    const saved = JSON.parse(localStorage.getItem('ecosemantic-page') ?? '{}') as { state: { navDatabases: Record<string, boolean> } }
+    expect(saved.state.navDatabases).toEqual({ fixture: true })
+    localStorage.removeItem('ecosemantic-page')
+  })
+
+  it('the chosen categories are persisted', async () => {
+    useUi.setState({ resultCategories: {} })
+    localStorage.setItem('ecosemantic-page', JSON.stringify({ state: { theme: 'dark' }, version: 5 }))
+    await useUi.persist.rehydrate()
+    expect(useUi.getState().resultCategories).toEqual({})
+    useUi.getState().setResultCategory('s1', 'm_gwp')
+    expect(useUi.getState().resultCategories).toEqual({ s1: 'm_gwp' })
+    const saved = JSON.parse(localStorage.getItem('ecosemantic-page') ?? '{}') as { state: { resultCategories: Record<string, string> } }
+    expect(saved.state.resultCategories).toEqual({ s1: 'm_gwp' })
+    localStorage.removeItem('ecosemantic-page')
+  })
+
   it('chooses an entry and a process, and forgets both when the canvas takes another system', () => {
     useUi.getState().setCanvasSystem('s1')
     useUi.getState().chooseEntry({ systemId: 's1', seq: 2, hash: 'h2' })

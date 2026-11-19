@@ -9,16 +9,21 @@ import pytest
 import uvicorn
 from fastmcp import Client, FastMCP
 from fastmcp.exceptions import ToolError
+from fastmcp.tools.base import ToolResult
 from mcp.types import Implementation
 
 from ecosemantic.errors import Invalid
+from ecosemantic.mcp.calls import InProgress, current
 from ecosemantic.mcp.context import ServerContext
-from ecosemantic.mcp.recording import agent_named
+from ecosemantic.mcp.envelopes import envelope_of
+from ecosemantic.mcp.recording import VIEW, agent_named, recorded
 from ecosemantic.mcp.server import build_server
-from ecosemantic.model.entities import Actor
-from ecosemantic.ports.types import trail
+from ecosemantic.model.entities import Actor, ProductSystem, method_id
+from ecosemantic.ports.types import Call, CallDraft, trail
 from ecosemantic.serve import ViewSettings, listener_for
-from tests.fixture_data import FIXTURE_DB
+from tests.fixture_data import FIXTURE_DB, GWP
+
+GWP_ID = method_id(" > ".join(GWP))
 
 
 def named(server: FastMCP, name: str) -> Client:
@@ -141,6 +146,142 @@ async def test_a_call_is_published_on_the_bus(context: ServerContext, full_serve
         assert calls == ["list_databases"]
     finally:
         context.events.unsubscribe_all(everything)
+
+
+async def _ids(context: ServerContext) -> set[uuid.UUID]:
+    return {call.id for call in await context.activity.list_calls()}
+
+
+async def _since(context: ServerContext, before: set[uuid.UUID]) -> list[Call]:
+    return [call for call in await context.activity.list_calls() if call.id not in before]
+
+
+class _DiskFull:
+    """An activity whose record cannot write."""
+
+    async def record(self, draft: CallDraft) -> Call:
+        raise OSError("disk full")
+
+
+async def test_a_calculation_a_person_started_is_recorded_under_view(
+    context: ServerContext, full_server: FastMCP, fixture_system_stored: ProductSystem
+) -> None:
+    tool = await full_server.get_tool("calculate_impact")
+    assert tool is not None
+    arguments = {"product_system_id": str(fixture_system_stored.id), "method_id": GWP_ID}
+    before = await _ids(context)
+    await recorded(
+        context,
+        tool,
+        arguments,
+        InProgress(agent=VIEW, client=VIEW),
+        True,
+        lambda: tool.run(arguments),
+    )
+    (call,) = await _since(context, before)
+    assert (call.agent, call.origin, call.outcome, call.tool) == (
+        "view",
+        "view",
+        "ok",
+        "calculate_impact",
+    )
+
+
+async def test_a_page_read_is_recorded_nowhere(
+    context: ServerContext, full_server: FastMCP, fixture_system_stored: ProductSystem
+) -> None:
+    tool = await full_server.get_tool("get_product_system")
+    assert tool is not None
+    arguments = {"product_system_id": str(fixture_system_stored.id)}
+    before = await _ids(context)
+    await recorded(
+        context,
+        tool,
+        arguments,
+        InProgress(agent=VIEW, client=VIEW),
+        False,
+        lambda: tool.run(arguments),
+    )
+    assert await _since(context, before) == []
+
+
+async def test_a_calculation_the_tool_refuses_is_recorded_with_its_envelope(
+    context: ServerContext, full_server: FastMCP, fixture_system_stored: ProductSystem
+) -> None:
+    tool = await full_server.get_tool("calculate_impact")
+    assert tool is not None
+    arguments = {"product_system_id": str(fixture_system_stored.id), "method_id": "no such method"}
+    before = await _ids(context)
+    with pytest.raises(ToolError) as refused:
+        await recorded(
+            context,
+            tool,
+            arguments,
+            InProgress(agent=VIEW, client=VIEW),
+            True,
+            lambda: tool.run(arguments),
+        )
+    (call,) = await _since(context, before)
+    assert call.outcome == "error" and call.error == envelope_of(refused.value)
+
+
+async def test_a_record_that_fails_raises_although_the_tool_ran(
+    context: ServerContext, full_server: FastMCP, fixture_system_stored: ProductSystem
+) -> None:
+    tool = await full_server.get_tool("calculate_impact")
+    assert tool is not None
+    arguments = {"product_system_id": str(fixture_system_stored.id), "method_id": GWP_ID}
+    unrecorded = dataclasses.replace(context, activity=_DiskFull())
+    with pytest.raises(OSError, match="disk full"):
+        await recorded(
+            unrecorded,
+            tool,
+            arguments,
+            InProgress(agent=VIEW, client=VIEW),
+            True,
+            lambda: tool.run(arguments),
+        )
+
+
+async def test_the_call_runs_as_the_call_in_progress(
+    context: ServerContext, full_server: FastMCP, fixture_system_stored: ProductSystem
+) -> None:
+    tool = await full_server.get_tool("get_product_system")
+    assert tool is not None
+    arguments = {"product_system_id": str(fixture_system_stored.id)}
+    seen: list[Actor] = []
+
+    async def run() -> ToolResult:
+        seen.append(context.acting())
+        return await tool.run(arguments)
+
+    await recorded(context, tool, arguments, InProgress(agent=VIEW, client=VIEW), False, run)
+    assert seen == [Actor(kind="agent", id="view", name="view")]
+    assert current() is None
+
+
+async def test_a_tool_with_no_annotations_runs_unrecorded_from_the_page(
+    context: ServerContext,
+) -> None:
+    probe = FastMCP("probe")
+
+    @probe.tool(name="answers")
+    def answers() -> str:
+        return "answered"
+
+    tool = await probe.get_tool("answers")
+    assert tool is not None
+    before = await _ids(context)
+    result = await recorded(
+        context,
+        tool,
+        {},
+        InProgress(agent=VIEW, client=VIEW),
+        False,
+        lambda: tool.run({}),
+    )
+    assert result.content[0].text == "answered"
+    assert await _since(context, before) == []
 
 
 async def _wait_until_started(web: uvicorn.Server) -> None:

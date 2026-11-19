@@ -60,9 +60,14 @@ def pinned_profile() -> Profile:
         columns=(
             Column(header="GWP 100 [kg CO2-eq]", method="IPCC 2021", category="IPCC 2021 GWP 100"),
         ),
-        total=Total(header="Total [UBP]", method="Ecological Scarcity 2021"),
+        total=Total(
+            header="Total [UBP]",
+            method="Ecological Scarcity 2021",
+            weighting_set="Total (water resources, evaporated; for BAFU database)",
+        ),
         unlinked="unlinked-2026-v1.csv",
         differences="differences-2026-v1.csv",
+        revision=1,
         tolerance=1e-4,
     )
 

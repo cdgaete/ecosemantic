@@ -14,5 +14,13 @@ describe('paths', () => {
 
   it('addresses a background process of a database', () => {
     expect(paths.background('fixture', 'p1')).toBe('/databases/fixture/processes/p1')
+    expect(paths.dataset('s1', 'fixture', 'p1')).toBe('/systems/s1/datasets/fixture/p1')
+  })
+})
+
+describe('the whole-database search', () => {
+  it('is the address of a database search of a kind', () => {
+    expect(paths.search('x')).toBe('/databases/x/search/processes')
+    expect(paths.search('x', 'methods')).toBe('/databases/x/search/methods')
   })
 })

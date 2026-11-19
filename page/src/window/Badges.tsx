@@ -2,22 +2,26 @@ import { useSystem, useValidation } from '@/api/queries'
 import { AppLink } from '@/lib/router'
 import { paths } from '@/lib/paths'
 
-export function ValidationBadge({ id }: { id: string }) {
-  const validation = useValidation(id)
+export function ValidationMark({ id, issues, error }: { id: string; issues: number | null; error: string | null }) {
   const to = paths.systemPage(id, 'statistics')
-  if (validation.error)
+  if (error)
     return (
-      <AppLink to={to} title={validation.error.message} className="text-warning hover:underline">
+      <AppLink to={to} title={error} className="text-warning hover:underline">
         ⚠ Not validated
       </AppLink>
     )
-  if (!validation.data) return null
-  const issues = validation.data.value.errors.length
+  if (issues === null) return null
   return (
     <AppLink to={to} className={issues === 0 ? 'text-success hover:underline' : 'text-warning hover:underline'}>
       {issues === 0 ? '✓ Valid' : `⚠ ${issues} issue${issues === 1 ? '' : 's'}`}
     </AppLink>
   )
+}
+
+export function ValidationBadge({ id }: { id: string }) {
+  const validation = useValidation(id)
+  const issues = validation.data ? validation.data.value.errors.length : null
+  return <ValidationMark id={id} issues={issues} error={validation.error ? validation.error.message : null} />
 }
 
 export function RequestsBadge({ id }: { id: string }) {

@@ -19,11 +19,11 @@
         "version": "2026-v1"
       },
       "error": null,
-      "finished_at": "2026-11-17T01:07:39.004958Z",
-      "id": "65cc6dd7-fdf5-4777-8822-2b9dcb8b9ca4",
+      "finished_at": "2026-11-19T15:55:50.185751Z",
+      "id": "f0623a56-223b-4a11-82b6-19aba93de236",
       "open": false,
       "pid": null,
-      "posted_at": "2026-11-17T01:07:39.004746Z",
+      "posted_at": "2026-11-19T15:55:50.185530Z",
       "progress": {
         "count": null,
         "step": "fetching the terms"
@@ -33,7 +33,7 @@
       "summary": null,
       "terms": {
         "citation": "BAFU 2026-v1, openLCA Nexus",
-        "licence": "/tmp/tmp6ww5bbqk/data/installs/bafu-terms.txt"
+        "licence": "/tmp/tmp_qqh14oa/data/installs/bafu-terms.txt"
       }
     }
   ],
