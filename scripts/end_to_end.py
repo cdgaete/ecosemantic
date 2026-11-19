@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import subprocess
 import sys
 import tempfile
@@ -32,6 +33,7 @@ from tests.fixture_data import CODES, FIXTURE_DB  # noqa: E402
 TELEMETRY_OFF = {"ECOSEMANTIC_TELEMETRY": "off"}
 ACCENTED = "Cátodo de cobre — Chile (ruta pirometalúrgica), ñandú"
 INSTALLED = "fixture-installed"
+STEEL = 2.0
 SETTLED = ("done", "cancelled", "failed")
 
 
@@ -108,9 +110,9 @@ async def checks(
             product_system_id=system,
             code="cathode",
             type="product",
-            amount=2.0,
+            amount=STEEL,
             input={"kind": "background", "database": FIXTURE_DB, "id": CODES["steel"]},
-            uncertainty={"type": "lognormal", "params": {"loc": 0.6931, "scale": 0.2}},
+            uncertainty={"type": "lognormal", "params": {"loc": math.log(STEEL), "scale": 0.2}},
         )
         exported = work / f"{ACCENTED}.zip"
         await answer(client, "export_product_system", product_system_id=system, path=str(exported))
