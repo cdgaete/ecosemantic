@@ -13,20 +13,18 @@ from ecosemantic.local import build_context
 from ecosemantic.mcp import discovery
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.discovery import NO_DATABASE
-from ecosemantic.mcp.server import build_server
 from ecosemantic.model.entities import method_id
 from ecosemantic.package.background import read_background
 from ecosemantic.ports.types import WeightingFactor, WeightingSet
 from tests.engine_fixture import fixture_bundle
 from tests.fixture_data import CODES, FIXTURE_DB, FLOW_IDS, GWP
 from tests.memory_background import MemoryInventory
+from tests.registered import registered
 
 
 @pytest.fixture(scope="module")
 def server(context: ServerContext) -> FastMCP:
-    built = build_server()
-    discovery.register(built, context)
-    return built
+    return registered(context, discovery)
 
 
 async def test_the_roster_is_the_seven_in_order(server: FastMCP) -> None:
@@ -67,8 +65,7 @@ async def test_list_databases_answers_the_revision_an_install_was_made_at(tmp_pa
     )
     context = build_context(data, systems)
     try:
-        built = build_server()
-        discovery.register(built, context)
+        built = registered(context, discovery)
         async with Client(built) as client:
             out = (await client.call_tool("list_databases", {})).structured_content
     finally:
@@ -85,8 +82,7 @@ async def test_list_databases_on_an_empty_engine_points_to_the_sources(
     systems.mkdir()
     empty = build_context(data, systems)
     try:
-        built = build_server()
-        discovery.register(built, empty)
+        built = registered(empty, discovery)
         async with Client(built) as client:
             out = (await client.call_tool("list_databases", {})).structured_content
     finally:
@@ -400,8 +396,7 @@ async def test_a_familys_weighting_sets_are_named(context: ServerContext) -> Non
             ),
         ]
     )
-    built = build_server()
-    discovery.register(built, dataclasses.replace(context, inventory=inventory))
+    built = registered(dataclasses.replace(context, inventory=inventory), discovery)
     async with Client(built) as client:
         vocabulary = (
             await client.call_tool(

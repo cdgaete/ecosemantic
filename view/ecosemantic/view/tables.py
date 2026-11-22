@@ -14,7 +14,7 @@ from starlette.responses import FileResponse, Response
 from starlette.routing import Route
 
 from ecosemantic.compute.results import ContributionResult, ImpactResult, InventoryResult
-from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.context import Callers, ServerContext
 from ecosemantic.mcp.envelopes import as_uuid
 from ecosemantic.mcp.tables import apply_tables, result_key, write_tables
 from ecosemantic.model.refs import DemandItem
@@ -28,11 +28,11 @@ from ecosemantic.tables.results import (
 )
 from ecosemantic.view.api import json_object, structured
 from ecosemantic.view.handling import (
+    ContextHandler,
     DownloadContent,
-    Handler,
-    answering,
     created,
     download_name,
+    for_caller,
     sent,
     unchanged,
     uploaded,
@@ -70,30 +70,32 @@ def _inventory(work: Path, key: ResultKey, payload: Payload, at: datetime) -> Pa
     )
 
 
-def routes(server: FastMCP, context: ServerContext) -> list[Route]:
-    """The folder download and return, and a run folder for each calculation."""
+def routes(server: FastMCP, callers: Callers) -> list[Route]:
+    """The folder download and return, and a run folder for each calculation, each over the
+    context the request's caller resolves to."""
 
-    @answering
-    async def tables_zip(request: Request) -> Response:
+    @for_caller(callers)
+    async def tables_zip(request: Request, context: ServerContext) -> Response:
         with working("ecosemantic-tables-", keep=True) as work:
             folder, system = await write_tables(context, as_uuid(request.path_params["id"]), work)
             return _zipped(folder, work, download_name(system, "tables"))
 
-    @answering
-    async def tables_returned(request: Request) -> Response:
+    @for_caller(callers)
+    async def tables_returned(request: Request, context: ServerContext) -> Response:
         system_id = as_uuid(request.path_params["id"])
         with working("ecosemantic-tables-return-") as work:
-            folder, actor = await uploaded(request, "tables", "the edited folder, zipped", work)
-            _, _, entry = await apply_tables(context, system_id, folder, actor, "returned tables")
+            folder, stated = await uploaded(request, "tables", "the edited folder, zipped", work)
+            _, _, entry = await apply_tables(
+                context, system_id, folder, context.posted_by(stated), "returned tables"
+            )
         if entry is None:
             return unchanged("The returned folder changes nothing; no entry was written.")
         return created(entry)
 
     def calculation(
         tool: str, render: Render, content: DownloadContent, **fixed: JsonValue
-    ) -> Handler:
-        @answering
-        async def handler(request: Request) -> Response:
+    ) -> ContextHandler:
+        async def handler(request: Request, context: ServerContext) -> Response:
             body = await json_object(request)
             system_id = as_uuid(request.path_params["id"])
             stored = await context.storage.get_product_system(system_id)
@@ -116,23 +118,24 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
 
         return handler
 
+    resolve = for_caller(callers)
     base = "/api/product-systems/{id}"
     return [
         Route(f"{base}/tables.zip", tables_zip),
         Route(f"{base}/tables", tables_returned, methods=["POST"]),
         Route(
             f"{base}/impact.zip",
-            calculation("calculate_impact", _impact, "impact", samples=True),
+            resolve(calculation("calculate_impact", _impact, "impact", samples=True)),
             methods=["POST"],
         ),
         Route(
             f"{base}/contributions.zip",
-            calculation("contribution_analysis", _contribution, "contributions"),
+            resolve(calculation("contribution_analysis", _contribution, "contributions")),
             methods=["POST"],
         ),
         Route(
             f"{base}/inventory.zip",
-            calculation("calculate_inventory", _inventory, "inventory"),
+            resolve(calculation("calculate_inventory", _inventory, "inventory")),
             methods=["POST"],
         ),
     ]

@@ -6,7 +6,7 @@ import type { Answer, Arrangement, CardGeometry, LogEntry, ProductSystem } from 
 import { api } from '@/api/client'
 import { formatAmount } from '@/lib/format'
 import { layoutAnswer, placementsFor } from './placements'
-import type { Outlines } from '@/editors/graph/build'
+import type { Outlines, OwnShown } from '@/editors/graph/build'
 import { ModelGraph } from '@/editors/graph/ModelGraph'
 import { useUi } from '@/store/ui'
 import { Slot, SlotsProvider } from '@/window/slots'
@@ -48,7 +48,7 @@ const ROW = 22
 const { rendered } = vi.hoisted(() => ({ rendered: { system: null as unknown, layout: null as unknown as Answer<Arrangement> | null, layouts: {} as Record<string, Answer<Arrangement>> } }))
 
 
-function Graph({ client, product, outlines, latest = null }: { client: QueryClient; product: ProductSystem; outlines?: Outlines; latest?: LogEntry | null }) {
+function Graph({ client, product, outlines, latest = null, owns }: { client: QueryClient; product: ProductSystem; outlines?: Outlines; latest?: LogEntry | null; owns?: Map<string, OwnShown> }) {
   return (
     <QueryClientProvider client={client}>
       <MemoryRouter>
@@ -58,7 +58,7 @@ function Graph({ client, product, outlines, latest = null }: { client: QueryClie
             <Slot name="view" className="slot-view" />
             <Slot name="minimap" className="slot-minimap" />
             <Slot name="notice" className="slot-notice" />
-            <ModelGraph system={product} latest={latest} outlines={outlines} />
+            <ModelGraph system={product} latest={latest} outlines={outlines} owns={owns} />
           </SlotsProvider>
         </TooltipProvider>
       </MemoryRouter>
@@ -66,10 +66,10 @@ function Graph({ client, product, outlines, latest = null }: { client: QueryClie
   )
 }
 
-function renderGraph(product: ProductSystem, outlines?: Outlines, latest: LogEntry | null = null) {
+function renderGraph(product: ProductSystem, outlines?: Outlines, latest: LogEntry | null = null, owns?: Map<string, OwnShown>) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   rendered.system = product
-  const view = render(<Graph client={client} product={product} outlines={outlines} latest={latest} />)
+  const view = render(<Graph client={client} product={product} outlines={outlines} latest={latest} owns={owns} />)
   return {
     ...view,
     redraw: (next: ProductSystem) => {
@@ -373,6 +373,33 @@ describe('model graph', () => {
     expect(targets.map((h) => h.style.top)).toEqual(placement.inputs.map((p) => `${p.y}px`))
     expect((node.querySelector('.react-flow__handle.source') as HTMLElement).style.top).toBe(`${placement.output}px`)
     expect((node.firstElementChild as HTMLElement).style.height).toBe(`${placement.height}px`)
+  })
+
+  it("each card shows its own part of the band's result", async () => {
+    const owns: Map<string, OwnShown> = new Map([
+      ['widget', { score: 2.49, fraction: 0.5988, unit: 'kg CO2-Eq' }],
+      ['frame', { score: 1.668, fraction: 0.4012, unit: 'kg CO2-Eq' }],
+    ])
+    const { container } = renderGraph(doc, undefined, null, owns)
+    await waitFor(() => expect(container.querySelector('.react-flow__node[data-id="widget"]')).not.toBeNull())
+    const widget = within(container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    const frame = within(container.querySelector('.react-flow__node[data-id="frame"]') as HTMLElement)
+    expect(widget.getByText(`own ${formatAmount(2.49)}`)).toBeInTheDocument()
+    expect(frame.getByText(`own ${formatAmount(1.668)}`)).toBeInTheDocument()
+    expect(widget.getByTitle('Own part: 2.49 kg CO2-Eq, 59.9 %')).toBeInTheDocument()
+  })
+
+  it('a card shows no part without owns', async () => {
+    const { container } = renderGraph(doc)
+    await waitFor(() => expect(container.querySelector('.react-flow__node[data-id="widget"]')).not.toBeNull())
+    expect(container.querySelectorAll('[data-own]')).toHaveLength(0)
+  })
+
+  it('a system without stages draws no box', async () => {
+    const { container } = renderGraph(doc)
+    await waitFor(() => expect(container.querySelector('.react-flow__node[data-id="widget"]')).not.toBeNull())
+    expect(container.querySelectorAll('[data-stage]')).toHaveLength(0)
+    expect(container.querySelectorAll('.react-flow__edge-tether')).toHaveLength(0)
   })
 
   it('draws each card where the layout says', async () => {

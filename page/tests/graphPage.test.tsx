@@ -2,12 +2,16 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { renderInSlots } from './render'
 import { layoutAnswer } from './placements'
 import { api } from '@/api/client'
-import type { ProductSystem } from '@/api/types'
+import type { Answer, Call, ContributionResult, ImpactResult, ProductSystem, Value } from '@/api/types'
 import { colourOf } from '@/activity/agents'
 import { GraphPage } from '@/editors/system/GraphPage'
+import { formatAmount } from '@/lib/format'
 import { useUi } from '@/store/ui'
 import system from './fixtures/system.json'
 import log from './fixtures/log.json'
+import calculations from './fixtures/calculations.json'
+import recordedImpact from './fixtures/impact.json'
+import recordedSplit from './fixtures/contributions_stage.json'
 import elementaryFlow from './fixtures/elementary_flow.json'
 import agentSystem from './fixtures/agent_system.json'
 import agentLog from './fixtures/agent_log.json'
@@ -19,6 +23,10 @@ vi.mock('@/api/client', async (importOriginal) => {
     api: {
       ...original.api,
       log: vi.fn(async () => log),
+      system: vi.fn(async () => system),
+      calculations: vi.fn(async () => ({ value: [] })),
+      impact: vi.fn(async () => recordedImpact as unknown as Answer<ImpactResult>),
+      contributions: vi.fn(async () => recordedSplit as unknown as ContributionResult),
       elementaryFlow: vi.fn(async () => elementaryFlow),
       layout: vi.fn(async () => layoutAnswer(system.value as ProductSystem, agentSystem.value as ProductSystem)),
       releaseCards: vi.fn(async () => layoutAnswer(system.value as ProductSystem)),
@@ -30,6 +38,9 @@ vi.mock('@/api/client', async (importOriginal) => {
 })
 
 const doc = system.value as ProductSystem
+const recorded = calculations.value[0] as unknown as Call
+const widgetPart = recordedSplit.value.stages![0].processes[0]
+const framePart = recordedSplit.value.stages![0].processes[1]
 
 describe('graph page', () => {
   beforeEach(() => useUi.setState({ canvasSystemId: null, canvasVariant: null }))
@@ -40,11 +51,11 @@ describe('graph page', () => {
     expect(screen.queryByText(/validate a base process/)).not.toBeInTheDocument()
   })
 
-  it('floats Calculate, the state, Fit and More on the canvas toolbar', async () => {
+  it('floats the band, the state, Fit and More on the canvas toolbar', async () => {
     const view = renderInSlots('/', <GraphPage view={{ id: doc.id, system: doc, openRequests: 0, version: null, state: null }} />)
     await waitFor(() => expect(view.container.querySelectorAll('.react-flow__node').length).toBeGreaterThan(0))
     const bar = within(screen.getByRole('toolbar', { name: 'Canvas' }))
-    expect(bar.getByRole('button', { name: 'Calculate an impact result' })).toBeInTheDocument()
+    expect(within(bar.getByRole('group', { name: 'Result band' })).getByRole('button', { name: 'Calculate an impact result' })).toBeInTheDocument()
     expect(bar.getByLabelText('State')).toBeInTheDocument()
     fireEvent.click(bar.getByRole('button', { name: 'Fit the graph' }))
     fireEvent.keyDown(bar.getByRole('button', { name: 'More canvas options' }), { key: 'Enter' })
@@ -105,5 +116,26 @@ describe('graph page', () => {
     expect(card?.style.getPropertyValue('--outline')).toBe(colourOf('fixture-agent'))
     expect(view.container.querySelector(`.react-flow__node[data-id="${bottle.code}"] [data-selection]`)).not.toBeNull()
     useUi.setState({ chosenProcess: null })
+  })
+
+  it("the graph shows each card's own part of the band's result", async () => {
+    vi.mocked(api.calculations).mockResolvedValue({ value: [recorded] } as Value<Call[]>)
+    vi.mocked(api.contributions).mockClear()
+    const view = renderInSlots('/', <GraphPage view={{ id: doc.id, system: doc, openRequests: 0, version: null, state: null }} />)
+    await waitFor(() => expect(view.container.querySelector('.react-flow__node[data-id="widget"]')).not.toBeNull())
+    const widget = within(view.container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    await waitFor(() => expect(widget.getByText(`own ${formatAmount(widgetPart.score)}`)).toBeInTheDocument())
+    const frame = within(view.container.querySelector('.react-flow__node[data-id="frame"]') as HTMLElement)
+    expect(frame.getByText(`own ${formatAmount(framePart.score)}`)).toBeInTheDocument()
+    expect(vi.mocked(api.contributions).mock.calls.map(([, body]) => body)).toContainEqual(expect.objectContaining({ by: 'stage' }))
+  })
+
+  it('a version shows no part', async () => {
+    vi.mocked(api.calculations).mockResolvedValue({ value: [recorded] } as Value<Call[]>)
+    vi.mocked(api.contributions).mockClear()
+    const view = renderInSlots('/', <GraphPage view={{ id: doc.id, system: doc, openRequests: 0, version: 'abc', state: null }} />)
+    await waitFor(() => expect(view.container.querySelectorAll('.react-flow__node').length).toBeGreaterThan(0))
+    expect(view.container.querySelectorAll('[data-own]')).toHaveLength(0)
+    expect(vi.mocked(api.contributions).mock.calls.map(([, body]) => body).some((body) => body.by === 'stage')).toBe(false)
   })
 })

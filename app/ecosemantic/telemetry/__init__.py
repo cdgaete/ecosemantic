@@ -1,5 +1,6 @@
-"""Anonymous counts of server starts and tool calls: whether they are on, the install identifier
-kept beside the data, and the meter provider that sends them."""
+"""Pseudonymous counts of server starts and tool calls: whether they are on, the install
+identifier and the person's answer for their country kept beside the data, and the meter provider
+that sends them."""
 
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
 from types import FrameType
-from typing import Literal, TextIO
+from typing import Literal, TextIO, get_args
 
 from opentelemetry.exporter.otlp.proto.common.metrics_encoder import encode_metrics
 from opentelemetry.sdk.metrics import AlwaysOffExemplarFilter, Counter, MeterProvider
@@ -36,6 +37,7 @@ from opentelemetry.sdk.resources import Resource
 from ecosemantic.errors import Invalid, Unavailable
 from ecosemantic.files import replace
 from ecosemantic.settings import Transport
+from ecosemantic.telemetry.location import country_here
 
 SWITCH = "ECOSEMANTIC_TELEMETRY"
 DO_NOT_TRACK = "DO_NOT_TRACK"
@@ -43,19 +45,24 @@ ENDPOINT_VARIABLE = "ECOSEMANTIC_TELEMETRY_ENDPOINT"
 ENDPOINT = "https://telemetry.ecosemantic.com/v1/metrics"
 FILE = "telemetry.json"
 STARTS = "ecosemantic.server.starts"
+COUNTRY = "geo.country.iso_code"
 INTERVAL_MILLIS = 3_600_000
 TIMEOUT_MILLIS = 5_000
 NOTICE = (
     "EcoSemantic sends counts of server starts and tool calls, under a random install "
-    "identifier, so its author can see how many people use it. `ecosemantic telemetry off` "
-    "turns it off for every server on this machine. What is sent: "
+    "identifier, so its author can see how many people use it. It sends this computer's country, "
+    "as two letters, only after your yes: `ecosemantic init` and `ecosemantic telemetry on` ask "
+    "at a terminal. `ecosemantic telemetry off` "
+    "turns it all off for every server on this machine. What is sent: "
     "https://github.com/cdgaete/ecosemantic/blob/main/TELEMETRY.md"
 )
+NOTICE_EDITION = 2
 CHOICES = ("on", "off")
 CONTENT_TYPE = "application/x-protobuf"
 LOG = logging.getLogger("opentelemetry.ecosemantic")
 
 Reason = Literal["ECOSEMANTIC_TELEMETRY", "DO_NOT_TRACK", "telemetry.json", "default"]
+CountryAnswer = Literal["yes", "no"]
 
 
 @dataclass(frozen=True)
@@ -104,6 +111,8 @@ def _read(data_dir: Path) -> dict[str, object]:
         raise _refused(path, "does not hold an object")
     if "choice" in held and held["choice"] not in CHOICES:
         raise _refused(path, f"holds the choice {held['choice']!r}, not on or off")
+    if "country" in held and held["country"] not in get_args(CountryAnswer):
+        raise _refused(path, f"holds the country answer {held['country']!r}, not yes or no")
     if "install_id" in held and not _identifier(held["install_id"]):
         raise _refused(path, f"holds the install identifier {held['install_id']!r}, not a UUID4")
     return held
@@ -159,20 +168,34 @@ def chosen(environ: Mapping[str, str], data_dir: Path) -> Choice:
 
 
 def record(environ: Mapping[str, str], data_dir: Path, on: bool) -> None:
-    """Writes the choice to telemetry.json, keeping its other keys. A mistyped
-    ECOSEMANTIC_TELEMETRY refuses it before anything is written."""
+    """Writes the choice to telemetry.json, keeping its other keys but the country's answer,
+    which off withdraws. A mistyped ECOSEMANTIC_TELEMETRY refuses it before anything is written."""
     _switched(environ)
     held = _read(data_dir)
     held["choice"] = "on" if on else "off"
+    if not on:
+        held.pop("country", None)
+    _write(data_dir, held)
+
+
+def record_country(data_dir: Path, yes: bool) -> None:
+    """Writes the answer a person gave when asked for their country: the one thing that lets a
+    start send it."""
+    held = _read(data_dir)
+    answer: CountryAnswer = "yes" if yes else "no"
+    held["country"] = answer
     _write(data_dir, held)
 
 
 def status(environ: Mapping[str, str], data_dir: Path) -> dict[str, object]:
-    """The choice, its reason, the kept identifier if any, the endpoint and the file."""
+    """The choice, its reason, the country this computer names with the answer given for it, the
+    kept identifier if any, the endpoint and the file."""
     decided, held = _decided(environ, data_dir, always_read=True)
     return {
         "on": decided.on,
         "reason": decided.reason,
+        "country": country_here(environ),
+        "country_answer": held.get("country"),
         "install_id": held.get("install_id"),
         "endpoint": environ.get(ENDPOINT_VARIABLE, ENDPOINT),
         "file": str(data_dir / FILE),
@@ -233,31 +256,35 @@ def begin(
     stream: TextIO,
     reader: MetricReader | None = None,
 ) -> MeterProvider | None:
-    """Starts counting when telemetry is on: tells the person once, keeps the identifier and
-    counts this start. Nothing is sent until the reader exports."""
+    """Starts counting when telemetry is on: tells the person once of each edition of the notice
+    until they have answered for their country, keeps the identifier, names the country after a
+    yes and counts this start. Nothing is sent until the reader exports."""
     from ecosemantic.mcp.counting import METER
 
     decided, held = _decided(environ, data_dir)
     if not decided.on:
         return None
-    tell = "choice" not in held and not held.get("told")
+    tell = "country" not in held and held.get("told") != NOTICE_EDITION
     install_id = str(held.get("install_id") or uuid.uuid4())
     if tell or "install_id" not in held:
         held["install_id"] = install_id
         if tell:
-            held["told"] = True
+            held["told"] = NOTICE_EDITION
         _write(data_dir, held)
     if tell:
         stream.write(NOTICE + "\n")
-    resource = Resource(
-        {
-            "service.name": "ecosemantic",
-            "service.version": version("ecosemantic"),
-            "service.instance.id": install_id,
-            "os.type": sys.platform,
-            "ecosemantic.transport": transport,
-        }
-    )
+    attributes = {
+        "service.name": "ecosemantic",
+        "service.version": version("ecosemantic"),
+        "service.instance.id": install_id,
+        "os.type": sys.platform,
+        "ecosemantic.transport": transport,
+    }
+    if held.get("country") == "yes":
+        country = country_here(environ)
+        if country is not None:
+            attributes[COUNTRY] = country
+    resource = Resource(attributes)
     provider = MeterProvider(
         metric_readers=[reader or _reader(environ.get(ENDPOINT_VARIABLE, ENDPOINT))],
         resource=resource,

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import functools
 import inspect
 import json
@@ -30,7 +29,7 @@ from ecosemantic.errors import (
     error_payload,
     said,
 )
-from ecosemantic.mcp.calls import note
+from ecosemantic.mcp.calls import calling, note
 from ecosemantic.model.summary import Summarising, Summary, listed
 from ecosemantic.ports.types import LogEntry, Page
 
@@ -218,20 +217,16 @@ def boundary(fn: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
     return carried(call, fn)
 
 
-def serialised(
-    lock: Callable[[uuid.UUID], asyncio.Lock],
-) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
-    """Hold the product system's lock across the whole tool call, so two writes never interleave."""
+def serialised(fn: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
+    """Hold the call's product system lock across the whole tool call, so two writes never
+    interleave."""
 
-    def wrap(fn: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
-        @functools.wraps(fn)
-        async def call(**kwargs: object) -> T:
-            async with lock(as_uuid(str(kwargs["product_system_id"]))):
-                return await fn(**kwargs)
+    @functools.wraps(fn)
+    async def call(**kwargs: object) -> T:
+        async with calling().lock(as_uuid(str(kwargs["product_system_id"]))):
+            return await fn(**kwargs)
 
-        return carried(call, fn)
-
-    return wrap
+    return carried(call, fn)
 
 
 UNKNOWN_REMEDIES: dict[tuple[str, str], str] = {
@@ -246,13 +241,13 @@ UNKNOWN_REMEDIES: dict[tuple[str, str], str] = {
 UNKNOWN_ARGUMENT = frozenset({"unexpected_keyword_argument", "extra_forbidden"})
 
 
-def bound(fn: Callable[..., Awaitable[T]], context: object) -> Callable[..., Awaitable[T]]:
-    """A tool's function with the server's context bound to its first argument, carrying the
-    name, signature and annotations a tool is registered from, less that argument."""
+def bound(fn: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
+    """A tool's function with the calling context bound to its first argument, carrying the name,
+    signature and annotations a tool is registered from, less that argument."""
 
     @functools.wraps(fn)
     async def call(**kwargs: object) -> T:
-        return await fn(context, **kwargs)
+        return await fn(calling(), **kwargs)
 
     signature = inspect.signature(fn)
     call.__dict__["__signature__"] = signature.replace(

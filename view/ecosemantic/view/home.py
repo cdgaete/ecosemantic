@@ -9,7 +9,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from ecosemantic.errors import EcoSemanticError, ErrorEnvelope, error_payload
-from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.context import Callers, ServerContext
 from ecosemantic.mcp.envelopes import REMEDIES, Answer
 from ecosemantic.mcp.systems import (
     SystemCard,
@@ -19,7 +19,7 @@ from ecosemantic.mcp.systems import (
 )
 from ecosemantic.model.validation import ValidationReport
 from ecosemantic.ports.types import LogEntry
-from ecosemantic.view.handling import answering
+from ecosemantic.view.handling import for_caller
 
 
 class SystemRow(BaseModel):
@@ -54,11 +54,12 @@ async def _row(context: ServerContext, card: SystemCard) -> SystemRow:
     )
 
 
-def routes(context: ServerContext) -> list[Route]:
-    """The one resource the home page reads: a row for every stored product system."""
+def routes(callers: Callers) -> list[Route]:
+    """The one resource the home page reads: a row for every product system of the request's
+    caller."""
 
-    @answering
-    async def home(request: Request) -> Response:
+    @for_caller(callers)
+    async def home(request: Request, context: ServerContext) -> Response:
         cards = (await list_product_systems(context)).value
         rows = [await _row(context, card) for card in cards]
         return JSONResponse(Answer[list[SystemRow]](value=rows).model_dump(mode="json"))

@@ -123,7 +123,7 @@ function Canvas({ at, clicked = null }: { at: { x: number; y: number }; clicked?
         position: at,
         selected: clicked === process.code,
         measured: CARD_SIZE,
-        data: { process, reference: false, hot: false, hotExchanges: [], outline: null, systemId: PRODUCT.id, placement: PLACEMENT, card: GEOMETRY },
+        data: { process, reference: false, hot: false, hotExchanges: [], outline: null, systemId: PRODUCT.id, placement: PLACEMENT, card: GEOMETRY, own: null, supplies: null },
       },
       {
         id: OTHER.code,
@@ -131,7 +131,7 @@ function Canvas({ at, clicked = null }: { at: { x: number; y: number }; clicked?
         position: OTHER_AT,
         selected: clicked === OTHER.code,
         measured: { width: GEOMETRY.width, height: OTHER_PLACEMENT.height },
-        data: { process: OTHER, reference: false, hot: false, hotExchanges: [], outline: null, systemId: PRODUCT.id, placement: OTHER_PLACEMENT, card: GEOMETRY },
+        data: { process: OTHER, reference: false, hot: false, hotExchanges: [], outline: null, systemId: PRODUCT.id, placement: OTHER_PLACEMENT, card: GEOMETRY, own: null, supplies: null },
       },
     ],
     [at, clicked],

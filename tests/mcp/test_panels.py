@@ -76,7 +76,7 @@ async def test_each_result_links_to_the_page_that_shows_it(
         )
     base = f"http://127.0.0.1:1/systems/{system_id}/results"
     assert contributions.structured_content["view_url"] == (
-        f"{base}/tree?method_id={GWP_ID}&token=abc"
+        f"{base}/processes?method_id={GWP_ID}&token=abc"
     )
     assert impact.structured_content["view_url"] == (
         f"{base}/impact?impact_method=gwp&amount=2.0&token=abc"

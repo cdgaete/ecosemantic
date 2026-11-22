@@ -8,8 +8,9 @@ A score is one number; reading it means saying where it comes from. Decompose it
 2. `contribution_analysis` with `by="process"` ranks the processes whose own exchanges carry the score; the list holds the `top_n` largest that reach `cutoff`, and `cut` says what it leaves out: the parts under the cut-off and the parts past `top_n`, each with its share of the total.
 3. `contribution_analysis` with `by="path"` follows the supply chain from the functional unit; `max_level`, `max_nodes` and `cutoff` bound the tree. A credit is a child with a negative score.
 4. `contribution_analysis` with `by="flow"` ranks the elementary flows behind the score, its list bounded and accounted for as the one by process.
-5. `calculate_inventory` pages every elementary flow of the system, filtered by `compartment` or `query`. Amounts at or below the answer's `floor` are float64 residue, set aside and counted in `dropped`.
-6. State each claim with the decomposition that shows it: a share is a process's or a flow's score over the total, under the method named.
+5. `contribution_analysis` with `by="stage"` splits the score over the life-cycle stages, each process's own part under its stage; and every decomposition and the inventory take `variant` to read a case or a scenario.
+6. `calculate_inventory` pages every elementary flow of the system, filtered by `compartment` or `query`. Amounts at or below the answer's `floor` are float64 residue, set aside and counted in `dropped`.
+7. State each claim with the decomposition that shows it: a share is a process's or a flow's score over the total, under the method named.
 
 ## Worked example: a bottle on the fixture database
 

@@ -438,11 +438,15 @@ async def test_every_link_a_tool_hands_out_descends_from_the_bridged_address(
     assert not [link for link in links if "token" in link]
 
 
-def test_the_instructions_carry_the_link(context: ServerContext) -> None:
+async def test_the_instructions_carry_the_link(context: ServerContext) -> None:
     bound = dataclasses.replace(context, view_url="http://127.0.0.1:1?token=x")
-    assert "http://127.0.0.1:1?token=x" in (build_server(bound).instructions or "")
-    assert "first reply" in (build_server(bound).instructions or "")
-    assert "http://" not in (build_server(context).instructions or "")
+    async with Client(build_server(bound)) as client:
+        text = client.instructions or ""
+    async with Client(build_server(context)) as client:
+        bare = client.instructions or ""
+    assert "http://127.0.0.1:1?token=x" in text
+    assert "first reply" in text
+    assert "http://" not in bare
 
 
 async def _wait_until_started(web: uvicorn.Server, timeout: float = 10) -> None:

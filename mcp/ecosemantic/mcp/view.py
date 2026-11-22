@@ -22,7 +22,7 @@ async def view_link(context: ServerContext, product_system_id: str | None = None
     return Answer[str](value=link)
 
 
-def register(server: FastMCP, context: ServerContext) -> None:
+def register(server: FastMCP) -> None:
     """Register the view tool."""
     server.tool(
         name="view_link",
@@ -31,4 +31,4 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "The link to the page the person watches the model in, or the page of one stored "
             "product system when given its id."
         ),
-    )(boundary(bound(view_link, context)))
+    )(boundary(bound(view_link)))

@@ -626,6 +626,7 @@ class ProductSystem:
         max_level: int = MAX_LEVEL,
         max_nodes: int = MAX_NODES,
         cutoff: float = CUTOFF,
+        variant: str | None = None,
     ) -> Answer[ContributionResult]:
         """The `contribution_analysis` tool."""
         return self.workspace.call(
@@ -639,6 +640,7 @@ class ProductSystem:
             max_level=max_level,
             max_nodes=max_nodes,
             cutoff=cutoff,
+            variant=variant,
         )
 
     def calculate_inventory(
@@ -650,6 +652,7 @@ class ProductSystem:
         query: str | None = None,
         limit: Limit = 100,
         cursor: str | None = None,
+        variant: str | None = None,
     ) -> InventoryListing:
         """The `calculate_inventory` tool."""
         return self.workspace.call(
@@ -662,6 +665,7 @@ class ProductSystem:
             query=query,
             limit=limit,
             cursor=cursor,
+            variant=variant,
         )
 
     def start_monte_carlo(

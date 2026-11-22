@@ -1,4 +1,5 @@
-"""Counts each agent's tool calls by name on a meter provider the server is handed."""
+"""Counts the tool calls that arrive over MCP by name, on a meter provider the server is
+handed."""
 
 from __future__ import annotations
 
@@ -9,16 +10,14 @@ from fastmcp.tools.base import ToolResult
 from mcp.types import CallToolRequestParams
 from opentelemetry.metrics import MeterProvider
 
-from ecosemantic.mcp.recording import VIEW, client_name
-
 TOOL_CALLS = "ecosemantic.tool.calls"
 METER = "ecosemantic"
 OTHER = "other"
 
 
 class Counting(Middleware):
-    """Adds one to the tool-call counter when a call ends, refused or not; the page's calls
-    are not counted."""
+    """Adds one to the tool-call counter when a call ends, refused or not; a call over MCP is
+    counted whatever its client is called."""
 
     def __init__(self, roster: Collection[str], provider: MeterProvider) -> None:
         self.roster = frozenset(roster)
@@ -34,6 +33,5 @@ class Counting(Middleware):
         try:
             return await call_next(context)
         finally:
-            if client_name(context) != VIEW:
-                name = context.message.name
-                self.calls.add(1, {"tool": name if name in self.roster else OTHER})
+            name = context.message.name
+            self.calls.add(1, {"tool": name if name in self.roster else OTHER})

@@ -18,7 +18,7 @@ from ecosemantic.compute.links import held_pins, pinned_documents, pinning
 from ecosemantic.errors import Conflict, Invalid, NotFound, build_label
 from ecosemantic.mcp.calculation import variant_of
 from ecosemantic.mcp.context import ServerContext
-from ecosemantic.mcp.effects import DELETE, READ, WRITE
+from ecosemantic.mcp.effects import DELETE, FILES, OVERWRITE, READ, WRITE
 from ecosemantic.mcp.envelopes import (
     Answer,
     Listing,
@@ -30,6 +30,7 @@ from ecosemantic.mcp.envelopes import (
     listing,
     serialised,
 )
+from ecosemantic.mcp.host import DOWNLOAD_PACKAGE, refuse_host
 from ecosemantic.mcp.linking import others
 from ecosemantic.mcp.requests import answer_write, open_requests
 from ecosemantic.mcp.treatments import treatments_in
@@ -192,6 +193,7 @@ async def export_model(
 async def export_product_system(
     context: ServerContext, product_system_id: str, path: str, replace: bool = False
 ) -> Answer[WrittenPath]:
+    refuse_host(context, "export_product_system", instead=DOWNLOAD_PACKAGE)
     destination = Path(path)
     if not destination.parent.is_dir():
         raise Invalid(f"{str(destination.parent)!r} does not exist")
@@ -204,6 +206,7 @@ async def export_product_system(
 
 
 async def import_product_system(context: ServerContext, path: str) -> Written[SystemCard]:
+    refuse_host(context, "import_product_system")
     system, entry = await import_model_package(Path(path), context.storage, context.acting())
     card = SystemCard.of(system, entry.result_hash, context.deep_link(system.id))
     return await answer_write(context, card, entry, None, system)
@@ -223,7 +226,7 @@ async def get_product_system_log(
     return listing(page)
 
 
-def register(server: FastMCP, context: ServerContext) -> None:
+def register(server: FastMCP) -> None:
     """Register the product system tools, in roster order."""
     server.tool(
         name="list_product_systems",
@@ -233,7 +236,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "over its processes, exchanges, parameters, cases, reference process and database "
             "build, which leaves out its name, description, scenarios and layout."
         ),
-    )(boundary(bound(list_product_systems, context)))
+    )(boundary(bound(list_product_systems)))
     server.tool(
         name="get_product_system",
         annotations=READ,
@@ -245,7 +248,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "A scenario's base_hash is the base pin, the content hash without the cases and "
             "the database build, so it is never the system's hash."
         ),
-    )(boundary(bound(get_product_system, context)))
+    )(boundary(bound(get_product_system)))
     server.tool(
         name="create_product_system",
         annotations=WRITE,
@@ -253,7 +256,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "An empty product system on one background database this server serves. "
             "Model it with create_process and create_exchange."
         ),
-    )(boundary(bound(create_product_system, context)))
+    )(boundary(bound(create_product_system)))
     server.tool(
         name="update_product_system",
         annotations=WRITE,
@@ -261,7 +264,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "Patch a product system's name, description, notes or reference process, the base "
             "process whose product, one unit of it, is the functional unit. Its database is fixed."
         ),
-    )(boundary(serialised(context.lock)(bound(update_product_system, context))))
+    )(boundary(serialised(bound(update_product_system))))
     server.tool(
         name="rebase_database",
         annotations=WRITE,
@@ -277,7 +280,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             'links need rebase_links. Example: {"product_system_id": "…", "database": '
             '"ecoinvent-3.12-cutoff"}.'
         ),
-    )(boundary(serialised(context.lock)(bound(rebase_database, context))))
+    )(boundary(serialised(bound(rebase_database))))
     server.tool(
         name="delete_product_system",
         annotations=DELETE,
@@ -286,7 +289,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "export_product_system first to keep a copy. Refused while another system links "
             "it or one of its runs is open."
         ),
-    )(boundary(serialised(context.lock)(bound(delete_product_system, context))))
+    )(boundary(serialised(bound(delete_product_system))))
     server.tool(
         name="validate_product_system",
         annotations=READ,
@@ -297,10 +300,11 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "a calculation does not wait for them to pass, and refuses only a build other "
             "than the installed one."
         ),
-    )(boundary(bound(validate_product_system, context)))
+    )(boundary(bound(validate_product_system)))
     server.tool(
         name="export_product_system",
-        annotations=READ,
+        annotations=OVERWRITE,
+        tags={FILES},
         description=(
             "Write a product system as a model package at the given path: one zip "
             "holding the openLCA JSON-LD layout, which openLCA opens directly, and the "
@@ -311,7 +315,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "file is refused unless replace is passed. Example: "
             '{"product_system_id": "…", "path": "/home/person/widget.zip"}.'
         ),
-    )(boundary(bound(export_product_system, context)))
+    )(boundary(bound(export_product_system)))
     server.tool(
         name="import_product_system",
         annotations=WRITE,
@@ -319,7 +323,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "Read a model package at the given path and store the product system "
             "it carries as a new one. An id already stored is refused."
         ),
-    )(boundary(bound(import_product_system, context)))
+    )(boundary(bound(import_product_system)))
     server.tool(
         name="get_product_system_log",
         annotations=READ,
@@ -327,4 +331,4 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "The append-only change log of a product system, oldest entry first, a page of "
             "limit entries at a time; pass next_cursor to continue."
         ),
-    )(boundary(bound(get_product_system_log, context)))
+    )(boundary(bound(get_product_system_log)))

@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 import { useImpact, useSystem } from '@/api/queries'
+import type { ImpactArguments } from '@/api/types'
 import { useUi } from '@/store/ui'
+import { useCanvasVariant, heldVariant } from '@/window/useCanvasState'
 import { movedSince } from '@/lib/hashes'
-import { serializeParams, toImpactArguments, type ResultParams } from './params'
+import { serializeParams, toImpactArguments, variantOf, type ResultParams } from './params'
 import { useResultParams } from './useResultParams'
 import { useStartImpact } from './useStartImpact'
 
@@ -34,7 +36,23 @@ export function useResult() {
   const root = system?.reference_process ?? null
   const empty: ResultParams = { variants: [], amount: 1 }
   const stale = movedSince(hash, current)
-  const impact = useImpact(id, hash, toImpactArguments(params ?? empty, root), params !== null && hash !== '' && !stale, () => useUi.getState().takeStartedImpact(id))
+  const addressed = variantOf(location.search)
+  const addressedVariant = system === undefined ? null : heldVariant(system, addressed)
+  const missingCase = addressed !== null && system !== undefined && addressedVariant === null ? addressed : null
+  const canvasSystemId = useUi((s) => s.canvasSystemId)
+  const setCanvasVariant = useUi((s) => s.setCanvasVariant)
+  const chosen = useRef<string | null>(null)
+  useEffect(() => {
+    if (addressed === null || canvasSystemId !== id) return
+    if (chosen.current === location.search) return
+    chosen.current = location.search
+    setCanvasVariant(addressed)
+  }, [addressed, canvasSystemId, id, location.search, setCanvasVariant])
+  const state = useCanvasVariant(system)
+  const body = toImpactArguments(params ?? empty, root)
+  const held = addressedVariant !== null && !(body.variants ?? []).includes(addressedVariant.name) ? addressedVariant.name : null
+  const argumentsOf: ImpactArguments = held === null ? body : { ...body, variants: [...(body.variants ?? []), held] }
+  const impact = useImpact(id, hash, argumentsOf, params !== null && hash !== '' && !stale, () => useUi.getState().takeStartedImpact(id))
   const seconds = useElapsed(impact.isFetching)
   const waiting = stale ? 'Recalculate to compute this page for the current model.' : `Calculating over the background database: ${seconds} s`
   const startImpact = useStartImpact(id)
@@ -42,5 +60,5 @@ export function useResult() {
     setHash(current)
     startImpact(location.pathname.split('/results/')[1] ?? 'impact', resolved.callId !== null ? `?call=${resolved.callId}` : serializeParams(params ?? empty))
   }
-  return { id, params, hash, system, impact, stale, waiting, recalculate, root, call: resolved.call, resolved }
+  return { id, params, hash, system, impact, stale, waiting, recalculate, root, call: resolved.call, resolved, state, variant: state?.name ?? null, missingCase }
 }

@@ -1,5 +1,11 @@
 import type { Call, DemandItem, ProductSystem } from '@/api/types'
+import { heldVariant } from '@/window/useCanvasState'
 import type { ResultParams } from './params'
+
+/** The newest call that succeeded, which `/calculations` answers first, or undefined while none has. */
+export function latestOf(calls: Call[]): Call | undefined {
+  return calls.find((call) => call.outcome === 'ok')
+}
 
 export function variantsOf(call: Call): string[] {
   const variants = call.arguments.variants
@@ -20,6 +26,18 @@ export function paramsOfCall(call: Call): ResultParams {
 export function ranMonteCarlo(call: Call): boolean {
   const config = call.arguments.monte_carlo
   return config !== undefined && config !== null
+}
+
+/** The params a calculation can be repeated with on `system`: the variants it holds kept, the ones it
+ * does not in `missing`. */
+export function heldParams(params: ResultParams, system: ProductSystem): { params: ResultParams; missing: string[] } {
+  const kept: string[] = []
+  const missing: string[] = []
+  for (const name of params.variants) {
+    if (heldVariant(system, name) === null) missing.push(name)
+    else kept.push(name)
+  }
+  return { params: { ...params, variants: kept }, missing }
 }
 
 export function withoutDatabase(method: string, database: string): string {

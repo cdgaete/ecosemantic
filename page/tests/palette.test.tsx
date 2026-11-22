@@ -14,7 +14,6 @@ import system from './fixtures/system.json'
 import databases from './fixtures/databases.json'
 import runs from './fixtures/runs.json'
 import validation from './fixtures/validation.json'
-import anchors from './fixtures/anchors.json'
 import log from './fixtures/log.json'
 import requests from './fixtures/requests.json'
 import elementaryFlow from './fixtures/elementary_flow.json'
@@ -30,7 +29,6 @@ vi.mock('@/api/client', async (importOriginal) => {
       system: vi.fn(async () => system),
       databases: vi.fn(async () => databases),
       validation: vi.fn(async () => validation),
-      anchors: vi.fn(async () => anchors),
       log: vi.fn(async () => log),
       requests: vi.fn(async () => requests),
       elementaryFlow: vi.fn(async () => elementaryFlow),

@@ -1,5 +1,5 @@
-"""What every route handler of the view shares: its error boundary, a working directory, an
-uploaded zip and a download that cleans up after itself."""
+"""What every route handler of the view shares: the caller it answers for, its error boundary,
+a working directory, an uploaded zip and a download that cleans up after itself."""
 
 from __future__ import annotations
 
@@ -26,11 +26,14 @@ from ecosemantic.errors import (
     error_payload,
     error_status,
 )
-from ecosemantic.model.entities import Actor, ProductSystem
+from ecosemantic.mcp.callers import resolved
+from ecosemantic.mcp.context import Callers, ServerContext
+from ecosemantic.model.entities import ProductSystem
 from ecosemantic.package.package import unzip_package
 from ecosemantic.tables.folder import folder_name
 
 Handler = Callable[[Request], Awaitable[Response]]
+ContextHandler = Callable[[Request, ServerContext], Awaitable[Response]]
 DownloadContent = Literal["impact", "contributions", "inventory", "tables", "openlca"]
 UPLOAD_BYTES = 100_000_000
 UNPACKED_BYTES = 1_000_000_000
@@ -87,6 +90,21 @@ def answering(handler: Handler) -> Handler:
     return call
 
 
+def for_caller(callers: Callers) -> Callable[[ContextHandler], Handler]:
+    """The view's caller seam: a handler given the context the host binds to its request's caller,
+    resolved before the handler reads a body, a form or a path parameter, and answered as
+    `answering` answers."""
+
+    def wrapping(handler: ContextHandler) -> Handler:
+        @functools.wraps(handler)
+        async def call(request: Request) -> Response:
+            return await handler(request, await resolved(callers, request.scope))
+
+        return answering(call)
+
+    return wrapping
+
+
 @contextlib.contextmanager
 def working(prefix: str, keep: bool = False) -> Iterator[Path]:
     """A temporary directory for one request, removed on the way out. A kept one is removed only
@@ -132,10 +150,10 @@ def _refuse_unpackable(upload: Path, carries: str) -> None:
         )
 
 
-async def uploaded(request: Request, field: str, carries: str, work: Path) -> tuple[Path, Actor]:
-    """The zip a form carries under a field, unpacked under the working directory, and the
-    person the form names; Invalid when the field holds no file, and for a file past the size,
-    the unpacked size or the entry count an upload may hold."""
+async def uploaded(request: Request, field: str, carries: str, work: Path) -> tuple[Path, str]:
+    """The zip a form carries under a field, unpacked under the working directory, and the text
+    the form states as the person who posted it; Invalid when the field holds no file, and for a
+    file past the size, the unpacked size or the entry count an upload may hold."""
     form = await request.form()
     upload = form.get(field)
     if not isinstance(upload, UploadFile):
@@ -147,7 +165,7 @@ async def uploaded(request: Request, field: str, carries: str, work: Path) -> tu
     _refuse_unpackable(zipped, carries)
     unpacked = work / "unpacked"
     await asyncio.to_thread(unzip_package, zipped, unpacked)
-    return unpacked, Actor(kind="person", name=str(form.get("actor", "")))
+    return unpacked, str(form.get("actor", ""))
 
 
 def download_name(system: ProductSystem, content: DownloadContent) -> str:

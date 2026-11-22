@@ -12,8 +12,9 @@ from fastmcp import FastMCP
 from ecosemantic.errors import Conflict, Invalid
 from ecosemantic.mcp.calculation import demand_of
 from ecosemantic.mcp.context import ServerContext
-from ecosemantic.mcp.effects import READ, WRITE
+from ecosemantic.mcp.effects import FILES, OVERWRITE, WRITE
 from ecosemantic.mcp.envelopes import Answer, Written, WrittenPath, as_uuid, bound, boundary
+from ecosemantic.mcp.host import DOWNLOAD_TABLES, RETURN_TABLES, refuse_host
 from ecosemantic.mcp.linking import refuse_dropped_cases
 from ecosemantic.mcp.parameters import ParameterSpace, space_of
 from ecosemantic.mcp.requests import answer_write
@@ -79,6 +80,7 @@ async def write_tables(
 async def export_tables(
     context: ServerContext, product_system_id: str, path: str, replace: bool = False
 ) -> Answer[WrittenPath]:
+    refuse_host(context, "export_tables", instead=DOWNLOAD_TABLES)
     root = Path(path)
     if not root.is_dir():
         raise Invalid(f"{path!r} is not a directory")
@@ -91,6 +93,7 @@ async def export_tables(
 
 
 async def import_tables(context: ServerContext, path: str) -> Written[ParameterSpace]:
+    refuse_host(context, "import_tables", instead=RETURN_TABLES)
     folder = Path(path)
     if not folder.is_dir():
         raise Invalid(f"{path!r} is not a directory")
@@ -103,18 +106,19 @@ async def import_tables(context: ServerContext, path: str) -> Written[ParameterS
     return await answer_write(context, space_of(changed), entry, stored, changed)
 
 
-def register(server: FastMCP, context: ServerContext) -> None:
+def register(server: FastMCP) -> None:
     """Register export_tables and import_tables, in roster order."""
     server.tool(
         name="export_tables",
-        annotations=READ,
+        annotations=OVERWRITE,
+        tags={FILES},
         description=(
             "Write a product system as a folder of text under the given directory: model.yaml, "
             "and inputs/ holding the parameter space as CSV with a schema. import_tables reads "
             "an edited folder back. The folder an earlier export of the system made there is "
             "refused unless replace is passed, since writing over it replaces a person's edits."
         ),
-    )(boundary(bound(export_tables, context)))
+    )(boundary(bound(export_tables)))
     server.tool(
         name="import_tables",
         annotations=WRITE,
@@ -124,4 +128,4 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "model.yaml was edited, when the folder changes nothing, and cell by cell when a "
             "value cannot be read."
         ),
-    )(boundary(bound(import_tables, context)))
+    )(boundary(bound(import_tables)))

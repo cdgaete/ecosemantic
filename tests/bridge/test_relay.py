@@ -33,11 +33,11 @@ from ecosemantic.errors import Unauthorised, Unavailable
 from ecosemantic.events import Event
 from ecosemantic.local import build_context
 from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.reach import BRIDGE_EXTENSION
 from ecosemantic.relay.frames import CHUNK_BYTES
 from ecosemantic.relay.messages import PROTOCOL, Reset, Welcome
 from ecosemantic.relay.proof import public_jwk
 from ecosemantic.serve import Listener, ViewSettings, listener_for
-from ecosemantic.view.api import BRIDGE_EXTENSION
 from tests.bridge.fake_bridge import (
     ACCOUNT,
     BEARER,
@@ -49,6 +49,7 @@ from tests.bridge.fake_bridge import (
 )
 from tests.bridge.fake_logto import ISSUER as LOGTO_ISSUER
 from tests.bridge.fake_logto import TOKEN_PATH, FakeLogto
+from tests.conftest import fixture_system
 
 ENGINE = uuid.uuid4()
 OTHER_ENGINE = uuid.uuid4()
@@ -397,6 +398,47 @@ async def test_a_bridged_mcp_initialize_reaches_the_engine_and_answers(
     assert held.status == 200
     assert payload(held.body)["result"]["serverInfo"]["name"] == "ecosemantic"
     assert dict(held.headers)["mcp-session-id"]
+
+
+async def test_a_bridged_chat_overwrites_no_file_on_this_computer(
+    empty_context: ServerContext, tmp_path: Path
+) -> None:
+    system = fixture_system().product_system
+    assert system is not None
+    await empty_context.storage.put_product_system(system, empty_context.actor, "created")
+    mine = tmp_path / "mine.txt"
+    mine.write_bytes(b"mine")
+    called = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "export_product_system",
+            "arguments": {"product_system_id": str(system.id), "path": str(mine), "replace": True},
+            "_meta": {
+                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                "io.modelcontextprotocol/clientInfo": {"name": "chat", "version": "1"},
+                "io.modelcontextprotocol/clientCapabilities": {},
+            },
+        },
+    }
+    headers = [
+        ("host", "x.bridge.test"),
+        ("accept", "application/json, text/event-stream"),
+        ("content-type", "application/json"),
+        ("mcp-protocol-version", "2026-07-28"),
+        ("mcp-method", "tools/call"),
+        ("mcp-name", "export_product_system"),
+    ]
+    async with relaying(empty_context, empty_context.systems_dir) as running:
+        await running.bridge.welcomed()
+        await running.bridge.start(
+            1, "/mcp", method="POST", headers=headers, body=json.dumps(called).encode()
+        )
+        held = await running.bridge.finished(1)
+    refused = json.loads(payload(held.body)["result"]["content"][0]["text"])
+    assert refused["error"] == "not_supported"
+    assert mine.read_bytes() == b"mine"
 
 
 async def test_a_bridged_page_call_needs_no_local_token(empty_context: ServerContext) -> None:

@@ -18,7 +18,7 @@ from ecosemantic.engine.paths import PathTree, Walked, walk
 from ecosemantic.engine.solver import DEFAULT_SOLVER, Solver, SolverName
 from ecosemantic.errors import Invalid
 from ecosemantic.model.entities import Method, ProductSystem
-from ecosemantic.model.refs import DemandItem, ForegroundRef
+from ecosemantic.model.refs import DemandItem, ForegroundRef, LinkedProcessRef
 
 NOISE_FLOOR = 1e-34
 
@@ -69,6 +69,46 @@ class Inventory:
     sources: dict[str, str | None]
     floor: float
     dropped: int
+
+
+@dataclass(frozen=True)
+class ActivityScore:
+    """A background activity an own process takes, by its label, and that input's share of the
+    score."""
+
+    label: str
+    score: float
+
+
+@dataclass(frozen=True)
+class LinkedScore:
+    """A linked system's column an own process takes, and that input's share of the score."""
+
+    ref: LinkedProcessRef
+    position: int
+    score: float
+
+
+@dataclass(frozen=True)
+class OwnScore:
+    """One of the product system's own processes, by the ref a result names it: its foreground
+    column, its direct emissions characterised, the inputs carrying the scores upstream of it,
+    and the sum of both."""
+
+    ref: ForegroundRef
+    position: int
+    direct: float
+    inputs: tuple[ActivityScore | LinkedScore, ...]
+    score: float
+
+
+@dataclass(frozen=True)
+class OwnScores:
+    """The score of a demand and each of the product system's own processes' part of it, in
+    column order; the parts sum to the total."""
+
+    total: float
+    parts: tuple[OwnScore, ...]
 
 
 class Calculation:
@@ -285,3 +325,68 @@ class Calculation:
             flow_labels=self.background.coords["flow"].labels,
         )
         return walk(walked, root, item.amount, total, max_level, max_nodes, cutoff)
+
+    def own_scores(
+        self, foreground: Foreground, demand: Sequence[DemandItem], method: Method
+    ) -> OwnScores:
+        """Each of the product system's own processes' part of a score, with the background
+        activities and the linked systems it takes, and the total the parts sum to."""
+        d_fg, d_bg = self.placed(foreground, demand)
+        if d_bg.any():
+            raise Invalid(
+                "a split by stage takes demand items on the product system's own processes"
+            )
+        [position] = self.background.positions([method])
+        factors = self._factors(position)
+        background_intensity = self._intensity_rows([position])[0]
+        own = np.asarray(factors @ foreground.direct).ravel()
+        cumulative = foreground.solve_transposed(
+            own + np.asarray(foreground.uses.T @ background_intensity).ravel()
+        )
+        levels = foreground.solve(d_fg)
+        technosphere = foreground.technosphere.tocsc()
+        uses = foreground.uses.tocsc()
+        activity_labels = self.background.coords["activity"].labels
+        parts: list[OwnScore] = []
+        for j, column in enumerate(foreground.columns):
+            if column.at_hash is not None:
+                continue
+            taken: list[ActivityScore | LinkedScore] = []
+            start, end = int(uses.indptr[j]), int(uses.indptr[j + 1])
+            for row, amount in zip(uses.indices[start:end], uses.data[start:end], strict=True):
+                taken.append(
+                    ActivityScore(
+                        label=str(activity_labels[int(row)]),
+                        score=float(amount * levels[j] * background_intensity[int(row)]),
+                    )
+                )
+            start, end = int(technosphere.indptr[j]), int(technosphere.indptr[j + 1])
+            for linked, amount in zip(
+                technosphere.indices[start:end], technosphere.data[start:end], strict=True
+            ):
+                taken_column = foreground.columns[int(linked)]
+                if int(linked) == j or taken_column.at_hash is None:
+                    continue
+                taken.append(
+                    LinkedScore(
+                        ref=LinkedProcessRef(
+                            product_system_id=taken_column.system,
+                            at_hash=taken_column.at_hash,
+                            code=taken_column.process.code,
+                        ),
+                        position=int(linked),
+                        score=float(-amount * levels[j] * cumulative[int(linked)]),
+                    )
+                )
+            direct = float(own[j] * levels[j])
+            parts.append(
+                OwnScore(
+                    ref=ForegroundRef(code=column.process.code),
+                    position=j,
+                    direct=direct,
+                    inputs=tuple(taken),
+                    score=direct + sum(entry.score for entry in taken),
+                )
+            )
+        solution = self.solve(foreground, demand)
+        return OwnScores(total=float(factors @ solution.inventory.data), parts=tuple(parts))

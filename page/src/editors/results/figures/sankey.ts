@@ -8,12 +8,14 @@ export interface SankeyNodeDatum {
   score: number
   fraction: number | null
   depth: number
+  stage: string | null
 }
 
 export interface SankeyLinkDatum {
   source: string
   target: string
   value: number
+  stage: string | null
 }
 
 const MAX_LINK_WIDTH = 70
@@ -58,6 +60,7 @@ export interface SankeyCardData extends Record<string, unknown> {
 export interface SankeyLinkData extends Record<string, unknown> {
   width: number
   offset: number
+  stage: string | null
 }
 
 export type SankeyCard = Node<SankeyCardData, 'card'>
@@ -85,24 +88,29 @@ export function sankeyElements(
         source: link.source,
         target: link.target,
         type: 'link',
-        data: { width: linkWidth(fractions.get(link.target)!), offset: ((slot + 0.5) / siblings.length - 0.5) * NODE_W },
+        data: { width: linkWidth(fractions.get(link.target)!), offset: ((slot + 0.5) / siblings.length - 0.5) * NODE_W, stage: link.stage },
       }
     }),
   }
 }
 
-export function sankeyFromTree(root: TreeNode): { nodes: SankeyNodeDatum[]; links: SankeyLinkDatum[] } {
+/** The nodes and links of a contribution tree, each band carrying the stage of the foreground
+ * process whose path it hangs under; a foreground node takes its stage from the split and every
+ * other node takes its parent's. */
+export function sankeyFromTree(root: TreeNode, stageOf: (code: string) => string | null = () => null): { nodes: SankeyNodeDatum[]; links: SankeyLinkDatum[] } {
   const nodes: SankeyNodeDatum[] = []
   const links: SankeyLinkDatum[] = []
-  const walk = (node: TreeNode, id: string) => {
-    nodes.push({ id, name: node.name, location: node.location, score: node.score, fraction: node.fraction, depth: node.level })
+  const stageFor = (node: TreeNode, parentStage: string | null) => (node.ref?.kind === 'foreground' ? stageOf(node.ref.code) : parentStage)
+  const walk = (node: TreeNode, id: string, stage: string | null) => {
+    nodes.push({ id, name: node.name, location: node.location, score: node.score, fraction: node.fraction, depth: node.level, stage })
     node.children.forEach((child, i) => {
       if (child.kind !== 'process') return
       const childId = `${id}/${i}`
-      links.push({ source: id, target: childId, value: Math.max(Math.abs(child.score), Number.MIN_VALUE) })
-      walk(child, childId)
+      const childStage = stageFor(child, stage)
+      links.push({ source: id, target: childId, value: Math.max(Math.abs(child.score), Number.MIN_VALUE), stage: childStage })
+      walk(child, childId, childStage)
     })
   }
-  walk(root, 'root')
+  walk(root, 'root', stageFor(root, null))
   return { nodes, links }
 }

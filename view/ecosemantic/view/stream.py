@@ -12,9 +12,9 @@ from starlette.responses import Response
 from starlette.routing import Route
 
 from ecosemantic.events import Event
-from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.context import Callers, ServerContext
 from ecosemantic.mcp.envelopes import as_uuid
-from ecosemantic.view.handling import answering
+from ecosemantic.view.handling import for_caller
 
 PING_SECONDS = 15
 RETRY_MILLISECONDS = 1000
@@ -34,11 +34,11 @@ async def _sending(
         leaving()
 
 
-def routes(context: ServerContext) -> list[Route]:
-    """The two streaming routes."""
+def routes(callers: Callers) -> list[Route]:
+    """The two streaming routes, each following the store of the caller it opened as."""
 
-    @answering
-    async def events(request: Request) -> Response:
+    @for_caller(callers)
+    async def events(request: Request, context: ServerContext) -> Response:
         system_id = as_uuid(request.path_params["id"])
         await context.storage.get_product_system(system_id)
         queue = context.events.subscribe(system_id)
@@ -48,8 +48,8 @@ def routes(context: ServerContext) -> list[Route]:
 
         return EventSourceResponse(_sending(queue, leaving), ping=PING_SECONDS)
 
-    @answering
-    async def everything(request: Request) -> Response:
+    @for_caller(callers)
+    async def everything(request: Request, context: ServerContext) -> Response:
         queue = context.events.subscribe_all()
         return EventSourceResponse(
             _sending(queue, lambda: context.events.unsubscribe_all(queue)), ping=PING_SECONDS

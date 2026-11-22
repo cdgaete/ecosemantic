@@ -16,7 +16,6 @@ from ecosemantic.compute.parameters import materialize
 from ecosemantic.mcp import calculation
 from ecosemantic.mcp.calculation import MAX_ITERATIONS, ImpactMonteCarlo, impact_of
 from ecosemantic.mcp.context import ServerContext
-from ecosemantic.mcp.server import build_server
 from ecosemantic.model.canonical import base_pin
 from ecosemantic.model.entities import (
     Case,
@@ -41,6 +40,7 @@ from ecosemantic.ports.types import (
 )
 from tests.fixture_data import CODES, FIXTURE_DB, FIXTURE_FINGERPRINT, GWP, WATER
 from tests.memory_background import MemoryInventory
+from tests.registered import registered
 
 GWP_ID = method_id(" > ".join(GWP))
 WIDGET_DEMAND = [{"ref": {"kind": "foreground", "code": "widget"}, "amount": 1.0}]
@@ -48,36 +48,12 @@ WIDGET_DEMAND = [{"ref": {"kind": "foreground", "code": "widget"}, "amount": 1.0
 
 @pytest.fixture(scope="module")
 def server(context: ServerContext) -> FastMCP:
-    built = build_server()
-    calculation.register(built, context)
-    return built
+    return registered(context, calculation)
 
 
 @pytest.fixture(scope="module")
 async def widget(fixture_system_stored: ProductSystem) -> uuid.UUID:
     return fixture_system_stored.id
-
-
-@pytest.fixture(scope="module")
-async def varied(context: ServerContext, fixture_system_stored: ProductSystem) -> uuid.UUID:
-    """The widget with electricity on a parameter, a case halving it, a scenario doubling steel."""
-    system = fixture_system_stored.model_copy(deep=True, update={"hash": None})
-    system.id = uuid.uuid5(system.id, "varied")
-    system.name = "widget_varied"
-    assembly = system.process("widget")
-    steel, electricity = assembly.exchanges[1], assembly.exchanges[2]
-    electricity.formula = "elec_kwh"
-    system.parameters = [Parameter(name="elec_kwh", value=1.0)]
-    system.cases = [Case(name="half", values={"elec_kwh": 0.5})]
-    system.scenarios = [
-        Scenario(
-            name="double_steel",
-            overrides=[ExchangeOverride(exchange_id=steel.id, multiplier=2.0)],
-        )
-    ]
-    system.scenarios[0].base_hash = base_pin(system)
-    await context.storage.put_product_system(system, context.actor, "created")
-    return system.id
 
 
 async def steel_parameterised(
@@ -892,9 +868,7 @@ def family_server(context: ServerContext) -> FastMCP:
     """The calculation tools over a background whose `gwp` family carries two weighting sets."""
     inventory = MemoryInventory(weighting_sets=FAMILY_SETS)
     bound = dataclasses.replace(context, inventory=inventory, resolver=InventoryResolver(inventory))
-    built = build_server()
-    calculation.register(built, bound)
-    return built
+    return registered(bound, calculation)
 
 
 async def test_calculate_impact_on_a_family_answers_one_total_per_set(

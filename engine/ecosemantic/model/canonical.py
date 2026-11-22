@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from decimal import Decimal
 
 from pydantic import JsonValue
 
 from ecosemantic.model.entities import Exchange, Parameter, ProductSystem, Scenario, Uncertainty
 from ecosemantic.model.refs import ExchangeInput
+
+_HASH = re.compile(r"[0-9a-f]{64}")
 
 
 def significant(value: float) -> str:
@@ -113,6 +116,11 @@ def canonical(product_system: ProductSystem) -> list[list[dict[str, JsonValue]]]
 def _digest(projection: list[list[dict[str, JsonValue]]]) -> str:
     payload = json.dumps(projection, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def is_content_hash(text: str) -> bool:
+    """Whether a text has the shape of a content hash, so that it names a version and no path."""
+    return _HASH.fullmatch(text) is not None
 
 
 def content_hash(product_system: ProductSystem) -> str:

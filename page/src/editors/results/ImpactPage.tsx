@@ -54,7 +54,7 @@ function Totals({ totals, variants, sectionKey }: { totals: Total[]; variants: V
 }
 
 function Children({ result, score, by, cutoff, byMethod, byIndicator }: { result: Result; score: Score; by: 'process' | 'flow'; cutoff: number; byMethod: boolean; byIndicator: boolean }) {
-  const parts = useContributions(result.id, result.hash, { by, method_id: score.method_id, top_n: 20, cutoff: cutoff / 100, demand: demandOf(result.params!, result.root) }, !result.stale)
+  const parts = useContributions(result.id, result.hash, { by, method_id: score.method_id, top_n: 20, cutoff: cutoff / 100, demand: demandOf(result.params!, result.root), ...(result.variant !== null ? { variant: result.variant } : {}) }, !result.stale)
   if (parts.error) return <tr><td colSpan={99} className="px-2 text-destructive">{parts.error.message}</td></tr>
   if (!parts.data) return <tr><td colSpan={99} className="px-2 text-muted-foreground">{result.waiting}</td></tr>
   const rows = by === 'process' ? (parts.data.value.processes ?? []).map((h) => ({ key: `${h.ref.kind === 'background' ? h.ref.id : h.ref.code}`, icon: h.ref.kind === 'foreground' ? ('process' as const) : ('product' as const), name: h.location ? `${h.name} · ${h.location}` : h.name, share: h.fraction, score: h.score })) : (parts.data.value.flows ?? []).map((f) => ({ key: f.flow.id, icon: 'elementary' as const, name: `${f.name} (${f.sub_compartment ? `${f.compartment} / ${f.sub_compartment}` : f.compartment})`, share: f.fraction, score: f.score }))
@@ -98,7 +98,7 @@ function Children({ result, score, by, cutoff, byMethod, byIndicator }: { result
 }
 
 export function ImpactPage({ result }: { result: Result }) {
-  const { id, params, system, impact } = result
+  const { id, params, system, impact, state } = result
   const [by, setBy] = useState<'process' | 'flow'>('process')
   const [cutoff, setCutoff] = useState(1)
   const [open, setOpen] = useState<string[]>([])
@@ -111,7 +111,7 @@ export function ImpactPage({ result }: { result: Result }) {
   const byIndicator = scores.some((score) => indicatorLabel(methodById(methods, score.method_id)) !== '')
   return (
     <>
-      <EditorHeader icon="result" page="Impact analysis" entity={system?.name ?? ''} />
+      <EditorHeader icon="result" page="Impact analysis" entity={system?.name ?? ''} state={state} />
       <Section title={`Impact analysis: ${title}`} sectionKey={`results:${id}:impact`} actions={<RequestAction systemId={id} entity="product_system" entityId={id} />}>
         <div className="flex flex-wrap items-center gap-3 pb-2 text-xs">
           <span>Sub-group by:</span>

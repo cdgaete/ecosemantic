@@ -8,8 +8,16 @@ from pydantic import BaseModel
 from ecosemantic.compute.links import held_pins, linked_documents
 from ecosemantic.compute.parameters import materialize
 from ecosemantic.errors import Invalid
-from ecosemantic.geometry import CardGeometry, Placement, card_geometry, link_texts, links
-from ecosemantic.layout import arrange, bounds
+from ecosemantic.geometry import (
+    CardGeometry,
+    Placement,
+    SharedSupplier,
+    StageRegions,
+    card_geometry,
+    link_texts,
+    links,
+)
+from ecosemantic.layout import arrange, bounds, shared_suppliers, stage_regions
 from ecosemantic.mcp.calculation import demand_of, variant_of
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import READ, WRITE
@@ -37,6 +45,8 @@ class Arrangement(BaseModel):
     score: int
     bounds: dict[str, float]
     scaling: str | None
+    stages: list[StageRegions]
+    shared_suppliers: list[SharedSupplier]
     card: CardGeometry
 
     def summarise(self) -> Summary | None:
@@ -110,14 +120,17 @@ async def _arrangement(
         ]
     routes = route(placements, links(system), link_texts(system, amounts))
     found = troubles(placements, routes)
+    stages = stage_regions(system, placements)
     return Arrangement(
-        map=as_text(system, placements, routes),
+        map=as_text(system, placements, routes, stages),
         cards=placements,
         edges=routes,
         troubles=found,
         score=score(found),
         bounds=bounds(placements),
         scaling=reason,
+        stages=stages,
+        shared_suppliers=shared_suppliers(system),
         card=card_geometry(),
     )
 
@@ -153,7 +166,7 @@ async def arrange_graph(
     return Answer[Arrangement](value=await _arrangement(context, product_system_id, variant))
 
 
-def register(server: FastMCP, context: ServerContext) -> None:
+def register(server: FastMCP) -> None:
     """Register the graph tools, in roster order."""
     server.tool(
         name="graph_layout",
@@ -169,9 +182,13 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "titles each card with its scaled output and writes each row's scaled amount. When "
             "the engine cannot solve the system, scaling names why and nothing is scaled. Name a "
             "case or a scenario as variant to draw every row, arrow and label under it, as "
-            "calculate_impact evaluates a variant. Read it before arrange_graph."
+            "calculate_impact evaluates a variant. A system whose processes carry "
+            "life_cycle_stage is drawn one band of columns per stage, from the functional unit's "
+            "stage at the right, processes of no stage leftmost; stages lists each stage's cards "
+            "and regions, and shared_suppliers each process of no stage that feeds several "
+            "stages. Read it before arrange_graph."
         ),
-    )(boundary(bound(graph_layout, context)))
+    )(boundary(bound(graph_layout)))
     server.tool(
         name="arrange_graph",
         annotations=WRITE,
@@ -186,4 +203,4 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "The answer is graph_layout's: activity, scaled amounts, labels and scaling, under the "
             "variant when one is named; where a card is held does not depend on the variant."
         ),
-    )(boundary(bound(arrange_graph, context)))
+    )(boundary(bound(arrange_graph)))

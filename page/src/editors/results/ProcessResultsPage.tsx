@@ -12,12 +12,12 @@ import { demandOf } from './params'
 import type { Result } from './ResultsEditor'
 
 export function ProcessResultsPage({ result }: { result: Result }) {
-  const { id, params, system, impact } = result
+  const { id, params, system, impact, state, variant } = result
   const scores = impact.data?.value.scores ?? []
   const methods = impact.data?.value.methods ?? []
   const { chosen, choose } = useCategory(scores, id, (category) => category.value)
   const [cutoff, setCutoff] = useState(1)
-  const parts = useContributions(id, result.hash, { by: 'process', method_id: chosen?.method_id, top_n: 50, cutoff: cutoff / 100, demand: demandOf(params!, result.root) }, chosen !== undefined && !result.stale)
+  const parts = useContributions(id, result.hash, { by: 'process', method_id: chosen?.method_id, top_n: 50, cutoff: cutoff / 100, demand: demandOf(params!, result.root), ...(variant !== null ? { variant } : {}) }, chosen !== undefined && !result.stale)
   const answer = parts.data?.value
   const total = answer?.total
   const cut = answer?.cut ?? null
@@ -40,7 +40,7 @@ export function ProcessResultsPage({ result }: { result: Result }) {
   const cutNoticeText = cutNotice(cut)
   return (
     <>
-      <EditorHeader icon="result" page="Process results" entity={system?.name ?? ''} />
+      <EditorHeader icon="result" page="Process results" entity={system?.name ?? ''} state={state} />
       <Section title="Process contributions" sectionKey={`results:${id}:processes`} actions={<RequestAction systemId={id} entity="product_system" entityId={id} />}>
         <div className="flex flex-wrap items-center gap-3 pb-2 text-xs">
           <label className="flex min-w-0 max-w-full items-center gap-1">

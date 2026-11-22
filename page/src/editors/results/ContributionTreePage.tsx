@@ -50,7 +50,7 @@ function Rows({ node, depth, unit, open, toggle, id }: { node: TreeNode; depth: 
 }
 
 export function ContributionTreePage({ result }: { result: Result }) {
-  const { id, params, system, impact, hash, root, stale, waiting } = result
+  const { id, params, system, impact, hash, root, stale, waiting, state, variant } = result
   const scores = impact.data?.value.scores ?? []
   const methods = impact.data?.value.methods ?? []
   const [maxLevel, setMaxLevel] = useState(3)
@@ -58,7 +58,7 @@ export function ContributionTreePage({ result }: { result: Result }) {
   const [cutoff, setCutoff] = useState(0.1)
   const [open, setOpen] = useState<Set<string>>(new Set(['root']))
   const { chosen, choose } = useCategory(scores, id, (category) => category.value)
-  const tree = useContributions(id, hash, { by: 'path', method_id: chosen?.method_id, max_level: maxLevel, max_nodes: maxNodes, cutoff: cutoff / 100, demand: demandOf(params!, root) }, chosen !== undefined && !stale)
+  const tree = useContributions(id, hash, { by: 'path', method_id: chosen?.method_id, max_level: maxLevel, max_nodes: maxNodes, cutoff: cutoff / 100, demand: demandOf(params!, root), ...(variant !== null ? { variant } : {}) }, chosen !== undefined && !stale)
   const toggle = (key: string) =>
     setOpen((s) => {
       const next = new Set(s)
@@ -68,7 +68,7 @@ export function ContributionTreePage({ result }: { result: Result }) {
     })
   return (
     <>
-      <EditorHeader icon="result" page="Contribution tree" entity={system?.name ?? ''} />
+      <EditorHeader icon="result" page="Contribution tree" entity={system?.name ?? ''} state={state} />
       <Section title="Contribution tree" sectionKey={`results:${id}:tree`} actions={<RequestAction systemId={id} entity="product_system" entityId={id} />}>
         <div className="flex flex-wrap items-center gap-3 pb-2 text-xs">
           <label className="flex min-w-0 max-w-full items-center gap-1">

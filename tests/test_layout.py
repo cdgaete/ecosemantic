@@ -22,6 +22,8 @@ from ecosemantic.geometry import (
     Link,
     LinkText,
     Placement,
+    Region,
+    SharedSupplier,
     card_geometry,
     card_size,
     link_texts,
@@ -29,7 +31,15 @@ from ecosemantic.geometry import (
     ports,
     shown_inputs,
 )
-from ecosemantic.layout import arrange, depths, nodes
+from ecosemantic.layout import (
+    REGION_PAD,
+    arrange,
+    card_stages,
+    depths,
+    nodes,
+    shared_suppliers,
+    stage_regions,
+)
 from ecosemantic.model.entities import Exchange, Process, ProductSystem
 from ecosemantic.model.refs import (
     BackgroundRef,
@@ -38,6 +48,7 @@ from ecosemantic.model.refs import (
     ForegroundRef,
     SystemRef,
 )
+from ecosemantic.model.stages import stage_order
 from ecosemantic.model.validation import anchors, roots
 from ecosemantic.ports.types import Side
 from ecosemantic.routes import Route
@@ -494,3 +505,203 @@ def test_link_texts_carry_a_formula_text_for_a_formula_exchange_only() -> None:
     texts = link_texts(drawn, None)
     assert texts[plain.id].formula == "ƒ kWh"
     assert texts[formula.id].formula is None
+
+
+def tagged(made: Process, stage: str) -> Process:
+    """The process, carrying a life-cycle stage."""
+    made.metadata["life_cycle_stage"] = stage
+    return made
+
+
+def water_chain() -> ProductSystem:
+    """Bottled water walked home, one process and one life-cycle stage per step."""
+    return system(
+        tagged(process("drinking_water", ["bottled_home"]), "use"),
+        tagged(process("bottled_home", ["bottled_retail"]), "distribution and end of life"),
+        tagged(process("bottled_retail", ["bottled_plant"]), "distribution"),
+        tagged(process("bottled_plant", ["pet_bottle"]), "production"),
+        tagged(process("pet_bottle"), "packaging"),
+    )
+
+
+def copper() -> ProductSystem:
+    """The copper chain, its shared supplier `sen` feeding every step of it."""
+    return system(
+        tagged(process("refinery", ["smelter", "sen"]), "smelting and refining"),
+        tagged(process("smelter", ["transport", "sen"]), "smelting and refining"),
+        tagged(process("transport", ["concentrator"]), "transport"),
+        tagged(process("concentrator", ["mine", "desal", "sen"]), "concentration"),
+        tagged(process("mine", ["sen"]), "extraction"),
+        tagged(process("desal", ["sen"]), "concentration"),
+        process("sen"),
+    )
+
+
+def test_a_system_without_stages_is_arranged_as_before(
+    fixture_system_stored: ProductSystem,
+) -> None:
+    plain = arrange(
+        fixture_system_stored,
+        roots(fixture_system_stored),
+        {},
+        emitted(fixture_system_stored),
+    )
+    cleared = fixture_system_stored.model_copy(deep=True)
+    for made in cleared.processes:
+        made.metadata["life_cycle_stage"] = None
+    blanked = fixture_system_stored.model_copy(deep=True)
+    for made in blanked.processes:
+        made.metadata["life_cycle_stage"] = "  "
+    assert arrange(cleared, roots(cleared), {}, emitted(cleared)) == plain
+    assert arrange(blanked, roots(blanked), {}, emitted(blanked)) == plain
+
+
+def test_each_stage_takes_a_band_of_its_own_from_the_functional_unit() -> None:
+    drawn = water_chain()
+    placed = {p.code: p for p in arrange(drawn, ["drinking_water"], {}, emitted(drawn))}
+    walked = [
+        placed[code].x
+        for code in (
+            "drinking_water",
+            "bottled_home",
+            "bottled_retail",
+            "bottled_plant",
+            "pet_bottle",
+        )
+    ]
+    assert walked == sorted(walked, reverse=True)
+    assert len(set(walked)) == len(walked)
+
+
+def test_a_stage_keeps_its_band_where_distance_disagrees() -> None:
+    drawn = copper()
+    placed = {p.code: p for p in arrange(drawn, ["refinery"], {}, emitted(drawn))}
+    pitch = CARD_WIDTH + COLUMN_GAP
+    # desal sits a column further from the reference than concentrator by distance
+    assert abs(placed["desal"].x - placed["concentrator"].x) == pitch
+    assert placed["concentrator"].x > placed["mine"].x
+    assert placed["desal"].x > placed["mine"].x
+    # the column states the stage; the depth stays the distance the two cards share
+    assert placed["desal"].depth == placed["mine"].depth == 4
+
+
+def test_a_shared_supplier_sits_in_the_band_of_no_stage() -> None:
+    drawn = copper()
+    placed = arrange(drawn, ["refinery"], {}, emitted(drawn))
+    assert min(placed, key=lambda card: card.x).code == "sen"
+
+
+def test_a_linked_card_takes_the_stage_of_the_process_taking_it() -> None:
+    part = uuid.uuid4()
+    one = system(tagged(linking("fu", part), "a"))
+    assert card_stages(one) == {"fu": "a", f"system:{part}": "a"}
+    two = system(tagged(linking("fu", part), "a"), tagged(linking("mid", part), "b"))
+    assert card_stages(two)[f"system:{part}"] is None
+
+
+def meets(a: Region, b: Region) -> bool:
+    """Whether two regions share any area."""
+    return (
+        a.x < b.x + b.width
+        and b.x < a.x + a.width
+        and a.y < b.y + b.height
+        and b.y < a.y + a.height
+    )
+
+
+def holds(region: Region, card: Placement) -> bool:
+    """Whether a region encloses a card's rectangle."""
+    return (
+        region.x <= card.x
+        and region.y <= card.y
+        and card.x + card.width <= region.x + region.width
+        and card.y + card.height <= region.y + region.height
+    )
+
+
+def test_each_stage_answers_one_region_and_none_overlap() -> None:
+    drawn = water_chain()
+    placed = arrange(drawn, ["drinking_water"], {}, emitted(drawn))
+    found = stage_regions(drawn, placed)
+    assert [s.stage for s in found] == [
+        "use",
+        "distribution and end of life",
+        "distribution",
+        "production",
+        "packaging",
+    ]
+    assert [s.codes for s in found] == [
+        ["drinking_water"],
+        ["bottled_home"],
+        ["bottled_retail"],
+        ["bottled_plant"],
+        ["pet_bottle"],
+    ]
+    assert all(len(s.regions) == 1 for s in found)
+    boxes = [s.regions[0] for s in found]
+    assert [(a, b) for i, a in enumerate(boxes) for b in boxes[i + 1 :] if meets(a, b)] == []
+    cards = {p.code: p for p in placed}
+    for entry in found:
+        assert holds(entry.regions[0], cards[entry.codes[0]])
+
+
+def test_a_stage_split_by_distance_answers_one_region() -> None:
+    drawn = copper()
+    placed = arrange(drawn, ["refinery"], {}, emitted(drawn))
+    found = {s.stage: s for s in stage_regions(drawn, placed)}
+    assert set(found) == {"smelting and refining", "transport", "concentration", "extraction"}
+    concentration = found["concentration"]
+    assert concentration.codes == ["concentrator", "desal"]
+    assert len(concentration.regions) == 1
+    cards = {p.code: p for p in placed}
+    assert holds(concentration.regions[0], cards["concentrator"])
+    assert holds(concentration.regions[0], cards["desal"])
+    assert not any("sen" in entry.codes for entry in found.values())
+
+
+def test_a_held_card_away_from_its_stage_has_a_region_of_its_own() -> None:
+    drawn = water_chain()
+    far = 5 * (CARD_WIDTH + COLUMN_GAP)
+    held = {"pet_bottle": (far, COLUMN_TOP)}
+    placed = arrange(drawn, ["drinking_water"], held, emitted(drawn))
+    card = next(p for p in placed if p.code == "pet_bottle")
+    assert (card.x, card.y, card.held) == (far, COLUMN_TOP, True)
+    found = {s.stage: s for s in stage_regions(drawn, placed)}
+    packaging = found["packaging"]
+    assert packaging.codes == ["pet_bottle"]
+    assert len(packaging.regions) == 1
+    [region] = packaging.regions
+    assert (region.x, region.y) == (far - REGION_PAD, COLUMN_TOP - REGION_PAD)
+    assert (region.width, region.height) == (
+        card.width + 2 * REGION_PAD,
+        card.height + 2 * REGION_PAD,
+    )
+
+
+def test_shared_suppliers_name_a_card_feeding_several_stages() -> None:
+    assert shared_suppliers(copper()) == [SharedSupplier(code="sen", processes=5, stages=3)]
+
+
+def test_shared_suppliers_count_the_stages_their_consumers_hold_not_the_span() -> None:
+    drawn = water_chain()
+    for code in ("drinking_water", "pet_bottle"):
+        next(p for p in drawn.processes if p.code == code).exchanges.append(
+            Exchange(
+                id=uuid.uuid4(),
+                type="product",
+                name="grid",
+                amount=1.0,
+                unit="kWh",
+                input=ForegroundRef(code="grid"),
+            )
+        )
+    drawn.processes.append(process("grid"))
+    # use and packaging sit at the two ends of stage_order, three stages apart
+    assert stage_order(drawn) == [
+        "use",
+        "distribution and end of life",
+        "distribution",
+        "production",
+        "packaging",
+    ]
+    assert shared_suppliers(drawn) == [SharedSupplier(code="grid", processes=2, stages=2)]

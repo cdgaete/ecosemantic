@@ -31,6 +31,7 @@ from ecosemantic.errors import Invalid, Unauthorised, Unavailable
 from ecosemantic.events import EventBus
 from ecosemantic.mcp.accounts import ACCOUNTS_PATH
 from ecosemantic.mcp.context import AccountStart, ServerContext, Start
+from ecosemantic.mcp.reach import BRIDGE_EXTENSION
 from ecosemantic.mcp.server import build_server
 from ecosemantic.settings import (
     LOOPBACK,
@@ -57,7 +58,7 @@ from ecosemantic.settings.handover import (
     reachable,
     read_health,
 )
-from ecosemantic.view.api import BRIDGE_EXTENSION, GATE_PARAMETER
+from ecosemantic.view.api import GATE_PARAMETER
 from ecosemantic.view.app import build_view
 from ecosemantic.view.handling import answering
 

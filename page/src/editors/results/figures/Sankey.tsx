@@ -1,10 +1,11 @@
 import '@xyflow/react/dist/style.css'
 import { Background, BaseEdge, ControlButton, Controls, Handle, Position, ReactFlow, ReactFlowProvider, type EdgeProps, type EdgeTypes, type NodeProps, type NodeTypes } from '@xyflow/react'
 import { Maximize2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { createContext, useContext, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { formatAmount, formatShare } from '@/lib/format'
+import { stageColour } from '@/lib/stageColours'
 import { useUi } from '@/store/ui'
 import { Icon } from '@/window/Icon'
 import { sankeyElements, type SankeyCard, type SankeyLink, type SankeyLinkDatum, type SankeyNodeDatum } from './sankey'
@@ -33,50 +34,62 @@ function Card({ data }: NodeProps<SankeyCard>) {
   )
 }
 
-function Link({ id, sourceX, sourceY, targetX, targetY, data }: EdgeProps<SankeyLink>) {
-  return <BaseEdge id={id} path={pathOf(sourceX + (data?.offset ?? 0), sourceY, targetX, targetY)} style={{ stroke: 'rgb(var(--link-stroke) / 0.6)', strokeWidth: data?.width }} />
+const NO_STAGES: string[] = []
+const StagesContext = createContext<string[]>(NO_STAGES)
+
+/** The band between two cards, coloured by the stage it hangs under while the split names stages. */
+export function Link({ id, sourceX, sourceY, targetX, targetY, data, stages = NO_STAGES }: EdgeProps<SankeyLink> & { stages?: string[] }) {
+  const stroke = stages.length === 0 ? 'rgb(var(--link-stroke) / 0.6)' : stageColour(stages, data?.stage ?? null, 0.6)
+  return <BaseEdge id={id} path={pathOf(sourceX + (data?.offset ?? 0), sourceY, targetX, targetY)} style={{ stroke, strokeWidth: data?.width }} />
+}
+
+function StageLink(props: EdgeProps<SankeyLink>) {
+  const stages = useContext(StagesContext)
+  return <Link {...props} stages={stages} />
 }
 
 const nodeTypes: NodeTypes = { card: Card }
-const edgeTypes: EdgeTypes = { link: Link }
+const edgeTypes: EdgeTypes = { link: StageLink }
 
-function Canvas({ elements, drawn, onExpand }: { elements: ReturnType<typeof sankeyElements>; drawn: string; onExpand?: () => void }) {
+function Canvas({ elements, drawn, stages, onExpand }: { elements: ReturnType<typeof sankeyElements>; drawn: string; stages: string[]; onExpand?: () => void }) {
   const theme = useUi((s) => s.theme)
   return (
     <ReactFlowProvider>
-      <ReactFlow
-        key={drawn}
-        defaultNodes={elements.nodes}
-        defaultEdges={elements.edges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        fitView
-        fitViewOptions={{ maxZoom: 1, padding: 0.1 }}
-        minZoom={0.1}
-        maxZoom={2}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        colorMode={theme}
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background />
-        <Controls position="top-right" showInteractive={false}>
-          {onExpand ? (
-            <ControlButton onClick={onExpand} title="Expand diagram" aria-label="Expand diagram">
-              <Maximize2 />
-            </ControlButton>
-          ) : null}
-        </Controls>
-      </ReactFlow>
+      <StagesContext.Provider value={stages}>
+        <ReactFlow
+          key={drawn}
+          defaultNodes={elements.nodes}
+          defaultEdges={elements.edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          fitView
+          fitViewOptions={{ maxZoom: 1, padding: 0.1 }}
+          minZoom={0.1}
+          maxZoom={2}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          colorMode={theme}
+          proOptions={{ hideAttribution: true }}
+        >
+          <Background />
+          <Controls position="top-right" showInteractive={false}>
+            {onExpand ? (
+              <ControlButton onClick={onExpand} title="Expand diagram" aria-label="Expand diagram">
+                <Maximize2 />
+              </ControlButton>
+            ) : null}
+          </Controls>
+        </ReactFlow>
+      </StagesContext.Provider>
     </ReactFlowProvider>
   )
 }
 
-export function Sankey({ nodes, links, unit, title = '' }: { nodes: SankeyNodeDatum[]; links: SankeyLinkDatum[]; unit: string; title?: string }) {
+export function Sankey({ nodes, links, unit, title = '', stages = NO_STAGES }: { nodes: SankeyNodeDatum[]; links: SankeyLinkDatum[]; unit: string; title?: string; stages?: string[] }) {
   const [large, setLarge] = useState(false)
   const elements = useMemo(() => sankeyElements(nodes, links, unit), [nodes, links, unit])
-  const drawn = nodes.map((node) => `${node.id}:${node.name}:${node.score}`).join('|')
+  const drawn = [...nodes.map((node) => `${node.id}:${node.name}:${node.score}:${node.stage ?? ''}`), ...links.map((link) => link.stage ?? '')].join('|')
   return (
     <>
       <figure
@@ -84,7 +97,7 @@ export function Sankey({ nodes, links, unit, title = '' }: { nodes: SankeyNodeDa
         className="max-h-[50vh] min-h-60 w-full overflow-hidden rounded-md border"
         style={{ aspectRatio: `${elements.extent.width} / ${elements.extent.height}` }}
       >
-        <Canvas elements={elements} drawn={drawn} onExpand={() => setLarge(true)} />
+        <Canvas elements={elements} drawn={drawn} stages={stages} onExpand={() => setLarge(true)} />
       </figure>
       <Dialog open={large} onOpenChange={setLarge}>
         <DialogContent aria-describedby={undefined} className="flex h-[90vh] w-[95vw] max-w-[95vw] flex-col gap-2 p-3">
@@ -96,7 +109,7 @@ export function Sankey({ nodes, links, unit, title = '' }: { nodes: SankeyNodeDa
               </Button>
             </DialogClose>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-hidden rounded-md border">{large ? <Canvas elements={elements} drawn={drawn} /> : null}</div>
+          <div className="min-h-0 flex-1 overflow-hidden rounded-md border">{large ? <Canvas elements={elements} drawn={drawn} stages={stages} /> : null}</div>
         </DialogContent>
       </Dialog>
     </>

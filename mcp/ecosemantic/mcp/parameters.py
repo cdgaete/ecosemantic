@@ -142,7 +142,7 @@ async def rebase_scenario(
     return await answer_write(context, scenario, entry, stored, changed)
 
 
-def register(server: FastMCP, context: ServerContext) -> None:
+def register(server: FastMCP) -> None:
     """Register get_parameters and set_parameters, then the scenario tools, in roster order."""
     server.tool(
         name="get_parameters",
@@ -153,7 +153,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "space as it was at that version. set_parameters writes it, and calculate_impact "
             "takes a case as a variant."
         ),
-    )(boundary(bound(get_parameters, context)))
+    )(boundary(bound(get_parameters)))
     server.tool(
         name="set_parameters",
         annotations=WRITE,
@@ -169,7 +169,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "formula or a case uses cannot be deleted, nor can a case another system's link "
             "names. Exchange formulas are re-evaluated after the write."
         ),
-    )(boundary(serialised(context.lock)(bound(set_parameters, context))))
+    )(boundary(serialised(bound(set_parameters))))
     server.tool(
         name="create_scenario",
         annotations=WRITE,
@@ -189,12 +189,12 @@ def register(server: FastMCP, context: ServerContext) -> None:
             '"name": "half power", "overrides": [{"kind": "exchange", "exchange_id": "…", '
             '"multiplier": 0.5}]}.'
         ),
-    )(boundary(serialised(context.lock)(bound(create_scenario, context))))
+    )(boundary(serialised(bound(create_scenario))))
     server.tool(
         name="delete_scenario",
         annotations=DELETE,
         description="Remove a scenario. The product system's data is untouched.",
-    )(boundary(serialised(context.lock)(bound(delete_scenario, context))))
+    )(boundary(serialised(bound(delete_scenario))))
     server.tool(
         name="rebase_scenario",
         annotations=WRITE,
@@ -202,4 +202,4 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "Re-pin a scenario to the product system's base hash after the base changed, "
             "proving its overrides still apply. calculate_impact refuses a stale scenario."
         ),
-    )(boundary(serialised(context.lock)(bound(rebase_scenario, context))))
+    )(boundary(serialised(bound(rebase_scenario))))

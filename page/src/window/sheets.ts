@@ -2,8 +2,6 @@ import { matchPath, useLocation } from 'react-router-dom'
 import { RESULT_PAGES } from '@/editors/results/pages'
 import { databaseOfPath, paths } from '@/lib/paths'
 import { useUi, type SheetKind } from '@/store/ui'
-import { NARROW_BELOW } from './inspector'
-import { useMinWidth } from './useMinWidth'
 
 export interface Place {
   address: string
@@ -14,6 +12,7 @@ export interface SheetReturn {
   kind: SheetKind
   to: string
   label: string
+  docked: boolean
 }
 
 function pathOf(address: string): string {
@@ -25,11 +24,16 @@ export function systemOf(address: string): string | null {
   return matchPath('/systems/:id/*', pathOf(address))?.params.id ?? null
 }
 
+/** Whether an address is a page of an open result, which docks under the graph instead of opening a sheet. */
+export function dockedOf(pathname: string): boolean {
+  const page = matchPath('/systems/:id/results/:page', pathname)?.params.page
+  return page !== undefined && RESULT_PAGES.some((entry) => entry.key === page)
+}
+
 /** The sheet an address opens: the explorer under one database, the results on a page of an open result or on a simulation, and none anywhere else. */
 export function sheetOf(pathname: string): SheetKind | null {
   if (databaseOfPath(pathname) !== null) return 'explorer'
-  const page = matchPath('/systems/:id/results/:page', pathname)?.params.page
-  if (page !== undefined && RESULT_PAGES.some((entry) => entry.key === page)) return 'results'
+  if (dockedOf(pathname)) return 'results'
   return matchPath('/systems/:id/simulations/:runId', pathname) === null ? null : 'results'
 }
 
@@ -58,17 +62,17 @@ export function returnLabel(address: string): string {
 
 /**
  * The sheet drawn over the page and the address it is left to: where it was opened from, else the graph of the system
- * a result is under or the canvas holds, else the product systems. Null where the address opens no sheet, and for the
- * results below 768 px, where the inspector's own sheet holds them.
+ * a result is under or the canvas holds, else the product systems. Null where the address opens no sheet. A page of an
+ * open result is answered at every width and docked, the graph staying under it; the explorer and a simulation are
+ * sheets.
  */
 export function useSheet(): SheetReturn | null {
   const { pathname } = useLocation()
   const kind = sheetOf(pathname)
   const origin = useUi((s) => (kind === null ? null : s.origins[kind]))
   const canvasSystemId = useUi((s) => s.canvasSystemId)
-  const narrow = !useMinWidth(NARROW_BELOW)
-  if (kind === null || (kind === 'results' && narrow)) return null
+  if (kind === null) return null
   const system = kind === 'results' ? systemOf(pathname) : canvasSystemId
   const to = origin ?? (system === null ? paths.home() : paths.system(system))
-  return { kind, to, label: returnLabel(to) }
+  return { kind, to, label: returnLabel(to), docked: dockedOf(pathname) }
 }

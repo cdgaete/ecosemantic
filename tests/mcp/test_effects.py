@@ -32,3 +32,5 @@ async def test_the_computes_are_the_three_calculations_and_the_run(full_server: 
     assert effects["search_processes"] == "read"
     assert effects["create_process"] == "write"
     assert effects["delete_process"] == "delete"
+    assert effects["export_product_system"] == "write"
+    assert effects["export_tables"] == "write"

@@ -362,6 +362,8 @@ async def test_the_layout_answers_the_arrangement_and_keeps_what_is_posted(
             "score",
             "bounds",
             "scaling",
+            "stages",
+            "shared_suppliers",
             "card",
         }
         cards = first["cards"]

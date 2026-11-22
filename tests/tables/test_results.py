@@ -13,6 +13,7 @@ from ecosemantic.compute.results import (
     InventoryResult,
     VariantScores,
 )
+from ecosemantic.compute.stages import StageInput, StagePart, StageProcess
 from ecosemantic.model.entities import Method, method_id
 from ecosemantic.model.refs import BackgroundRef, DemandItem, ElementaryFlowRef, ForegroundRef
 from ecosemantic.ports.types import (
@@ -138,6 +139,93 @@ def test_a_contribution_over_processes_writes_its_own_columns(tmp_path: Path) ->
     assert rows[0]["rank"] == "1" and rows[0]["name"] == "transport"
     schema = yaml.safe_load((folder / "schema.yaml").read_text(encoding="utf-8"))
     assert schema["by"] == "process"
+
+
+def test_a_split_by_stage_writes_one_row_per_stage_process_and_input(tmp_path: Path) -> None:
+    result = ContributionResult(
+        database=FIXTURE_DATABASE,
+        by="stage",
+        method=GWP,
+        total=Score(value=4.158, unit="kg CO2-Eq", method_id=GWP.id),
+        credit_loops=[],
+        stages=[
+            StagePart(
+                stage="assembly",
+                score=2.49,
+                fraction=2.49 / 4.158,
+                processes=[
+                    StageProcess(
+                        ref=ForegroundRef(code="widget"),
+                        name="widget assembly",
+                        location="GLO",
+                        score=2.49,
+                        fraction=2.49 / 4.158,
+                        direct=0.1,
+                        inputs=[
+                            StageInput(
+                                kind="process",
+                                ref=BackgroundRef(database="ei", id="steel-rer"),
+                                name="steel production",
+                                location="RER",
+                                score=1.39,
+                                fraction=1.39 / 4.158,
+                            ),
+                            StageInput(
+                                kind="remainder",
+                                ref=None,
+                                name="remainder",
+                                location=None,
+                                score=1.0,
+                                fraction=1.0 / 4.158,
+                            ),
+                        ],
+                    )
+                ],
+            ),
+            StagePart(
+                stage=None,
+                score=1.668,
+                fraction=1.668 / 4.158,
+                processes=[
+                    StageProcess(
+                        ref=ForegroundRef(code="frame"),
+                        name="frame production",
+                        location="GLO",
+                        score=1.668,
+                        fraction=1.668 / 4.158,
+                        direct=0.0,
+                        inputs=[],
+                    )
+                ],
+            ),
+        ],
+    )
+    folder = write_contribution(tmp_path, key(), result, AT)
+    rows = list(csv.DictReader((folder / "contributions.csv").open(encoding="utf-8")))
+    assert list(rows[0]) == [
+        "stage",
+        "kind",
+        "ref",
+        "name",
+        "location",
+        "score",
+        "fraction",
+    ]
+    assert [(row["stage"], row["kind"], row["name"]) for row in rows] == [
+        ("assembly", "stage", "assembly"),
+        ("assembly", "process", "widget assembly"),
+        ("assembly", "direct", ""),
+        ("assembly", "input", "steel production"),
+        ("assembly", "remainder", "remainder"),
+        ("", "stage", "no stage"),
+        ("", "process", "frame production"),
+        ("", "direct", ""),
+    ]
+    direct = rows[2]
+    assert (direct["score"], direct["fraction"], direct["ref"]) == ("0.1", "", "")
+    assert rows[3]["ref"] == BackgroundRef(database="ei", id="steel-rer").model_dump_json()
+    assert rows[4]["ref"] == "" and rows[4]["location"] == ""
+    assert rows[1]["location"] == "GLO" and rows[5]["location"] == ""
 
 
 def test_a_contribution_run_records_the_cut_it_made(tmp_path: Path) -> None:

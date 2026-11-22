@@ -1,11 +1,72 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import type { ContributionResult } from '@/api/types'
-import { Sankey } from '@/editors/results/figures/Sankey'
+import { Position, ReactFlowProvider } from '@xyflow/react'
+import type { ContributionResult, TreeNode } from '@/api/types'
+import { Link, Sankey } from '@/editors/results/figures/Sankey'
 import { NODE_H, NODE_W, linkWidth, sankeyElements, sankeyFromTree } from '@/editors/results/figures/sankey'
 import byPath from './fixtures/contributions_path.json'
 
 const tree = (byPath.value as ContributionResult).root!
 const figure = sankeyFromTree(tree)
+
+function processNode(ref: TreeNode['ref'], name: string, level: number): TreeNode {
+  return { kind: 'process', ref, name, location: null, score: 1, fraction: null, level, children: [] }
+}
+
+const banded: TreeNode = {
+  ...processNode({ kind: 'foreground', code: 'widget' }, 'widget', 0),
+  score: 4,
+  fraction: 1,
+  children: [
+    processNode({ kind: 'background', database: 'fixture', id: 'steel' }, 'steel', 1),
+    processNode({ kind: 'foreground', code: 'frame' }, 'frame', 1),
+    processNode({ kind: 'foreground', code: 'gizmo' }, 'gizmo', 1),
+  ],
+}
+
+const STAGES = new Map([
+  ['widget', 'assembly'],
+  ['frame', 'materials'],
+])
+
+const staged = sankeyFromTree(banded, (code) => STAGES.get(code) ?? null)
+
+function bandStroke(stages: string[] | undefined, stage: string | null): string {
+  const props = {
+    id: 'band',
+    source: 'root',
+    target: 'root/1',
+    sourceX: 0,
+    sourceY: 0,
+    targetX: 120,
+    targetY: 90,
+    sourcePosition: Position.Bottom,
+    targetPosition: Position.Top,
+    data: { width: 12, offset: 4, stage },
+    ...(stages === undefined ? {} : { stages }),
+  }
+  const { container } = render(
+    <ReactFlowProvider>
+      <svg>
+        <Link {...(props as unknown as Parameters<typeof Link>[0])} />
+      </svg>
+    </ReactFlowProvider>,
+  )
+  return container.querySelector('path.react-flow__edge-path')?.getAttribute('style') ?? ''
+}
+
+it('colours a band by the stage of the split, and a band of no stage with the muted token', () => {
+  const stages = ['assembly', 'materials']
+  const materials = staged.links.find((link) => link.stage === 'materials')!
+  const unstaged = staged.links.find((link) => link.stage === null)!
+  expect(bandStroke(stages, 'assembly')).toContain('rgb(var(--stage-1) / 0.6)')
+  expect(bandStroke(stages, materials.stage)).toContain('rgb(var(--stage-2) / 0.6)')
+  expect(bandStroke(stages, unstaged.stage)).toContain('rgb(var(--muted-foreground) / 0.6)')
+})
+
+it('draws a band with the plain link token while it holds no stage name', () => {
+  expect(bandStroke(undefined, 'materials')).toContain('rgb(var(--link-stroke) / 0.6)')
+  expect(bandStroke([], null)).toContain('rgb(var(--link-stroke) / 0.6)')
+})
 
 interface Rect {
   x: number

@@ -13,11 +13,12 @@ from starlette.responses import FileResponse, Response
 from starlette.routing import Route
 
 from ecosemantic.errors import Invalid, NotFound
-from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.context import Callers, ServerContext
 from ecosemantic.mcp.envelopes import Answer
+from ecosemantic.mcp.host import OPERATOR_INSTALLS, refuse_host, refuse_remote_path
 from ecosemantic.ports.types import Install
 from ecosemantic.view.api import call_tool, json_object, structured
-from ecosemantic.view.handling import answering, refuse_oversized, zip_entries
+from ecosemantic.view.handling import for_caller, refuse_oversized, zip_entries
 
 DATABASE_UPLOAD_BYTES = 4_000_000_000
 CHUNK_BYTES = 1_000_000
@@ -60,30 +61,38 @@ async def _stored(upload: UploadFile, target: Path) -> None:
             out.write(chunk)
 
 
-def routes(server: FastMCP, context: ServerContext) -> list[Route]:
-    """The sources and the installs, the terms file, and the zip an openLCA install reads."""
+def routes(server: FastMCP, callers: Callers) -> list[Route]:
+    """The sources and the installs, the terms file, and the zip an openLCA install reads, each
+    over the context the request's caller resolves to."""
 
-    async def sources(request: Request) -> Response:
+    @for_caller(callers)
+    async def sources(request: Request, context: ServerContext) -> Response:
         return await call_tool(server, context, "list_sources", {})
 
-    async def posted(request: Request) -> Response:
-        return await call_tool(server, context, "install_database", await json_object(request))
+    @for_caller(callers)
+    async def posted(request: Request, context: ServerContext) -> Response:
+        body = await json_object(request)
+        refuse_remote_path(request.scope, "install_database", body)
+        return await call_tool(server, context, "install_database", body)
 
-    async def listed(request: Request) -> Response:
+    @for_caller(callers)
+    async def listed(request: Request, context: ServerContext) -> Response:
         return await call_tool(server, context, "list_installs", {})
 
-    async def read(request: Request) -> Response:
+    @for_caller(callers)
+    async def read(request: Request, context: ServerContext) -> Response:
         return await call_tool(
             server, context, "get_install", {"install_id": request.path_params["id"]}
         )
 
-    async def cancelled(request: Request) -> Response:
+    @for_caller(callers)
+    async def cancelled(request: Request, context: ServerContext) -> Response:
         return await call_tool(
             server, context, "cancel_install", {"install_id": request.path_params["id"]}
         )
 
-    @answering
-    async def licence(request: Request) -> Response:
+    @for_caller(callers)
+    async def licence(request: Request, context: ServerContext) -> Response:
         """The terms file of the install the request names, NotFound when it stopped at none."""
         install = Answer[Install].model_validate(
             await structured(
@@ -95,11 +104,12 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             raise NotFound(f"install {install.value.id} stopped at no terms")
         return FileResponse(terms.licence)
 
-    @answering
-    async def openlca(request: Request) -> Response:
+    @for_caller(callers)
+    async def openlca(request: Request, context: ServerContext) -> Response:
         """The zip a person holds, streamed under the uploads directory and posted as an openLCA
         install reading it. An upload refused as not a zip, cut short or past the limit is
         deleted, and so is one whose install the server refuses."""
+        refuse_host(context, "/api/installs/openlca", instead=OPERATOR_INSTALLS)
         form = await request.form()
         upload = form.get("file")
         if not isinstance(upload, UploadFile):

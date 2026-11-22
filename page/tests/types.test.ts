@@ -55,11 +55,17 @@ import type {
   ProcessHit,
   ProductSystem,
   Request,
+  Region,
   Run,
   RunState,
   RunProgress,
   Scenario,
   Score,
+  SharedSupplier,
+  StageInput,
+  StagePart,
+  StageProcess,
+  StageRegions,
   SubCompartment,
   SystemCard,
   SystemRead,
@@ -94,6 +100,7 @@ import impactMonteCarlo from './fixtures/impact_monte_carlo.json'
 import byProcess from './fixtures/contributions_process.json'
 import byFlow from './fixtures/contributions_flow.json'
 import byPath from './fixtures/contributions_path.json'
+import byStage from './fixtures/contributions_stage.json'
 import inventory from './fixtures/inventory.json'
 import backgroundProcess from './fixtures/background_process.json'
 import notFound from './fixtures/error_not_found.json'
@@ -177,7 +184,12 @@ const EXCHANGE_OVERRIDE_KEYS = { kind: true, exchange_id: true, amount: true, mu
 const PARAMETER_OVERRIDE_KEYS = { kind: true, name: true, value: true } satisfies Record<keyof ParameterOverride, true>
 const SCENARIO_KEYS = { name: true, description: true, overrides: true, base_hash: true } satisfies Record<keyof Scenario, true>
 
-const ACTOR_KEYS = { kind: true, id: true, name: true } satisfies Record<keyof Actor, true>
+type ActorWithoutPerson = Omit<Actor, 'on_behalf_of'>
+const ACTOR_KEYS = { kind: true, id: true, name: true } satisfies Record<keyof ActorWithoutPerson, true>
+
+function expectActorKeys(actor: ActorWithoutPerson): void {
+  expectKeys(actor, ACTOR_KEYS)
+}
 
 const CHANGE_KEYS = { op: true, entity: true, id: true, field: true, before: true, after: true } satisfies Record<keyof Change, true>
 
@@ -220,7 +232,7 @@ const SYSTEM_CARD_KEYS = {
 const ANSWER_KEYS = { value: true, hint: true, view_url: true } satisfies Record<keyof Answer<unknown>, true>
 const LISTING_KEYS = { items: true, has_more: true, next_cursor: true, hint: true, view_url: true } satisfies Record<keyof Listing<unknown>, true>
 const METHOD_LISTING_KEYS = { ...LISTING_KEYS, weighting_sets: true } satisfies Record<keyof MethodListing, true>
-const INVENTORY_LISTING_KEYS = { ...LISTING_KEYS, database: true, credit_loops: true, linked_credit_loops: true, treatments_run_backwards: true, floor: true, dropped: true } satisfies Record<keyof InventoryListing, true>
+const INVENTORY_LISTING_KEYS = { ...LISTING_KEYS, database: true, credit_loops: true, linked_credit_loops: true, treatments_run_backwards: true, floor: true, dropped: true, variant: true } satisfies Record<keyof InventoryListing, true>
 const SYSTEM_READ_KEYS = { value: true, hint: true, view_url: true, open_requests: true } satisfies Record<keyof SystemRead, true>
 
 const METHOD_KEYS = {
@@ -306,6 +318,20 @@ const TREE_NODE_KEYS = {
   children: true,
 } satisfies Record<keyof TreeNode, true>
 
+const STAGE_INPUT_KEYS = { kind: true, ref: true, name: true, location: true, score: true, fraction: true } satisfies Record<keyof StageInput, true>
+
+const STAGE_PROCESS_KEYS = {
+  ref: true,
+  name: true,
+  location: true,
+  score: true,
+  fraction: true,
+  direct: true,
+  inputs: true,
+} satisfies Record<keyof StageProcess, true>
+
+const STAGE_PART_KEYS = { stage: true, score: true, fraction: true, processes: true } satisfies Record<keyof StagePart, true>
+
 const CONTRIBUTION_RESULT_KEYS = {
   database: true,
   by: true,
@@ -318,7 +344,9 @@ const CONTRIBUTION_RESULT_KEYS = {
   root: true,
   truncated: true,
   flows: true,
+  stages: true,
   cut: true,
+  variant: true,
 } satisfies Record<keyof ContributionResult, true>
 
 const CUT_KEYS = { cutoff: true, below: true, share: true, below_score: true, unlisted: true, unlisted_share: true, unlisted_score: true } satisfies Record<keyof Cut, true>
@@ -360,7 +388,11 @@ const VALIDATION_REPORT_KEYS = {
   errors: true,
 } satisfies Record<keyof ValidationReport, true>
 
-const ARRANGEMENT_KEYS = { map: true, cards: true, edges: true, troubles: true, score: true, bounds: true, scaling: true, card: true } satisfies Record<keyof Arrangement, true>
+const ARRANGEMENT_KEYS = { map: true, cards: true, edges: true, troubles: true, score: true, bounds: true, scaling: true, stages: true, shared_suppliers: true, card: true } satisfies Record<keyof Arrangement, true>
+
+const STAGE_REGIONS_KEYS = { stage: true, codes: true, regions: true } satisfies Record<keyof StageRegions, true>
+const REGION_KEYS = { x: true, y: true, width: true, height: true } satisfies Record<keyof Region, true>
+const SHARED_SUPPLIER_KEYS = { code: true, processes: true, stages: true } satisfies Record<keyof SharedSupplier, true>
 
 const CARD_GEOMETRY_KEYS = { width: true, header_height: true, section_padding: true, section_label: true, row_height: true } satisfies Record<keyof CardGeometry, true>
 
@@ -588,6 +620,7 @@ const typedImpactMonteCarlo = impactMonteCarlo as unknown as Answer<ImpactResult
 const typedByProcess = byProcess as Answer<ContributionResult>
 const typedByFlow = byFlow as Answer<ContributionResult>
 const typedByPath = byPath as Answer<ContributionResult>
+const typedByStage = byStage as Answer<ContributionResult>
 const typedInventory = inventory as InventoryListing
 const typedBackgroundProcess = backgroundProcess as Answer<BackgroundProcess>
 const typedNotFound = notFound as ErrorEnvelope
@@ -675,7 +708,7 @@ describe('recorded response keys match the types field for field', () => {
     expectKeys(typedLog, ANSWER_KEYS)
     typedLog.value.forEach((entry) => {
       expectKeys(entry, LOG_ENTRY_KEYS)
-      expectKeys(entry.actor, ACTOR_KEYS)
+      expectActorKeys(entry.actor)
       entry.changes.forEach((change) => expectKeys(change, CHANGE_KEYS))
     })
   })
@@ -706,16 +739,21 @@ describe('recorded response keys match the types field for field', () => {
     expectKeys(typedLayout.value.card, CARD_GEOMETRY_KEYS)
     expect(typedLayout.value.cards.length).toBeGreaterThan(0)
     typedLayout.value.cards.forEach((card) => expectKeys(card, PLACEMENT_KEYS))
+    typedLayout.value.stages.forEach((stage) => {
+      expectKeys(stage, STAGE_REGIONS_KEYS)
+      stage.regions.forEach((region) => expectKeys(region, REGION_KEYS))
+    })
+    typedLayout.value.shared_suppliers.forEach((supplier) => expectKeys(supplier, SHARED_SUPPLIER_KEYS))
   })
 
   it('requests', () => {
     expectKeys(typedRequests, ANSWER_KEYS)
     typedRequests.value.forEach((request) => {
       expectKeys(request, REQUEST_KEYS)
-      expectKeys(request.actor, ACTOR_KEYS)
+      expectActorKeys(request.actor)
       if (request.outcome) {
         expectKeys(request.outcome, OUTCOME_KEYS)
-        expectKeys(request.outcome.actor, ACTOR_KEYS)
+        expectActorKeys(request.outcome.actor)
       }
     })
     expect(typedRequests.value.some((r) => r.outcome !== null)).toBe(true)
@@ -800,6 +838,29 @@ describe('recorded response keys match the types field for field', () => {
     expect(typedByPath.value.processes).toBeNull()
     expect(typedByPath.value.flows).toBeNull()
     expect(typedByPath.value.cut).toBeNull()
+  })
+
+  it('contributions by stage', () => {
+    expectKeys(typedByStage, ANSWER_KEYS)
+    expectContributionKeys(typedByStage.value)
+    const stages = typedByStage.value.stages
+    expect(stages).not.toBeNull()
+    stages?.forEach((part) => {
+      expectKeys(part, STAGE_PART_KEYS)
+      part.processes.forEach((process) => {
+        expectKeys(process, STAGE_PROCESS_KEYS)
+        expectKeys(process.ref, FOREGROUND_REF_KEYS)
+        process.inputs.forEach((input) => {
+          expectKeys(input, STAGE_INPUT_KEYS)
+          if (input.kind === 'remainder') expect(input.ref).toBeNull()
+          else expectRefKeys(input.ref)
+        })
+      })
+    })
+    expect(typedByStage.value.by).toBe('stage')
+    expect(typedByStage.value.processes).toBeNull()
+    expect(typedByStage.value.root).toBeNull()
+    expect(typedByStage.value.flows).toBeNull()
   })
 
   it('inventory', () => {

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import typing
 import uuid
@@ -21,6 +20,8 @@ from ecosemantic.errors import (
     error_status,
 )
 from ecosemantic.mcp import discovery
+from ecosemantic.mcp.calls import InProgress, begin, end
+from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.envelopes import (
     Answer,
     Listing,
@@ -161,20 +162,27 @@ def test_an_answer_summarises_what_its_value_can() -> None:
     assert Answer(value={"anything": 1}).summarise() is None
 
 
-async def test_bound_registers_the_function_less_its_context() -> None:
+async def test_bound_registers_the_function_less_its_context(
+    context: ServerContext,
+) -> None:
     import inspect
 
     from ecosemantic.mcp.envelopes import bound
 
-    async def tool(context: str, name: str, count: int = 2) -> str:
+    async def tool(context: ServerContext, name: str, count: int = 2) -> str:
         return f"{context}:{name}:{count}"
 
-    registered = bound(tool, "ctx")
+    registered = bound(tool)
     assert list(inspect.signature(registered).parameters) == ["name", "count"]
     assert inspect.signature(registered).parameters["count"].default == 2
     assert "context" not in registered.__annotations__
     assert registered.__name__ == "tool"
-    assert await registered(name="widget") == "ctx:widget:2"
+    call = InProgress(context=context, agent="claude", client="claude", origin="agent")
+    token = begin(call)
+    try:
+        assert await registered(name="widget") == f"{context}:widget:2"
+    finally:
+        end(token)
 
 
 def test_a_wrapper_carries_the_annotations_of_the_function_it_wraps() -> None:
@@ -191,9 +199,9 @@ def test_a_wrapper_carries_the_annotations_of_the_function_it_wraps() -> None:
     assert carried(wrapper, wrapped).__annotations__ == {"return": "Answer[list[Database]]"}
 
 
-@pytest.mark.parametrize("wrap", [boundary, serialised(lambda _: asyncio.Lock())])
+@pytest.mark.parametrize("wrap", [boundary, serialised])
 def test_a_registered_tool_s_annotations_resolve_through_its_wrappers(
     wrap: typing.Callable[..., typing.Any],
 ) -> None:
-    hints = typing.get_type_hints(wrap(bound(discovery.list_databases, object())))
+    hints = typing.get_type_hints(wrap(bound(discovery.list_databases)))
     assert hints == {"return": typing.get_type_hints(discovery.list_databases)["return"]}

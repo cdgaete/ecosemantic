@@ -1,6 +1,6 @@
 [project]
 name = "ecosemantic-engine"
-version = "0.1.22"
+version = "0.1.23"
 description = "The EcoSemantic product-system vocabulary, its typed errors, and the exact LCA computation."
 requires-python = ">=3.12"
 license = "PolyForm-Noncommercial-1.0.0"
@@ -20,7 +20,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "pydantic>=2.7,<3",
+    "pydantic>=2.12,<3",
     "numpy>=2.5",
     "scipy>=1.16",
     "nimblend>=0.20261012.0",

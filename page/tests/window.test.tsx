@@ -18,7 +18,6 @@ import system from './fixtures/system.json'
 import databases from './fixtures/databases.json'
 import runs from './fixtures/runs.json'
 import validation from './fixtures/validation.json'
-import anchors from './fixtures/anchors.json'
 import log from './fixtures/log.json'
 import requests from './fixtures/requests.json'
 import elementaryFlow from './fixtures/elementary_flow.json'
@@ -38,7 +37,6 @@ vi.mock('@/api/client', async (importOriginal) => {
       version: vi.fn(async () => system.value),
       databases: vi.fn(async () => databases),
       validation: vi.fn(async () => validation),
-      anchors: vi.fn(async () => anchors),
       log: vi.fn(async () => log),
       requests: vi.fn(async () => requests),
       elementaryFlow: vi.fn(async () => elementaryFlow),
@@ -89,6 +87,7 @@ const moving = (to: string, then: string | null = null) => (
   </>
 )
 const result = `${base}/results/impact?impact_method=gwp`
+const buildLabel = `Build · ${log.value.length} ${log.value.length === 1 ? 'entry' : 'entries'}`
 
 const nodes = (view: { container: HTMLElement }) => view.container.querySelectorAll('.react-flow__node').length
 
@@ -285,34 +284,37 @@ describe('window', () => {
     expect(place()).toBe(`${base}/general`)
   })
 
-  it('draws an open result in a sheet over the graph, with the way back on the name island', async () => {
+  it('docks an open result under the graph, with the way back on the name island', async () => {
     const view = renderAt(result, moving(explorer))
-    const page = await screen.findByRole('region', { name: 'Page' })
+    const docked = await screen.findByRole('region', { name: 'Result' })
     await waitFor(() => expect(nodes(view)).toBeGreaterThan(0))
-    expect(await within(page).findByText(`Impact analysis – ${system.value.name}`)).toBeInTheDocument()
+    expect(await within(docked).findByText(`Impact analysis – ${system.value.name}`)).toBeInTheDocument()
+    expect(view.container.querySelector('[data-scrim]')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Fit the graph' })).toBeInTheDocument()
     expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Build timeline' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Fit the graph' })).not.toBeInTheDocument()
     const banner = nameIsland()
     expect(within(banner).getByRole('heading', { name: system.value.name })).toBeInTheDocument()
     expect(within(banner).getByRole('link', { name: 'Back to graph' })).toHaveAttribute('href', base)
+    expect(within(banner).getByRole('button', { name: buildLabel })).toHaveAttribute('title', 'Back to the graph and its build timeline')
     fireEvent.keyDown(window, { key: 'Escape' })
     await waitFor(() => expect(place()).toBe(base))
     await screen.findByRole('complementary', { name: 'Inspector' })
   })
 
-  it('returns from a result to the calculation form it was calculated from, by its close button and by a click outside it', async () => {
+  it('returns from a docked result to the calculation form it was opened from, by its close button and by the build button', async () => {
     const view = renderAt(`${base}/results/setup`, moving(result))
     await screen.findByRole('complementary', { name: 'Inspector' })
-    expect(screen.queryByRole('region', { name: 'Page' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Result' })).not.toBeInTheDocument()
     leap()
-    await screen.findByRole('region', { name: 'Page' })
+    await screen.findByRole('region', { name: 'Result' })
     expect(within(nameIsland()).getByRole('link', { name: 'Back to graph' })).toHaveAttribute('href', `${base}/results/setup`)
+    expect(view.container.querySelector('[data-scrim]')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Close the results' }))
     await waitFor(() => expect(place()).toBe(`${base}/results/setup`))
     leap()
-    await screen.findByRole('region', { name: 'Page' })
-    fireEvent.click(view.container.querySelector('[data-scrim]') as HTMLElement)
+    await screen.findByRole('region', { name: 'Result' })
+    fireEvent.click(within(nameIsland()).getByRole('button', { name: buildLabel }))
     await waitFor(() => expect(place()).toBe(`${base}/results/setup`))
   })
 
@@ -323,35 +325,39 @@ describe('window', () => {
     expect(listed.container.querySelector('[data-scrim]')).toBeNull()
   })
 
-  it('leaves a closed inspector closed when a result opens over the graph and is left again', async () => {
+  it('leaves a closed inspector closed when a result docks under the graph and is left again', async () => {
     useUi.setState({ inspector: 'closed' })
     const view = renderAt(base, moving(result))
     await waitFor(() => expect(nodes(view)).toBeGreaterThan(0))
     leap()
-    await screen.findByRole('region', { name: 'Page' })
+    await screen.findByRole('region', { name: 'Result' })
     expect(useUi.getState().inspector).toBe('closed')
     fireEvent.keyDown(window, { key: 'Escape' })
     await waitFor(() => expect(place()).toBe(base))
     expect(screen.getByRole('button', { name: 'Show the inspector' })).toBeInTheDocument()
   })
 
-  it('returns from an explorer opened over a result to the result, and from the result to where it was opened', async () => {
+  it('returns from an explorer opened over a docked result to the result, and from the result to where it was opened', async () => {
     renderAt(base, moving(result, explorer))
     await waitFor(() => expect(screen.getByRole('link', { name: 'Activity' })).toBeInTheDocument())
     leap()
-    await screen.findByRole('region', { name: 'Page' })
+    await screen.findByRole('region', { name: 'Result' })
     leapOn()
+    await screen.findByRole('region', { name: 'Page' })
     await waitFor(() => expect(within(nameIsland()).getByRole('link', { name: 'Back to graph' })).toHaveAttribute('href', result))
     fireEvent.keyDown(window, { key: 'Escape' })
     await waitFor(() => expect(place()).toBe(result))
+    await screen.findByRole('region', { name: 'Result' })
     await waitFor(() => expect(within(nameIsland()).getByRole('link', { name: 'Back to graph' })).toHaveAttribute('href', base))
     fireEvent.keyDown(window, { key: 'Escape' })
     await waitFor(() => expect(place()).toBe(base))
   })
 
-  it('draws a simulation in the sheet, as a result is', async () => {
-    renderAt(`${base}/simulations/${runs.value[0].id}`, <App router={false} />)
+  it('draws a simulation in a sheet over a scrim', async () => {
+    const view = renderAt(`${base}/simulations/${runs.value[0].id}`, <App router={false} />)
     await screen.findByRole('region', { name: 'Page' })
+    expect(view.container.querySelector('[data-scrim]')).not.toBeNull()
+    expect(screen.queryByRole('region', { name: 'Result' })).not.toBeInTheDocument()
     expect(within(nameIsland()).getByRole('link', { name: 'Back to graph' })).toHaveAttribute('href', base)
     expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument()
   })
@@ -945,33 +951,22 @@ describe('the narrow frame', () => {
     expect(screen.getByRole('complementary', { name: 'Navigation' })).toBeInTheDocument()
   })
 
-  it('holds a result in the inspector\'s own sheet below 768 px, with no sheet over the page', async () => {
-    window.innerWidth = 700
-    const view = renderAt(base, moving(result))
-    await waitFor(() => expect(nodes(view)).toBeGreaterThan(0))
-    leap()
-    await screen.findByRole('complementary', { name: 'Inspector' })
-    expect(place()).toBe(result)
-    expect(screen.queryByRole('region', { name: 'Page' })).not.toBeInTheDocument()
-    expect(view.container.querySelector('[data-scrim]')).toBeNull()
-    expect(within(nameIsland()).queryByRole('link', { name: 'Back to graph' })).not.toBeInTheDocument()
-  })
-
-  it('names the result held in a closed sheet when the window narrows from 1024 to 700 px', async () => {
+  it('below 768 px the result takes the screen under the band', async () => {
     window.innerWidth = 1024
     const method = encodeURIComponent(firstMethodOf(impact.value).impact_method)
     renderAt(`${base}/results/sankey?impact_method=${method}`, <App router={false} />)
-    await screen.findByRole('region', { name: 'Page' })
+    const wide = await screen.findByRole('region', { name: 'Result' })
+    expect(within(wide).getByRole('navigation', { name: 'Pages' })).toBeInTheDocument()
     await waitFor(() => expect(useUi.getState().details?.title).toBe(`Results of: ${system.value.name}`))
+    expect(screen.queryByRole('region', { name: 'Page' })).not.toBeInTheDocument()
     expect(screen.queryByRole('toolbar', { name: 'Build line' })).toBeNull()
     act(() => resizePage(700))
-    const line = await screen.findByRole('toolbar', { name: 'Build line' })
+    const docked = await screen.findByRole('region', { name: 'Result' })
+    expect(within(docked).getByRole('group', { name: 'Result band' })).toBeInTheDocument()
+    expect(await within(docked).findByRole('heading', { name: /Sankey diagram/ })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Page' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('toolbar', { name: 'Build line' })).toBeNull()
     expect(screen.queryByRole('complementary', { name: 'Inspector' })).toBeNull()
-    const held = within(line).getByRole('button', { name: `Results of: ${system.value.name}` })
-    fireEvent.click(held)
-    await waitFor(() =>
-      expect(within(screen.getByRole('complementary', { name: 'Inspector' })).getByRole('link', { name: 'Details' })).toHaveAttribute('aria-current', 'page'),
-    )
   })
 
   it('keeps the sheet out of the row the build line takes, open and widened', async () => {

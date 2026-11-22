@@ -54,5 +54,6 @@
   "linked_credit_loops": [],
   "next_cursor": null,
   "treatments_run_backwards": [],
+  "variant": null,
   "view_url": null
 }

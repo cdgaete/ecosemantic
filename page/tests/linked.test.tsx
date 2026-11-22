@@ -32,7 +32,6 @@ vi.mock('@/api/client', async (importOriginal) => {
       releaseCards: vi.fn(async () => layoutAnswer(agentSystem.value as ProductSystem)),
       databases: vi.fn(async () => databases),
       validation: vi.fn(async () => validation),
-      anchors: vi.fn(async () => ({ value: ['bottle'], hint: null, view_url: null })),
       log: vi.fn(async () => agentLog),
       requests: vi.fn(async () => requests),
       elementaryFlow: vi.fn(async () => elementaryFlow),

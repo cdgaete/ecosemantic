@@ -142,8 +142,8 @@ export const useAccountEntry = () =>
   useQuery({ queryKey: keys.accountEntry, queryFn: api.accountEntry, ...forever, refetchOnWindowFocus: 'always' })
 export const useServer = () => useQuery({ queryKey: keys.server, queryFn: api.server, ...forever })
 
-export const useLayout = (id: string, variant: string | null) =>
-  useQuery({ queryKey: keys.layout(id, variant), queryFn: ({ signal }) => api.layout(id, variant, signal), ...forever })
+export const useLayout = (id: string, variant: string | null, enabled = true) =>
+  useQuery({ queryKey: keys.layout(id, variant), queryFn: ({ signal }) => api.layout(id, variant, signal), enabled, ...forever })
 
 export const useMonteCarloDefaults = () => useQuery({ queryKey: keys.monteCarlo, queryFn: api.monteCarlo, ...forever })
 

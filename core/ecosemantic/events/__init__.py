@@ -5,6 +5,7 @@ process writes to an install's record, and read by the stream the page follows."
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -12,6 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from ecosemantic.errors import Unavailable
 from ecosemantic.model.entities import Actor, ProductSystem
 from ecosemantic.ports.install import InstallPort
 from ecosemantic.ports.run import RunPort
@@ -269,3 +271,48 @@ async def pump_installs(
         ready.set()
     async for install_id in changes:
         bus.publish(Event(kind="install", install=await installs.get_install(install_id)))
+
+
+async def _started(pumps: list[asyncio.Task[None]], ready: tuple[asyncio.Event, ...]) -> None:
+    """Wait until every pump is armed and the stored state is taken as published, or raise the
+    error of one that ended first: a write the caller goes on to serve is one a ready pump
+    publishes."""
+    waiting = asyncio.gather(*(event.wait() for event in ready))
+    try:
+        await asyncio.wait([*pumps, waiting], return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        if not waiting.done():
+            waiting.cancel()
+            await asyncio.gather(waiting, return_exceptions=True)
+    ended = [pump for pump in pumps if pump.done()]
+    if not ended:
+        return
+    for pump in ended:
+        error = None if pump.cancelled() else pump.exception()
+        if error is not None:
+            raise error
+    raise Unavailable("a pump of the store ended before it was ready")
+
+
+@contextlib.asynccontextmanager
+async def following(
+    storage: StoragePort, runs: RunPort, installs: InstallPort, bus: EventBus
+) -> AsyncIterator[None]:
+    """Publish what other processes write to one store, for as long as the caller serves it.
+
+    Entering returns once the three pumps are armed and the stored state is taken as published, or
+    raises the error of a pump that ended first; leaving cancels all three and awaits them.
+    """
+    ready = (asyncio.Event(), asyncio.Event(), asyncio.Event())
+    pumps = [
+        asyncio.create_task(pump_storage(storage, bus, ready[0])),
+        asyncio.create_task(pump_runs(runs, bus, ready[1])),
+        asyncio.create_task(pump_installs(installs, bus, ready[2])),
+    ]
+    try:
+        await _started(pumps, ready)
+        yield
+    finally:
+        for pump in pumps:
+            pump.cancel()
+        await asyncio.gather(*pumps, return_exceptions=True)

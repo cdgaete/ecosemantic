@@ -1,7 +1,7 @@
 import { Play, RotateCw } from 'lucide-react'
 import { useCalculations, useSystem } from '@/api/queries'
 import { Button } from '@/components/ui/button'
-import { methodOf, variantsOf } from '@/editors/results/recorded'
+import { methodOf, latestOf, variantsOf } from '@/editors/results/recorded'
 import { useStartImpact } from '@/editors/results/useStartImpact'
 import { paths, useGo } from '@/lib/paths'
 import { IconButton } from '@/window/IconButton'
@@ -12,7 +12,7 @@ export function CalculateButton({ systemId }: { systemId: string }) {
   const startImpact = useStartImpact(systemId)
   const calculations = useCalculations(systemId)
   const database = useSystem(systemId).data?.value.database.name ?? ''
-  const last = calculations.data?.value.find((call) => call.outcome === 'ok')
+  const last = latestOf(calculations.data?.value ?? [])
   const variants = last === undefined ? [] : variantsOf(last)
   return (
     <>

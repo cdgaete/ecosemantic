@@ -4,6 +4,7 @@ import dataclasses
 import inspect
 import json
 import uuid
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastmcp import Client, FastMCP
@@ -12,8 +13,15 @@ from fastmcp.exceptions import ToolError
 from ecosemantic.compute.results import InventoryResult
 from ecosemantic.mcp import calculation
 from ecosemantic.mcp.context import ServerContext
-from ecosemantic.mcp.server import build_server
-from ecosemantic.model.entities import Exchange, Method, Process, ProductSystem, method_id
+from ecosemantic.model.entities import (
+    Exchange,
+    ExchangeOverride,
+    Method,
+    Process,
+    ProductSystem,
+    Scenario,
+    method_id,
+)
 from ecosemantic.model.refs import BackgroundRef, ElementaryFlowRef
 from ecosemantic.ports.inventory import InventoryPort
 from ecosemantic.ports.types import InventoryOrder, Side
@@ -22,20 +30,50 @@ from tests.fixture_data import CODES as FIXTURE_CODES
 from tests.fixture_data import FIXTURE_BIO, FIXTURE_DB, FIXTURE_FINGERPRINT, GWP
 from tests.fixture_data import FLOW_IDS as FIXTURE_FLOW_IDS
 from tests.fixture_data import FLOWS as FIXTURE_FLOWS
+from tests.registered import registered
 
 GWP_ID = method_id(" > ".join(GWP))
 
 
 @pytest.fixture(scope="module")
 def server(context: ServerContext) -> FastMCP:
-    built = build_server()
-    calculation.register(built, context)
-    return built
+    return registered(context, calculation)
 
 
 @pytest.fixture(scope="module")
 async def widget(fixture_system_stored: ProductSystem) -> uuid.UUID:
     return fixture_system_stored.id
+
+
+@pytest.fixture(scope="module")
+def page_server(context: ServerContext) -> FastMCP:
+    """The calculation tools over a context that serves the page, so each answer links to it."""
+    served = dataclasses.replace(context, view_url="http://127.0.0.1:1?token=abc")
+    return registered(served, calculation)
+
+
+def _staged(system: ProductSystem, name: str) -> ProductSystem:
+    """A copy of the system whose widget is `assembly` and whose frame is `materials`."""
+    staged = system.model_copy(deep=True, update={"hash": None})
+    staged.id = uuid.uuid5(system.id, name)
+    staged.name = name
+    staged.process("widget").metadata["life_cycle_stage"] = "assembly"
+    staged.process("frame").metadata["life_cycle_stage"] = "materials"
+    return staged
+
+
+@pytest.fixture(scope="module")
+async def staged(context: ServerContext, fixture_system_stored: ProductSystem) -> uuid.UUID:
+    system = _staged(fixture_system_stored, "widget_staged")
+    await context.storage.put_product_system(system, context.actor, "created")
+    return system.id
+
+
+@pytest.fixture(scope="module")
+async def staged_varied(context: ServerContext, varied: uuid.UUID) -> uuid.UUID:
+    system = _staged(await context.storage.get_product_system(varied), "widget_varied_staged")
+    await context.storage.put_product_system(system, context.actor, "created")
+    return system.id
 
 
 @pytest.fixture(scope="module")
@@ -172,9 +210,8 @@ async def test_an_impact_method_with_many_categories_is_invalid(
     context: ServerContext, widget: uuid.UUID
 ) -> None:
     # the fixture's methods are gwp and water: two categories under one name
-    many = build_server()
-    calculation.register(
-        many, dataclasses.replace(context, inventory=_EveryCategory(context.inventory))
+    many = registered(
+        dataclasses.replace(context, inventory=_EveryCategory(context.inventory)), calculation
     )
     async with Client(many) as client:
         with pytest.raises(ToolError) as caught:
@@ -483,3 +520,116 @@ async def test_a_loop_holding_a_credit_is_named_beside_each_decomposition_and_th
                 "calculate_inventory", {"product_system_id": str(system), "demand": demand}
             )
             assert rows.structured_content["credit_loops"] == named
+
+
+async def test_a_case_is_decomposed_in_place_of_the_base(
+    server: FastMCP, varied: uuid.UUID
+) -> None:
+    args = {"product_system_id": str(varied), "method_id": GWP_ID, "by": "process"}
+    async with Client(server) as client:
+
+        async def decomposed(**extra: object) -> dict[str, object]:
+            out = await client.call_tool("contribution_analysis", {**args, **extra})
+            return out.structured_content["value"]
+
+        base = await decomposed()
+        case = await decomposed(variant="half")
+        scenario = await decomposed(variant="double_steel")
+    assert base["variant"] is None and base["total"]["value"] == pytest.approx(4.158)
+    assert case["variant"] == "half" and case["total"]["value"] == pytest.approx(3.658)
+    assert scenario["variant"] == "double_steel"
+    assert scenario["total"]["value"] == pytest.approx(5.548)
+
+
+async def test_a_decomposition_links_to_its_page(page_server: FastMCP, widget: uuid.UUID) -> None:
+    async with Client(page_server) as client:
+        for by, page in (("stage", "stages"), ("process", "processes"), ("path", "tree")):
+            out = await client.call_tool(
+                "contribution_analysis",
+                {"product_system_id": str(widget), "method_id": GWP_ID, "by": by},
+            )
+            link = out.structured_content["view_url"]
+            assert urlsplit(link).path.endswith(f"/results/{page}"), by
+
+
+async def test_the_split_by_stage_through_the_tool_sums_to_calculate_impact(
+    page_server: FastMCP, staged: uuid.UUID
+) -> None:
+    args = {"product_system_id": str(staged), "method_id": GWP_ID}
+    async with Client(page_server) as client:
+        split = (
+            await client.call_tool("contribution_analysis", {**args, "by": "stage"})
+        ).structured_content
+        scored = (await client.call_tool("calculate_impact", args)).structured_content["value"]
+    out = split["value"]
+    assert out["by"] == "stage" and out["variant"] is None
+    assert [s["stage"] for s in out["stages"]] == ["assembly", "materials"]
+    assert [s["score"] for s in out["stages"]] == pytest.approx([2.49, 1.668])
+    assert [s["fraction"] for s in out["stages"]] == pytest.approx([2.49 / 4.158, 1.668 / 4.158])
+    assert out["total"]["value"] == pytest.approx(4.158)
+    assert out["total"]["value"] == pytest.approx(scored["scores"][0]["value"])
+    assert "variant" not in parse_qs(urlsplit(split["view_url"]).query)
+
+
+async def test_a_case_split_by_stage(page_server: FastMCP, staged_varied: uuid.UUID) -> None:
+    args = {
+        "product_system_id": str(staged_varied),
+        "method_id": GWP_ID,
+        "by": "stage",
+        "variant": "half",
+    }
+    async with Client(page_server) as client:
+        split = (await client.call_tool("contribution_analysis", args)).structured_content
+    out = split["value"]
+    assert out["variant"] == "half"
+    assert [s["stage"] for s in out["stages"]] == ["assembly", "materials"]
+    assert [s["score"] for s in out["stages"]] == pytest.approx([1.99, 1.668])
+    assert out["total"]["value"] == pytest.approx(3.658)
+    assert parse_qs(urlsplit(split["view_url"]).query)["variant"] == ["half"]
+
+
+async def test_a_case_s_inventory_is_listed_in_place_of_the_base(
+    server: FastMCP, varied: uuid.UUID
+) -> None:
+    args = {"product_system_id": str(varied)}
+    async with Client(server) as client:
+
+        async def listed(**extra: object) -> dict[str, object]:
+            out = await client.call_tool("calculate_inventory", {**args, **extra})
+            return out.structured_content
+
+        base = await listed()
+        case = await listed(variant="half")
+    assert base["variant"] is None and case["variant"] == "half"
+    amounts = {r["name"]: r["amount"] for r in base["items"]}
+    varied_amounts = {r["name"]: r["amount"] for r in case["items"]}
+    # the case halves the widget's kilowatt hour, which emits one kilogram of carbon dioxide
+    assert varied_amounts["Carbon dioxide, fossil"] == pytest.approx(
+        amounts["Carbon dioxide, fossil"] - 0.5
+    )
+
+
+async def test_a_stale_scenario_is_refused_by_the_contributions(
+    context: ServerContext, server: FastMCP, fixture_system_stored: ProductSystem
+) -> None:
+    system = fixture_system_stored.model_copy(deep=True, update={"hash": None})
+    system.id = uuid.uuid5(system.id, "unpinned_contributions")
+    system.name = "widget_unpinned_contributions"
+    steel = system.process("widget").exchanges[1]
+    system.scenarios = [
+        Scenario(name="more", overrides=[ExchangeOverride(exchange_id=steel.id, multiplier=2.0)])
+    ]
+    await context.storage.put_product_system(system, context.actor, "created")
+    async with Client(server) as client:
+        with pytest.raises(ToolError) as caught:
+            await client.call_tool(
+                "contribution_analysis",
+                {
+                    "product_system_id": str(system.id),
+                    "method_id": GWP_ID,
+                    "by": "process",
+                    "variant": "more",
+                },
+            )
+    payload = json.loads(str(caught.value))
+    assert payload["error"] == "invalid" and "rebase_scenario" in payload["message"]

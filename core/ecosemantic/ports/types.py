@@ -23,6 +23,7 @@ from ecosemantic.model.entities import (
     Actor,
     ExchangeType,
     Method,
+    Person,
     ProductSystem,
     Scope,
 )
@@ -67,7 +68,7 @@ FLOW_TYPE_OF: dict[CompartmentName, FlowType] = {
 TreeKind = Literal["process", "elementary_flow", "remainder"]
 Side = Literal["input", "output"]
 InventoryOrder = Literal["compartment", "amount"]
-Decomposition = Literal["process", "path", "flow"]
+Decomposition = Literal["process", "path", "flow", "stage"]
 RunStatus = Literal["queued", "running", "done", "failed", "cancelled"]
 OpenStatus = Literal["queued", "running"]
 STALE_SECONDS = 60.0
@@ -607,6 +608,33 @@ class Tree(BaseModel):
     total: Score
     root: TreeNode
     truncated: bool
+
+
+class InputPart(BaseModel):
+    """One input of a foreground process and its part of the score."""
+
+    ref: BackgroundRef | LinkedProcessRef
+    name: str
+    location: str | None
+    score: float
+
+
+class OwnPart(BaseModel):
+    """One of the product system's own processes: its direct emissions characterised, its
+    inputs, and the sum of both."""
+
+    ref: ForegroundRef
+    direct: float
+    inputs: list[InputPart]
+    score: float
+
+
+class OwnParts(BaseModel):
+    """The score and each own process's part of it, in the product system's process order; the
+    parts sum to the total."""
+
+    total: Score
+    parts: list[OwnPart]
 
 
 class InventoryRow(BaseModel):
@@ -1273,6 +1301,7 @@ class CallDraft(BaseModel):
 
     agent: str = Field(pattern=AGENT_NAME)
     client: str
+    person: Person | None = Field(default=None, exclude_if=lambda who: who is None)
     origin: Origin
     tool: str
     effect: Effect
@@ -1347,9 +1376,15 @@ def agents_of(calls: Sequence[Call]) -> list[AgentSummary]:
     return sorted(summaries, key=lambda summary: summary.last_call_at, reverse=True)
 
 
+def _person_id(call: Call) -> str | None:
+    """The id of the person a call names, or none when it names no person."""
+    return None if call.person is None else call.person.id
+
+
 def trail(calls: Sequence[Call], product_system_id: uuid.UUID, entry_seq: int) -> list[Call]:
-    """The calls that led to one log entry: its agent's calls after that agent's preceding
-    write, through the call that appended the entry. None when no recorded call appended it."""
+    """The calls that led to one log entry: the calls of its agent for its person, after that
+    agent's preceding write, through the call that appended the entry. None when no recorded
+    call appended it. Two calls that name no person are the same person's."""
     ordered = selected(calls)
     wrote = next(
         (
@@ -1361,7 +1396,8 @@ def trail(calls: Sequence[Call], product_system_id: uuid.UUID, entry_seq: int) -
     )
     if wrote is None:
         return []
-    own = [call for call in ordered if call.agent == wrote.agent]
+    of_person = _person_id(wrote)
+    own = [call for call in ordered if call.agent == wrote.agent and _person_id(call) == of_person]
     end = own.index(wrote)
     start = next((i + 1 for i in range(end - 1, -1, -1) if own[i].entry_seq is not None), 0)
     return own[start : end + 1]

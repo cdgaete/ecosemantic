@@ -1,6 +1,6 @@
 [project]
 name = "ecosemantic-core"
-version = "0.1.22"
+version = "0.1.23"
 description = "The EcoSemantic ports, pure computations, portable format and filesystem storage."
 requires-python = ">=3.12"
 license = "PolyForm-Noncommercial-1.0.0"
@@ -20,8 +20,8 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "ecosemantic-engine==0.1.22",
-    "pydantic>=2.7,<3",
+    "ecosemantic-engine==0.1.23",
+    "pydantic>=2.12,<3",
     "olca-schema==2.4.0",
     "asteval>=1.0.10,<2",
     "duckdb>=1.5,<2",

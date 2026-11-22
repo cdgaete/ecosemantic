@@ -1,6 +1,19 @@
-import { MarkerType, type Edge, type Node, type NodeChange } from '@xyflow/react'
+import { MarkerType, Position, type Edge, type Node, type NodeChange } from '@xyflow/react'
 import type { EdgeText } from './FlowEdge'
-import type { Arrangement, CardGeometry, Exchange, Label, LogEntry, Placement, Process, ProductSystem, Route } from '@/api/types'
+import type { Arrangement, CardGeometry, ContributionResult, Exchange, Label, LogEntry, Placement, Process, ProductSystem, Route, StageRegions } from '@/api/types'
+import { formatAmount, formatShare } from '@/lib/format'
+import { stageColour } from '@/lib/stageColours'
+
+export interface OwnShown {
+  score: number
+  fraction: number | null
+  unit: string
+}
+
+export interface Supplies {
+  processes: number
+  stages: number
+}
 
 export interface ProcessNodeData extends Record<string, unknown> {
   process: Process
@@ -11,6 +24,8 @@ export interface ProcessNodeData extends Record<string, unknown> {
   systemId: string
   placement: Placement
   card: CardGeometry
+  own: OwnShown | null
+  supplies: Supplies | null
 }
 
 export type ProcessNodeType = Node<ProcessNodeData, 'process'>
@@ -25,7 +40,23 @@ export interface LinkedNodeData extends Record<string, unknown> {
 
 export type LinkedNodeType = Node<LinkedNodeData, 'linked'>
 
-export type GraphNode = ProcessNodeType | LinkedNodeType
+export interface StageNodeData extends Record<string, unknown> {
+  stage: string
+  colour: string
+  fill: string
+  line: string
+  label: string
+}
+
+export type StageNodeType = Node<StageNodeData, 'stage'>
+
+export type GraphNode = ProcessNodeType | LinkedNodeType | StageNodeType
+
+export const STAGE_PREFIX = 'stage:'
+
+export function stageNodeId(stage: string, region: number): string {
+  return `${STAGE_PREFIX}${stage}:${region}`
+}
 
 type Unplaced<N extends GraphNode> = Omit<N, 'data'> & { data: { [K in keyof N['data'] as K extends 'placement' | 'card' ? never : K]: N['data'][K] } }
 
@@ -55,7 +86,62 @@ export function changedSuppliers(edges: Edge[]): string[] {
 
 export function droppedCards(changes: NodeChange<GraphNode>[], nodes: GraphNode[]): { code: string; x: number; y: number }[] {
   const dropped = new Set(changes.flatMap((change) => (change.type === 'position' && change.dragging === false ? [change.id] : [])))
-  return nodes.filter((node) => dropped.has(node.id)).map((node) => ({ code: node.id, x: node.position.x, y: node.position.y }))
+  return nodes.filter((node) => dropped.has(node.id) && node.type !== 'stage').map((node) => ({ code: node.id, x: node.position.x, y: node.position.y }))
+}
+
+function stageLabel(stage: string, split: ContributionResult | undefined): string {
+  const part = split?.stages?.find((one) => one.stage === stage)
+  if (split === undefined || part === undefined) return stage
+  return `${stage} · ${formatShare(part.fraction)} · ${formatAmount(part.score)} ${split.total.unit}`
+}
+
+/** Each stage's regions as boxes behind the cards, in its colour and labelled with its part of the split. */
+export function stageNodes(stages: StageRegions[], split?: ContributionResult): StageNodeType[] {
+  const names = stages.map((one) => one.stage)
+  return stages.flatMap((one) =>
+    one.regions.map((region, at) => ({
+      id: stageNodeId(one.stage, at),
+      type: 'stage' as const,
+      position: { x: region.x, y: region.y },
+      width: region.width,
+      height: region.height,
+      zIndex: -1,
+      selectable: false,
+      draggable: false,
+      connectable: false,
+      focusable: false,
+      style: { pointerEvents: 'none' },
+      handles: [
+        { id: 'out', type: 'source' as const, position: Position.Right, x: region.width, y: region.height / 2, width: 0, height: 0 },
+        { id: 'in', type: 'target' as const, position: Position.Left, x: 0, y: region.height / 2, width: 0, height: 0 },
+      ],
+      data: {
+        stage: one.stage,
+        colour: stageColour(names, one.stage),
+        fill: stageColour(names, one.stage, 0.07),
+        line: stageColour(names, one.stage, 0.6),
+        label: stageLabel(one.stage, split),
+      },
+    })),
+  )
+}
+
+/** Dashed lines joining each stage's first region to its others, in the stage's colour. */
+export function tetherEdges(stages: StageRegions[]): Edge[] {
+  const names = stages.map((one) => one.stage)
+  const edges: Edge[] = []
+  for (const one of stages)
+    for (let at = 1; at < one.regions.length; at += 1)
+      edges.push({
+        id: `tether:${one.stage}:${at}`,
+        source: stageNodeId(one.stage, 0),
+        target: stageNodeId(one.stage, at),
+        type: 'tether',
+        selectable: false,
+        focusable: false,
+        style: { stroke: stageColour(names, one.stage, 0.6), strokeWidth: 1.5, strokeDasharray: '5 4' },
+      })
+  return edges
 }
 
 export function edgeText(label: Label, scaled: boolean, formulaValues: boolean): EdgeText {
@@ -66,6 +152,15 @@ export function edgeText(label: Label, scaled: boolean, formulaValues: boolean):
 export type Outlines = Map<string, string>
 
 const NONE: Outlines = new Map()
+
+/** Each own process of the split by its code, with the part it holds of the split's total. */
+export function ownParts(split: ContributionResult | undefined): Map<string, OwnShown> {
+  const parts = new Map<string, OwnShown>()
+  if (split === undefined) return parts
+  for (const stage of split.stages ?? [])
+    for (const process of stage.processes) parts.set(process.ref.code, { score: process.score, fraction: process.fraction, unit: split.total.unit })
+  return parts
+}
 
 function exchangesOf(system: ProductSystem): Map<string, Exchange> {
   return new Map(system.processes.flatMap((process) => process.exchanges.map((exchange) => [exchange.id, exchange] as [string, Exchange])))
@@ -129,7 +224,7 @@ function processNode(process: Process, system: ProductSystem, hot: Hot, referenc
     id: process.code,
     type: 'process',
     position: { x: 0, y: 0 },
-    data: { process, reference, hot: hot.processes.has(process.id) || hotExchanges.length > 0, hotExchanges, outline: outlines.get(process.code) ?? null, systemId: system.id },
+    data: { process, reference, hot: hot.processes.has(process.id) || hotExchanges.length > 0, hotExchanges, outline: outlines.get(process.code) ?? null, systemId: system.id, own: null, supplies: null },
   }
 }
 

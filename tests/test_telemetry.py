@@ -42,6 +42,7 @@ def clean(monkeypatch):
     monkeypatch.delenv(telemetry.SWITCH, raising=False)
     monkeypatch.delenv("DO_NOT_TRACK", raising=False)
     monkeypatch.delenv(telemetry.ENDPOINT_VARIABLE, raising=False)
+    monkeypatch.setattr(telemetry, "country_here", lambda environ: "CL", raising=False)
 
 
 def kept(data_dir: Path) -> dict:
@@ -108,6 +109,8 @@ def test_record_refuses_a_mistyped_switch_before_writing(tmp_path):
         "[]",
         '{"install_id": "ABC"}',
         '{"install_id": 7}',
+        '{"country": "CL"}',
+        '{"country": true}',
         '{"install_id": "6F1C0B52-2D57-4C1E-9A54-0C3F6F0D8A11"}',
         '{"install_id": "6f1c0b52-2d57-1c1e-9a54-0c3f6f0d8a11"}',
     ],
@@ -175,14 +178,92 @@ def test_the_first_start_tells_once(tmp_path):
     for _ in range(2):
         begin({}, tmp_path, "stdio", stream, InMemoryMetricReader())
     assert stream.getvalue() == telemetry.NOTICE + "\n"
-    assert kept(tmp_path)["told"] is True
+    assert kept(tmp_path)["told"]
 
 
-def test_a_recorded_choice_is_not_told(tmp_path):
-    record({}, tmp_path, True)
+@pytest.mark.parametrize(
+    "held",
+    [
+        {"install_id": KEPT_ID, "told": True},
+        {"install_id": KEPT_ID, "told": True, "choice": "on"},
+        {"install_id": KEPT_ID, "choice": "on"},
+    ],
+)
+def test_an_install_never_told_of_the_country_is_told_once(tmp_path, held):
+    (tmp_path / telemetry.FILE).write_text(json.dumps(held), encoding="utf-8")
+    stream = io.StringIO()
+    for _ in range(2):
+        begin({}, tmp_path, "stdio", stream, InMemoryMetricReader())
+    assert stream.getvalue() == telemetry.NOTICE + "\n"
+    assert kept(tmp_path)["install_id"] == KEPT_ID
+
+
+@pytest.mark.parametrize("yes", [True, False])
+def test_an_install_that_answered_for_its_country_is_not_told(tmp_path, yes):
+    telemetry.record_country(tmp_path, yes)
     stream = io.StringIO()
     begin({}, tmp_path, "stdio", stream, InMemoryMetricReader())
     assert stream.getvalue() == ""
+
+
+def test_the_notice_names_the_country():
+    assert "country" in telemetry.NOTICE
+    assert "\n" not in telemetry.NOTICE
+    # EcoSemantic Desktop finds the line by this opening
+    assert telemetry.NOTICE.startswith("EcoSemantic sends counts of server starts and tool calls")
+
+
+def resource_sent(data_dir: Path, environ: dict[str, str]) -> dict:
+    reader = InMemoryMetricReader()
+    provider = begin(environ, data_dir, "stdio", io.StringIO(), reader)
+    assert provider is not None
+    attributes = dict(reader.get_metrics_data().resource_metrics[0].resource.attributes)
+    provider.shutdown()
+    return attributes
+
+
+@pytest.mark.parametrize(
+    "held",
+    [
+        {},
+        {"choice": "on"},
+        {"told": True, "install_id": KEPT_ID},
+        {"told": 2, "install_id": KEPT_ID, "choice": "on"},
+        {"country": "no"},
+    ],
+)
+@pytest.mark.parametrize("environ", [{}, {"ECOSEMANTIC_TELEMETRY": "on"}])
+def test_no_country_is_sent_or_read_without_a_yes(tmp_path, monkeypatch, held, environ):
+    read = []
+    monkeypatch.setattr(telemetry, "country_here", read.append, raising=False)
+    (tmp_path / telemetry.FILE).write_text(json.dumps(held), encoding="utf-8")
+    assert "geo.country.iso_code" not in resource_sent(tmp_path, environ)
+    assert read == []
+
+
+def test_a_yes_sends_the_country_as_two_letters(tmp_path):
+    telemetry.record_country(tmp_path, True)
+    assert resource_sent(tmp_path, {})["geo.country.iso_code"] == "CL"
+
+
+def test_a_yes_sends_nothing_where_no_country_is_found(tmp_path, monkeypatch):
+    telemetry.record_country(tmp_path, True)
+    monkeypatch.setattr(telemetry, "country_here", lambda environ: None, raising=False)
+    assert "geo.country.iso_code" not in resource_sent(tmp_path, {})
+
+
+def test_off_withdraws_the_yes_and_on_again_does_not_restore_it(tmp_path):
+    telemetry.record_country(tmp_path, True)
+    record({}, tmp_path, False)
+    record({}, tmp_path, True)
+    assert status({}, tmp_path)["country_answer"] is None
+    assert "geo.country.iso_code" not in resource_sent(tmp_path, {})
+
+
+def test_on_keeps_the_country_s_answer(tmp_path):
+    telemetry.record_country(tmp_path, True)
+    record({}, tmp_path, True)
+    assert status({}, tmp_path)["country_answer"] == "yes"
 
 
 def test_the_identifier_is_a_kept_uuid4(tmp_path):
@@ -198,6 +279,8 @@ def test_status_without_an_identifier(tmp_path):
     assert status({}, tmp_path) == {
         "on": True,
         "reason": "default",
+        "country": "CL",
+        "country_answer": None,
         "install_id": None,
         "endpoint": telemetry.ENDPOINT,
         "file": str(tmp_path / telemetry.FILE),

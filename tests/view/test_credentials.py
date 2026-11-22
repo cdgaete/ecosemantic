@@ -14,8 +14,9 @@ from starlette.testclient import TestClient
 
 from ecosemantic.mcp.accounts import account_advice
 from ecosemantic.mcp.context import AccountStart, ServerContext
+from ecosemantic.mcp.reach import BRIDGE_EXTENSION
 from ecosemantic.mcp.server import build_server
-from ecosemantic.view.api import BRIDGE_EXTENSION, GATE_PARAMETER
+from ecosemantic.view.api import GATE_PARAMETER
 from ecosemantic.view.app import build_view
 
 NOWHERE = Path("/nonexistent-static")

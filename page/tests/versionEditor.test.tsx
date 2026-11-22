@@ -50,6 +50,7 @@ const recordedLog = log as unknown as Answer<LogEntry[]>
 
 describe('version editor', () => {
   afterEach(() => {
+    vi.useRealTimers()
     vi.mocked(api.log).mockResolvedValue(recordedLog)
   })
 
@@ -97,6 +98,9 @@ describe('version editor', () => {
 
   it("names the entry a version page was written at, with its own actor and a relative time", async () => {
     vi.mocked(api.log).mockResolvedValue(twoEntries)
+    // a millisecond before the entry is three hours old: a clock that moved between the page and the test would read 3
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(new Date(olderEntry.timestamp).getTime() + 3 * 3_600_000 - 1))
     renderAt(`/systems/${system.value.id}/versions/${olderEntry.result_hash}`, <Screens />)
     await waitFor(() => expect(screen.getByText('Last change')).toBeInTheDocument())
     const line = screen.getByText('Last change').parentElement as HTMLElement
@@ -105,6 +109,7 @@ describe('version editor', () => {
     const stamp = line.querySelector('time') as HTMLTimeElement
     expect(stamp.getAttribute('datetime')).toBe(olderEntry.timestamp)
     expect(stamp.getAttribute('title')).toBe(olderEntry.timestamp)
+    expect(stamp.textContent).toBe('2 h ago')
     expect(stamp.textContent).toBe(formatAgo(olderEntry.timestamp))
     expect(stamp.textContent).not.toContain('T')
   })

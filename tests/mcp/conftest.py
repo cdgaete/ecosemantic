@@ -7,7 +7,14 @@ from fastmcp import Client, FastMCP
 
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.model.canonical import base_pin
-from ecosemantic.model.entities import Exchange, ExchangeOverride, ProductSystem, Scenario
+from ecosemantic.model.entities import (
+    Case,
+    Exchange,
+    ExchangeOverride,
+    Parameter,
+    ProductSystem,
+    Scenario,
+)
 from ecosemantic.model.refs import ForegroundRef
 from tests.conftest import fixture_system
 from tests.fixture_data import FIXTURE_DB
@@ -67,3 +74,25 @@ async def looped_stored(context: ServerContext) -> ProductSystem:
     )
     await context.storage.put_product_system(system, context.actor, "created")
     return system
+
+
+@pytest.fixture(scope="session")
+async def varied(context: ServerContext, fixture_system_stored: ProductSystem) -> uuid.UUID:
+    """The widget with electricity on a parameter, a case halving it, a scenario doubling steel."""
+    system = fixture_system_stored.model_copy(deep=True, update={"hash": None})
+    system.id = uuid.uuid5(system.id, "varied")
+    system.name = "widget_varied"
+    assembly = system.process("widget")
+    steel, electricity = assembly.exchanges[1], assembly.exchanges[2]
+    electricity.formula = "elec_kwh"
+    system.parameters = [Parameter(name="elec_kwh", value=1.0)]
+    system.cases = [Case(name="half", values={"elec_kwh": 0.5})]
+    system.scenarios = [
+        Scenario(
+            name="double_steel",
+            overrides=[ExchangeOverride(exchange_id=steel.id, multiplier=2.0)],
+        )
+    ]
+    system.scenarios[0].base_hash = base_pin(system)
+    await context.storage.put_product_system(system, context.actor, "created")
+    return system.id

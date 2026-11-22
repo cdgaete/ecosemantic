@@ -13,12 +13,12 @@ import { ranMonteCarlo, targetOf } from './recorded'
 import type { Result } from './ResultsEditor'
 
 export function GeneralPage({ result }: { result: Result }) {
-  const { id, params, hash, system, impact, root, stale, waiting } = result
+  const { id, params, hash, system, impact, root, stale, waiting, state, variant } = result
   const scores = impact.data?.value.scores
   const first = scores?.[0]
   const methods = impact.data?.value.methods
   const firstMethod = first === undefined || methods === undefined ? undefined : methodById(methods, first.method_id)
-  const top = useContributions(id, hash, { by: 'process', method_id: first?.method_id, top_n: 5, demand: demandOf(params!, root) }, first !== undefined && !stale)
+  const top = useContributions(id, hash, { by: 'process', method_id: first?.method_id, top_n: 5, demand: demandOf(params!, root), ...(variant !== null ? { variant } : {}) }, first !== undefined && !stale)
   const cut = cutNotice(top.data?.value.cut ?? null)
   const rootProcess = system?.processes.find((p) => p.code === root)
   const action = <RequestAction systemId={id} entity="product_system" entityId={id} />
@@ -30,7 +30,7 @@ export function GeneralPage({ result }: { result: Result }) {
   ]
   return (
     <>
-      <EditorHeader icon="result" page="General information" entity={system?.name ?? ''} />
+      <EditorHeader icon="result" page="General information" entity={system?.name ?? ''} state={state} />
       <Section title="General information" sectionKey={`results:${id}:general`} actions={action}>
         <FieldGrid
           rows={[
@@ -40,7 +40,7 @@ export function GeneralPage({ result }: { result: Result }) {
             { label: 'Impact assessment method', value: params?.impact_method ?? firstMethod?.spec ?? '' },
             {
               label: 'Scored on',
-              value: 'base values',
+              value: state === null ? 'base values' : `${state.kind} ${state.name}`,
             },
             ...(params?.variants.length
               ? [

@@ -3,10 +3,11 @@ import { api } from '@/api/client'
 import { useUi } from '@/store/ui'
 import { useFiles } from '@/window/files'
 import { renderAt } from './render'
+import system from './fixtures/system.json'
 
 vi.mock('@/api/queries', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/api/queries')>()
-  return { ...original, useSystem: () => ({ data: undefined }) }
+  return { ...original, useSystem: () => ({ data: system }) }
 })
 
 vi.mock('@/api/client', async (importOriginal) => {

@@ -262,6 +262,9 @@ def record(client: TestClient, system_id: str, unfinished_id: str) -> dict[str, 
         "contributions_path": client.post(
             f"{base}/contributions", json={"method_id": GWP_ID, "by": "path", "max_level": 2}
         ).json(),
+        "contributions_stage": client.post(
+            f"{base}/contributions", json={"method_id": GWP_ID, "by": "stage"}
+        ).json(),
         "inventory": client.post(f"{base}/inventory", json={"limit": 50}).json(),
         "error_not_found": client.get(
             "/api/product-systems/00000000-0000-4000-8000-000000000000"

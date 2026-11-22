@@ -1,6 +1,7 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import type { ContributionResult, TreeNode } from '@/api/types'
 import { App } from '@/App'
+import { api } from '@/api/client'
 import { formatAmount } from '@/lib/format'
 import { renderAt } from './render'
 import { firstMethodOf } from './method'
@@ -36,4 +37,11 @@ it('shows a credited node with its negative score in the node table', async () =
   const table = within(heading.closest('section')!).getByRole('table')
   const row = within(table).getByText(new RegExp(`^${credited.children[0].name}`)).closest('tr')!
   expect(row.textContent).toContain(formatAmount(-1.5))
+})
+
+it('the sankey reads the split under the same case', async () => {
+  vi.mocked(api.contributions).mockClear()
+  renderAt(`/systems/${system.value.id}/results/sankey?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}&variant=heavy`, <App router={false} />)
+  await waitFor(() => expect(api.contributions).toHaveBeenCalledWith(system.value.id, expect.objectContaining({ by: 'stage', variant: 'heavy' })))
+  expect(api.contributions).toHaveBeenCalledWith(system.value.id, expect.objectContaining({ by: 'path', variant: 'heavy' }))
 })

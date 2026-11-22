@@ -8,6 +8,7 @@ import { useUi } from '@/store/ui'
 import { ICON_BUTTON, IconButton } from '@/window/IconButton'
 import { keysOf } from '@/window/shortcuts'
 import { useCanvasState, useCanvasVariant } from '@/window/useCanvasState'
+import { useChooseCase } from '@/window/useChooseCase'
 import { useMinWidth } from '@/window/useMinWidth'
 
 export interface CanvasToolbarProps {
@@ -29,7 +30,7 @@ export interface CanvasToolbarProps {
 export function CanvasToolbar({ system, calculate, grip, notes, following, fit, follow, scaling, minimap, setMinimapOpen, focus, reorganise, reset }: CanvasToolbarProps) {
   const state = useCanvasVariant(system)
   const live = useCanvasState(system.id).live
-  const setVariant = useUi((s) => s.setCanvasVariant)
+  const chooseCase = useChooseCase(system.id)
   const scaledView = useUi((s) => s.scaledView)
   const setScaledView = useUi((s) => s.setScaledView)
   const formulaValues = useUi((s) => s.formulaValues)
@@ -58,7 +59,7 @@ export function CanvasToolbar({ system, calculate, grip, notes, following, fit, 
             className="nodrag min-w-28 max-w-48 rounded-sm border bg-background px-1"
             value={state?.name ?? ''}
             disabled={!live}
-            onChange={(e) => setVariant(e.target.value === '' ? null : e.target.value)}
+            onChange={(e) => chooseCase(e.target.value === '' ? null : e.target.value)}
           >
             <option value="">base values</option>
             {system.cases.map((c) => (

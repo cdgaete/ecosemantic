@@ -5,12 +5,13 @@ from __future__ import annotations
 
 import heapq
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, get_args
 
 import numpy as np
 import scipy.sparse as sp
 
 PathKind = Literal["process", "activity", "flow", "remainder"]
+SupplierKind = Literal["activity", "process"]
 
 
 @dataclass
@@ -184,6 +185,6 @@ def walk(
             node.truncated = True
             truncated = True
         for child in kept:
-            if child.kind in ("process", "activity"):
+            if child.kind in get_args(SupplierKind):
                 push(child)
     return PathTree(root=start, total=total, truncated=truncated)

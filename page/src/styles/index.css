@@ -54,6 +54,12 @@
   --chart-5: 217 84 26;
   --chart-6: 122 79 176;
   --chart-7: 166 124 0;
+  --stage-1: 79 84 199;
+  --stage-2: 181 58 145;
+  --stage-3: 25 112 190;
+  --stage-4: 128 72 190;
+  --stage-5: 133 94 60;
+  --stage-6: 176 56 96;
   color-scheme: light;
 }
 
@@ -108,6 +114,12 @@
   --chart-5: 132 189 66;
   --chart-6: 62 158 91;
   --chart-7: 7 99 108;
+  --stage-1: 157 163 255;
+  --stage-2: 240 138 212;
+  --stage-3: 110 178 250;
+  --stage-4: 196 156 255;
+  --stage-5: 214 174 128;
+  --stage-6: 250 140 172;
   color-scheme: dark;
 }
 
@@ -160,6 +172,12 @@
   --color-chart-5: rgb(var(--chart-5));
   --color-chart-6: rgb(var(--chart-6));
   --color-chart-7: rgb(var(--chart-7));
+  --color-stage-1: rgb(var(--stage-1));
+  --color-stage-2: rgb(var(--stage-2));
+  --color-stage-3: rgb(var(--stage-3));
+  --color-stage-4: rgb(var(--stage-4));
+  --color-stage-5: rgb(var(--stage-5));
+  --color-stage-6: rgb(var(--stage-6));
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);

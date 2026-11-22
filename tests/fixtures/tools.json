@@ -335,6 +335,79 @@
             "score": {
               "type": "integer"
             },
+            "shared_suppliers": {
+              "items": {
+                "description": "A card of no stage: how many processes it feeds and how many of the system's stages those\nprocesses span.",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "processes": {
+                    "type": "integer"
+                  },
+                  "stages": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "code",
+                  "processes",
+                  "stages"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "stages": {
+              "items": {
+                "description": "One stage's cards in the order the drawing places them, and the regions that hold them.",
+                "properties": {
+                  "codes": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "regions": {
+                    "items": {
+                      "description": "A rectangle in the drawing's own coordinates, holding the cards of one stage.",
+                      "properties": {
+                        "height": {
+                          "type": "number"
+                        },
+                        "width": {
+                          "type": "number"
+                        },
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y",
+                        "width",
+                        "height"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "stage": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "stage",
+                  "codes",
+                  "regions"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
             "troubles": {
               "items": {
                 "description": "One thing wrong with the drawing, with the cards it concerns.",
@@ -378,6 +451,8 @@
             "score",
             "bounds",
             "scaling",
+            "stages",
+            "shared_suppliers",
             "card"
           ],
           "type": "object"
@@ -2423,7 +2498,7 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "The life cycle inventory: every elementary flow the demand draws or emits, with the foreground process that dominates each row. side='input' or side='output' names one side of the process; without one each row carries its side and inputs come first. Rows are ordered by compartment then name, or by order='amount' by falling magnitude, and paged; filter by compartment or by words in the flow name. contribution_analysis by='flow' ranks them by characterised score.",
+    "description": "The life cycle inventory: every elementary flow the demand draws or emits, with the foreground process that dominates each row. side='input' or side='output' names one side of the process; without one each row carries its side and inputs come first. Rows are ordered by compartment then name, or by order='amount' by falling magnitude, and paged; filter by compartment or by words in the flow name. contribution_analysis by='flow' ranks them by characterised score. variant names a case or a scenario to list in place of the base.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -2550,6 +2625,17 @@
                 "input",
                 "output"
               ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "variant": {
+          "anyOf": [
+            {
               "type": "string"
             },
             {
@@ -2836,6 +2922,17 @@
           },
           "type": "array"
         },
+        "variant": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "view_url": {
           "anyOf": [
             {
@@ -2934,6 +3031,38 @@
                       "anyOf": [
                         {
                           "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null
+                    },
+                    "on_behalf_of": {
+                      "anyOf": [
+                        {
+                          "description": "The signed-in person a record belongs to.",
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "name": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "type": "object"
                         },
                         {
                           "type": "null"
@@ -4232,7 +4361,7 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "Decompose one impact. by='process' partitions the total over the processes that emit it, each appearing once. by='path' nests it under the demanded process along the supply chain that caused it, with elementary flows itemised at each node. by='flow' partitions it over the substances emitted or drawn, ranked by characterised score. Same total every way. by='path' stops at max_level (default 3) and max_nodes (default 50) and folds a branch below cutoff (default 0.001) of the total into a remainder; by='process' and by='flow' answer the top_n (default 10) largest parts that reach cutoff, and cut says what the list leaves out: below, the parts under the cut-off, and unlisted, the parts that reach it past top_n, each counted, with share and unlisted_share the total of their magnitudes and below_score and unlisted_score the signed total of their scores, so the rows listed plus these two make the total. Every fraction and share is none where the total is 0, which nothing is a share of. method names the method once and total names it by method_id. Example: {\"product_system_id\": \"\u2026\", \"by\": \"path\", \"method_id\": \"m_\u2026\", \"max_level\": 4}.",
+    "description": "Decompose one impact. by='process' partitions the total over the processes that emit it, each appearing once. by='path' nests it under the demanded process along the supply chain that caused it, with elementary flows itemised at each node. by='flow' partitions it over the substances emitted or drawn, ranked by characterised score. by='stage' splits it over the life-cycle stages the processes' life_cycle_stage metadata names, in the order a walk from the functional unit meets them, processes of no stage last: each stage holds each of its processes' own part, its direct emissions and each input's cumulative score, and the stages sum to the total. variant names a case or a scenario to decompose in place of the base. Same total every way. by='path' stops at max_level (default 3) and max_nodes (default 50) and folds a branch below cutoff (default 0.001) of the total into a remainder; by='process' and by='flow' answer the top_n (default 10) largest parts that reach cutoff, and cut says what the list leaves out: below, the parts under the cut-off, and unlisted, the parts that reach it past top_n, each counted, with share and unlisted_share the total of their magnitudes and below_score and unlisted_score the signed total of their scores, so the rows listed plus these two make the total. Every fraction and share is none where the total is 0, which nothing is a share of. method names the method once and total names it by method_id. Example: {\"product_system_id\": \"\u2026\", \"by\": \"path\", \"method_id\": \"m_\u2026\", \"max_level\": 4}.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -4241,7 +4370,8 @@
           "enum": [
             "process",
             "path",
-            "flow"
+            "flow",
+            "stage"
           ],
           "type": "string"
         },
@@ -4352,6 +4482,17 @@
         "top_n": {
           "default": 10,
           "type": "integer"
+        },
+        "variant": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -4384,13 +4525,14 @@
           "type": "object"
         },
         "ContributionResult": {
-          "description": "One decomposition of a total over the database build `database` names: flat over\nemitters, nested over paths, or flat over flows, with the processes of each loop holding a\ncredit, whose delivery no check decides, and each exchange sending a positive amount to a\ntreatment, which runs it backwards. `cut` is what a flat list leaves out, under its cut-off\nand past its length, and a tree holds its own `truncated` beside none. `method` is the\nmethod of `total`, which names it by `method_id`.",
+          "description": "One decomposition of a total over the database build `database` names: flat over\nemitters, nested over paths, flat over flows, or split over life-cycle stages, with the\nprocesses of each loop holding a credit, whose delivery no check decides, and each exchange\nsending a positive amount to a treatment, which runs it backwards. `cut` is what a flat list\nleaves out, under its cut-off and past its length, and a tree holds its own `truncated`\nbeside none. `method` is the method of `total`, which names it by `method_id`, and `variant`\nis the case or the scenario it decomposed, none for the base.",
           "properties": {
             "by": {
               "enum": [
                 "process",
                 "path",
-                "flow"
+                "flow",
+                "stage"
               ],
               "type": "string"
             },
@@ -4465,6 +4607,20 @@
               ],
               "default": null
             },
+            "stages": {
+              "anyOf": [
+                {
+                  "items": {
+                    "$ref": "#/$defs/StagePart"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
             "total": {
               "$ref": "#/$defs/Score"
             },
@@ -4478,6 +4634,17 @@
               "anyOf": [
                 {
                   "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "variant": {
+              "anyOf": [
+                {
+                  "type": "string"
                 },
                 {
                   "type": "null"
@@ -4870,6 +5037,160 @@
             "value",
             "unit",
             "method_id"
+          ],
+          "type": "object"
+        },
+        "StageInput": {
+          "description": "One input of a foreground process and its part of the score, or the one part standing for\nthe inputs a cut-off folds away, which names no reference and no location.",
+          "properties": {
+            "fraction": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kind": {
+              "enum": [
+                "process",
+                "remainder"
+              ],
+              "type": "string"
+            },
+            "location": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "ref": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BackgroundRef"
+                },
+                {
+                  "$ref": "#/$defs/LinkedProcessRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "score": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "ref",
+            "name",
+            "location",
+            "score",
+            "fraction"
+          ],
+          "type": "object"
+        },
+        "StagePart": {
+          "description": "One life-cycle stage's part of the score and its processes; the part of a stage of None\nholds every process stating no stage.",
+          "properties": {
+            "fraction": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "processes": {
+              "items": {
+                "$ref": "#/$defs/StageProcess"
+              },
+              "type": "array"
+            },
+            "score": {
+              "type": "number"
+            },
+            "stage": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "stage",
+            "score",
+            "fraction",
+            "processes"
+          ],
+          "type": "object"
+        },
+        "StageProcess": {
+          "description": "One of the product system's own processes under its stage: its own part of the score, its\ndirect emissions and its inputs, largest magnitude first.",
+          "properties": {
+            "direct": {
+              "type": "number"
+            },
+            "fraction": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "inputs": {
+              "items": {
+                "$ref": "#/$defs/StageInput"
+              },
+              "type": "array"
+            },
+            "location": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "ref": {
+              "$ref": "#/$defs/ForegroundRef"
+            },
+            "score": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "ref",
+            "name",
+            "location",
+            "score",
+            "fraction",
+            "direct",
+            "inputs"
           ],
           "type": "object"
         },
@@ -5323,6 +5644,38 @@
                   "anyOf": [
                     {
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "on_behalf_of": {
+                  "anyOf": [
+                    {
+                      "description": "The signed-in person a record belongs to.",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
                     },
                     {
                       "type": "null"
@@ -5855,6 +6208,38 @@
                   "anyOf": [
                     {
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "on_behalf_of": {
+                  "anyOf": [
+                    {
+                      "description": "The signed-in person a record belongs to.",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
                     },
                     {
                       "type": "null"
@@ -6410,6 +6795,38 @@
                     }
                   ],
                   "default": null
+                },
+                "on_behalf_of": {
+                  "anyOf": [
+                    {
+                      "description": "The signed-in person a record belongs to.",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -6867,6 +7284,38 @@
                     }
                   ],
                   "default": null
+                },
+                "on_behalf_of": {
+                  "anyOf": [
+                    {
+                      "description": "The signed-in person a record belongs to.",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -7309,6 +7758,38 @@
                     }
                   ],
                   "default": null
+                },
+                "on_behalf_of": {
+                  "anyOf": [
+                    {
+                      "description": "The signed-in person a record belongs to.",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -7581,6 +8062,38 @@
                   "anyOf": [
                     {
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "on_behalf_of": {
+                  "anyOf": [
+                    {
+                      "description": "The signed-in person a record belongs to.",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
                     },
                     {
                       "type": "null"
@@ -7958,6 +8471,38 @@
                     }
                   ],
                   "default": null
+                },
+                "on_behalf_of": {
+                  "anyOf": [
+                    {
+                      "description": "The signed-in person a record belongs to.",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -8115,10 +8660,10 @@
   },
   {
     "annotations": {
-      "destructive_hint": false,
-      "idempotent_hint": true,
+      "destructive_hint": true,
+      "idempotent_hint": false,
       "open_world_hint": false,
-      "read_only_hint": true
+      "read_only_hint": false
     },
     "description": "Write a product system as a model package at the given path: one zip holding the openLCA JSON-LD layout, which openLCA opens directly, and the ecosemantic/ folder with what openLCA has no field for: the scenarios, the pins, the identities, the state as a version snapshot, and ecosemantic/log.jsonl, whose one entry records the export; the stored change log stays in the store. Background datasets travel as references, never as records. A path that holds a file is refused unless replace is passed. Example: {\"product_system_id\": \"\u2026\", \"path\": \"/home/person/widget.zip\"}.",
     "input_schema": {
@@ -8192,10 +8737,10 @@
   },
   {
     "annotations": {
-      "destructive_hint": false,
-      "idempotent_hint": true,
+      "destructive_hint": true,
+      "idempotent_hint": false,
       "open_world_hint": false,
-      "read_only_hint": true
+      "read_only_hint": false
     },
     "description": "Write a product system as a folder of text under the given directory: model.yaml, and inputs/ holding the parameter space as CSV with a schema. import_tables reads an edited folder back. The folder an earlier export of the system made there is refused unless replace is passed, since writing over it replaces a person's edits.",
     "input_schema": {
@@ -8782,6 +9327,38 @@
                       "anyOf": [
                         {
                           "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null
+                    },
+                    "on_behalf_of": {
+                      "anyOf": [
+                        {
+                          "description": "The signed-in person a record belongs to.",
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "name": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "type": "object"
                         },
                         {
                           "type": "null"
@@ -10093,6 +10670,38 @@
                       }
                     ],
                     "default": null
+                  },
+                  "on_behalf_of": {
+                    "anyOf": [
+                      {
+                        "description": "The signed-in person a record belongs to.",
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "name": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
                   }
                 },
                 "required": [
@@ -11281,7 +11890,7 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "Where every process of a product system is drawn and how every arrow runs, exactly as the page draws it: a map in characters with its legend on the first line, each card's place, size and row anchors, each arrow's corner points and label, what is wrong with the drawing, and a score where 0 means nothing is wrong. The drawing is scaled to one unit of the reference process's product: each card carries its activity, how many times its process runs, and scaled, each exchange's amount at that activity; each label carries its per-unit and its scaled text, and the map titles each card with its scaled output and writes each row's scaled amount. When the engine cannot solve the system, scaling names why and nothing is scaled. Name a case or a scenario as variant to draw every row, arrow and label under it, as calculate_impact evaluates a variant. Read it before arrange_graph.",
+    "description": "Where every process of a product system is drawn and how every arrow runs, exactly as the page draws it: a map in characters with its legend on the first line, each card's place, size and row anchors, each arrow's corner points and label, what is wrong with the drawing, and a score where 0 means nothing is wrong. The drawing is scaled to one unit of the reference process's product: each card carries its activity, how many times its process runs, and scaled, each exchange's amount at that activity; each label carries its per-unit and its scaled text, and the map titles each card with its scaled output and writes each row's scaled amount. When the engine cannot solve the system, scaling names why and nothing is scaled. Name a case or a scenario as variant to draw every row, arrow and label under it, as calculate_impact evaluates a variant. A system whose processes carry life_cycle_stage is drawn one band of columns per stage, from the functional unit's stage at the right, processes of no stage leftmost; stages lists each stage's cards and regions, and shared_suppliers each process of no stage that feeds several stages. Read it before arrange_graph.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
@@ -11568,6 +12177,79 @@
             "score": {
               "type": "integer"
             },
+            "shared_suppliers": {
+              "items": {
+                "description": "A card of no stage: how many processes it feeds and how many of the system's stages those\nprocesses span.",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "processes": {
+                    "type": "integer"
+                  },
+                  "stages": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "code",
+                  "processes",
+                  "stages"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "stages": {
+              "items": {
+                "description": "One stage's cards in the order the drawing places them, and the regions that hold them.",
+                "properties": {
+                  "codes": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "regions": {
+                    "items": {
+                      "description": "A rectangle in the drawing's own coordinates, holding the cards of one stage.",
+                      "properties": {
+                        "height": {
+                          "type": "number"
+                        },
+                        "width": {
+                          "type": "number"
+                        },
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y",
+                        "width",
+                        "height"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "stage": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "stage",
+                  "codes",
+                  "regions"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
             "troubles": {
               "items": {
                 "description": "One thing wrong with the drawing, with the cards it concerns.",
@@ -11611,6 +12293,8 @@
             "score",
             "bounds",
             "scaling",
+            "stages",
+            "shared_suppliers",
             "card"
           ],
           "type": "object"
@@ -11747,6 +12431,38 @@
                   "anyOf": [
                     {
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "on_behalf_of": {
+                  "anyOf": [
+                    {
+                      "description": "The signed-in person a record belongs to.",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
                     },
                     {
                       "type": "null"
@@ -12058,6 +12774,38 @@
                   "anyOf": [
                     {
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "on_behalf_of": {
+                  "anyOf": [
+                    {
+                      "description": "The signed-in person a record belongs to.",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
                     },
                     {
                       "type": "null"
@@ -12532,6 +13280,38 @@
                         }
                       ],
                       "default": null
+                    },
+                    "on_behalf_of": {
+                      "anyOf": [
+                        {
+                          "description": "The signed-in person a record belongs to.",
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "name": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "default": null
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null
                     }
                   },
                   "required": [
@@ -12967,6 +13747,38 @@
                           }
                         ],
                         "default": null
+                      },
+                      "on_behalf_of": {
+                        "anyOf": [
+                          {
+                            "description": "The signed-in person a record belongs to.",
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ],
+                                "default": null
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null
                       }
                     },
                     "required": [
@@ -13390,6 +14202,38 @@
                       }
                     ],
                     "default": null
+                  },
+                  "on_behalf_of": {
+                    "anyOf": [
+                      {
+                        "description": "The signed-in person a record belongs to.",
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "name": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
                   }
                 },
                 "required": [
@@ -13481,6 +14325,38 @@
                             "anyOf": [
                               {
                                 "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "default": null
+                          },
+                          "on_behalf_of": {
+                            "anyOf": [
+                              {
+                                "description": "The signed-in person a record belongs to.",
+                                "properties": {
+                                  "id": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ],
+                                    "default": null
+                                  }
+                                },
+                                "required": [
+                                  "id"
+                                ],
+                                "type": "object"
                               },
                               {
                                 "type": "null"
@@ -14342,6 +15218,38 @@
                     }
                   ],
                   "default": null
+                },
+                "on_behalf_of": {
+                  "anyOf": [
+                    {
+                      "description": "The signed-in person a record belongs to.",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -14664,6 +15572,38 @@
                     }
                   ],
                   "default": null
+                },
+                "on_behalf_of": {
+                  "anyOf": [
+                    {
+                      "description": "The signed-in person a record belongs to.",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -14977,6 +15917,38 @@
                   "anyOf": [
                     {
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "on_behalf_of": {
+                  "anyOf": [
+                    {
+                      "description": "The signed-in person a record belongs to.",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
                     },
                     {
                       "type": "null"
@@ -15387,6 +16359,38 @@
                     }
                   ],
                   "default": null
+                },
+                "on_behalf_of": {
+                  "anyOf": [
+                    {
+                      "description": "The signed-in person a record belongs to.",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -15478,6 +16482,38 @@
                           "anyOf": [
                             {
                               "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "on_behalf_of": {
+                          "anyOf": [
+                            {
+                              "description": "The signed-in person a record belongs to.",
+                              "properties": {
+                                "id": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ],
+                                  "default": null
+                                }
+                              },
+                              "required": [
+                                "id"
+                              ],
+                              "type": "object"
                             },
                             {
                               "type": "null"
@@ -16377,6 +17413,38 @@
                   "anyOf": [
                     {
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "on_behalf_of": {
+                  "anyOf": [
+                    {
+                      "description": "The signed-in person a record belongs to.",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
                     },
                     {
                       "type": "null"
@@ -18122,6 +19190,38 @@
                     }
                   ],
                   "default": null
+                },
+                "on_behalf_of": {
+                  "anyOf": [
+                    {
+                      "description": "The signed-in person a record belongs to.",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -18687,6 +19787,38 @@
                   "anyOf": [
                     {
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "on_behalf_of": {
+                  "anyOf": [
+                    {
+                      "description": "The signed-in person a record belongs to.",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
                     },
                     {
                       "type": "null"
@@ -19268,6 +20400,38 @@
                   "anyOf": [
                     {
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "on_behalf_of": {
+                  "anyOf": [
+                    {
+                      "description": "The signed-in person a record belongs to.",
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "type": "object"
                     },
                     {
                       "type": "null"

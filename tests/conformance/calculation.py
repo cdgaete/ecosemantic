@@ -6,8 +6,9 @@ from __future__ import annotations
 import pytest
 
 from ecosemantic.model.entities import Method
-from ecosemantic.model.refs import BackgroundRef, DemandItem, ForegroundRef
+from ecosemantic.model.refs import BackgroundRef, DemandItem, ForegroundRef, LinkedProcessRef
 from ecosemantic.ports.types import MonteCarloConfig, System
+from tests.conftest import split_system
 from tests.fixture_data import CODES, FIXTURE_DB
 
 # the fixture's method as its bundle keys it: the category and the indicator in one name
@@ -71,6 +72,32 @@ class CalculationConformance:
         co2 = sum(r.amount for r in found.rows if r.name == "Carbon dioxide, fossil")
         assert co2 == pytest.approx(3.85)
         assert found.dropped == 0 and found.floor == pytest.approx(1e-34 * 3.85)
+
+    async def test_own_parts_name_each_input(self, calculation, fixture_system: System) -> None:
+        parts = await calculation.own_parts(fixture_system, WIDGET, GWP_METHOD)
+        assert [part.ref.code for part in parts.parts] == ["widget", "frame"]
+        widget = parts.parts[0]
+        assert widget.direct == pytest.approx(0.1)
+        named = {one.name: one for one in widget.inputs}
+        steel = named["steel production"]
+        assert steel.ref == BackgroundRef(database=FIXTURE_DB, id=CODES["steel"])
+        assert (steel.location, steel.score) == ("GLO", pytest.approx(1.39))
+        assert named["electricity production"].score == pytest.approx(1.0)
+        assert widget.score == pytest.approx(2.49)
+        assert parts.parts[1].score == pytest.approx(1.668)
+        assert parts.total.value == pytest.approx(4.158)
+        assert parts.total.unit == GWP_METHOD.unit
+        assert parts.total.method_id == GWP_METHOD.id
+        assert sum(part.score for part in parts.parts) == pytest.approx(parts.total.value)
+
+    async def test_a_linked_input_names_the_linked_process(self, calculation) -> None:
+        parts = await calculation.own_parts(split_system(), WIDGET, GWP_METHOD)
+        [widget] = parts.parts
+        [linked] = [one for one in widget.inputs if one.ref.kind == "linked"]
+        assert isinstance(linked.ref, LinkedProcessRef)
+        assert (linked.ref.code, linked.name) == ("frame", "frame production")
+        assert linked.score == pytest.approx(1.668)
+        assert widget.score == pytest.approx(4.158)
 
 
 class MonteCarloConformance:

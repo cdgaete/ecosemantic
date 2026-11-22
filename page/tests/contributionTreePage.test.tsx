@@ -34,6 +34,7 @@ const search = url.slice(url.indexOf('?'))
 it('keeps every impact category select within its container', async () => {
   const pages = [
     ['processes', 'Impact category'],
+    ['stages', 'Impact category'],
     ['tree', 'Impact category'],
     ['sankey', 'Impact category:'],
     ['inventory', 'Compartment'],
@@ -95,11 +96,18 @@ it('associates each Sankey control with its caption', async () => {
   expect(screen.getByLabelText(/Max\. number of processes/)).toBe(document.getElementById('sankey-nodes'))
 })
 
-it('has the six result pages and no Simulation page', async () => {
+it('puts the pages navigation above the heading of the page it opens', async () => {
+  renderAt(url, <App router={false} />)
+  const nav = await screen.findByRole('navigation', { name: 'Pages' })
+  const heading = await screen.findByRole('heading', { name: /Contribution tree/ })
+  expect(nav.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})
+
+it('has the seven result pages and no Simulation page', async () => {
   renderAt(`/systems/${system.value.id}/results/impact?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`, <App router={false} />)
   await waitFor(() => expect(screen.getByRole('navigation', { name: 'Pages' })).toBeInTheDocument())
   const nav = screen.getByRole('navigation', { name: 'Pages' })
-  expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['General information', 'Inventory results', 'Impact analysis', 'Process results', 'Contribution tree', 'Sankey diagram'])
+  expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['General information', 'Inventory results', 'Impact analysis', 'By stage', 'Process results', 'Contribution tree', 'Sankey diagram'])
 })
 
 it('says whether each branch of the tree is open', async () => {

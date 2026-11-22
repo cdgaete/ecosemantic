@@ -12,6 +12,7 @@ from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.counting import TOOL_CALLS, Counting
+from ecosemantic.mcp.direct import run_tool
 from ecosemantic.mcp.server import build_server
 
 
@@ -61,10 +62,19 @@ async def test_a_name_outside_the_roster_counts_as_other(context: ServerContext)
     assert counted(reader) == [({"tool": "other"}, 1)]
 
 
-async def test_the_page_calls_are_not_counted(context: ServerContext) -> None:
+async def test_a_client_named_view_is_counted(context: ServerContext) -> None:
     server, reader = served(context)
     async with named(server, "view") as client:
-        await client.call_tool("list_databases", {})
+        with pytest.raises(ToolError):
+            await client.call_tool("list_databases", {})
+    assert counted(reader) == [({"tool": "list_databases"}, 1)]
+
+
+async def test_the_page_s_calls_through_run_tool_are_not_counted(
+    context: ServerContext,
+) -> None:
+    server, reader = served(context)
+    await run_tool(server, context, "list_databases", {})
     assert counted(reader) == []
 
 

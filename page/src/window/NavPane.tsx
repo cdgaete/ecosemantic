@@ -1,18 +1,40 @@
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
-import { useAnchors, useCalculations, useDatabases, useRuns, useSystem, useSystems } from '@/api/queries'
-import type { ListedDatabase, SystemCard } from '@/api/types'
+import { useCalculations, useDatabases, useLayout, useRuns, useSystem, useSystems } from '@/api/queries'
+import type { Arrangement, ListedDatabase, Process, ProductSystem, SystemCard } from '@/api/types'
 import { formatAmount } from '@/lib/format'
 import { beginsAWord } from '@/lib/matching'
 import { distinguishingId, sharedNames } from '@/lib/names'
 import { AppLink } from '@/lib/router'
 import { databaseOfPath, paths } from '@/lib/paths'
-import { groupByStage } from '@/lib/stages'
 import { useUi } from '@/store/ui'
 import { places } from '@/editors/explorer/sections'
 import { CanvasBadge } from './Badges'
 import { Icon } from './Icon'
+
+const NO_STAGE = 'no stage'
+
+interface StageGroup {
+  stage: string
+  processes: Process[]
+}
+
+/** A system's processes by the arrangement's stages, each group in its stage's order and its processes from the reference's side. */
+function stageGroups(system: ProductSystem, arrangement: Arrangement): StageGroup[] {
+  const rank = new Map(
+    [...arrangement.cards].sort((a, b) => b.x - a.x || a.y - b.y).map((card, at) => [card.code, at] as const),
+  )
+  const byCode = new Map(system.processes.map((p) => [p.code, p]))
+  const fromReference = (processes: Process[]) => [...processes].sort((a, b) => (rank.get(a.code) ?? Infinity) - (rank.get(b.code) ?? Infinity))
+  const grouped = arrangement.stages.map((one) => ({
+    stage: one.stage,
+    processes: fromReference(one.codes.flatMap((code) => byCode.get(code) ?? [])),
+  }))
+  const staged = new Set(arrangement.stages.flatMap((one) => one.codes))
+  const unstaged = fromReference(system.processes.filter((p) => !staged.has(p.code)))
+  return unstaged.length > 0 ? [...grouped, { stage: NO_STAGE, processes: unstaged }] : grouped
+}
 
 function Twisty({ open, onClick }: { open: boolean; onClick: () => void }) {
   return (
@@ -51,15 +73,15 @@ function Node({ icon, label, to, count, depth, twisty, note, current }: { icon: 
 function SystemNode({ card, depth, shared, current }: { card: SystemCard; depth: number; shared: Set<string>; current: boolean }) {
   const [open, setOpen] = useState(false)
   const read = useSystem(card.id)
-  const drawn = useAnchors(card.id, open)
+  const drawn = useLayout(card.id, null, open)
   const runs = useRuns(card.id, open)
   const calculations = useCalculations(card.id, open)
   const running = (runs.data?.value ?? []).some((r) => r.open)
   const system = read.data?.value
   const openRequests = read.data?.open_requests ?? 0
-  const anchors = drawn.data?.value
-  const groups = system && anchors ? groupByStage(system, anchors) : []
-  const waiting = drawn.error ? drawn.error.message : anchors ? null : 'Loading…'
+  const arrangement = drawn.data?.value
+  const groups = system && arrangement ? stageGroups(system, arrangement) : []
+  const waiting = drawn.error ? drawn.error.message : arrangement ? null : 'Loading…'
   return (
     <>
       <Node

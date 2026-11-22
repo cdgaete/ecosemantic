@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import get_args
 from urllib.parse import parse_qs, urlsplit
 
+from ecosemantic.compute.stages import StageInputKind
 from ecosemantic.events import EventKind
 from ecosemantic.mcp.accounts import ACCOUNTS_PATH, Reach
-from ecosemantic.mcp.calculation import result_link
+from ecosemantic.mcp.calculation import DECOMPOSITION_PAGES, result_link
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.discovery import VocabularyKind
 from ecosemantic.mcp.installs import databases_link
@@ -59,7 +60,7 @@ CALCULATION = REPOSITORY / "mcp" / "ecosemantic" / "mcp" / "calculation.py"
 KINDS = REPOSITORY / "page" / "src" / "requests" / "kinds.ts"
 
 VIEW = "http://127.0.0.1:8765"
-RESULT_QUERY = {"method_id", "impact_method", "variants", "amount"}
+RESULT_QUERY = {"method_id", "impact_method", "variants", "amount", "variant"}
 
 VOCABULARIES: dict[str, object] = {
     "Scheme": Scheme,
@@ -81,6 +82,7 @@ VOCABULARIES: dict[str, object] = {
     "InstallStatus": InstallStatus,
     "TreeKind": TreeKind,
     "Decomposition": Decomposition,
+    "StageInputKind": StageInputKind,
     "FlowType": FlowType,
     "CompartmentName": CompartmentName,
     "Side": Side,
@@ -241,7 +243,7 @@ def test_every_page_route_python_writes_is_one_the_page_serves(
     ):
         assert link is not None
         assert any(p.fullmatch(urlsplit(link).path) for p in builders.values()), link
-    pages = result_page_names()
+    pages = sorted(set(result_page_names()) | set(DECOMPOSITION_PAGES.values()))
     assert pages
     for page in pages:
         link = result_link(
@@ -252,6 +254,7 @@ def test_every_page_route_python_writes_is_one_the_page_serves(
             impact_method="gwp",
             variants=("a", "b"),
             demand=[DemandItem(ref=ForegroundRef(code=reference), amount=2.0)],
+            variant="a",
         )
         assert link is not None
         assert page in routed, page

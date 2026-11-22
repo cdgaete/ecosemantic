@@ -22,11 +22,17 @@ export function useCanvasState(systemId: string | null): CanvasState {
   return { live: true }
 }
 
+/** The case or the scenario `system` holds under `name`, or null when it holds neither. */
+export function heldVariant(system: ProductSystem, name: string | null): CanvasVariant | null {
+  if (name === null) return null
+  if (system.cases.some((one) => one.name === name)) return { kind: 'case', name }
+  if (system.scenarios.some((one) => one.name === name)) return { kind: 'scenario', name }
+  return null
+}
+
 export function useCanvasVariant(system: ProductSystem | undefined): CanvasVariant | null {
   const chosen = useUi((s) => (system === undefined || s.canvasSystemId !== system.id ? null : s.canvasVariant))
   const state = useCanvasState(system?.id ?? null)
   if (system === undefined || chosen === null || !state.live) return null
-  if (system.cases.some((one) => one.name === chosen)) return { kind: 'case', name: chosen }
-  if (system.scenarios.some((one) => one.name === chosen)) return { kind: 'scenario', name: chosen }
-  return null
+  return heldVariant(system, chosen)
 }

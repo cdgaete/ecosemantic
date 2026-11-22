@@ -1,4 +1,13 @@
-import type { Answer, Arrangement, CardGeometry, Exchange, Placement, ProductSystem, Route } from '@/api/types'
+import type { Answer, Arrangement, CardGeometry, Exchange, Placement, ProductSystem, Route, SharedSupplier, StageRegions } from '@/api/types'
+
+export interface StageAnswer {
+  stages: StageRegions[]
+  shared_suppliers: SharedSupplier[]
+}
+
+function isStageAnswer(given: ProductSystem | StageAnswer): given is StageAnswer {
+  return !('processes' in given)
+}
 
 export const CARD: CardGeometry = { width: 300, header_height: 40, section_padding: 6, section_label: 18, row_height: 22 }
 
@@ -38,8 +47,11 @@ export function placementsFor(...systems: ProductSystem[]): Placement[] {
   )
 }
 
-export function layoutAnswer(...systems: ProductSystem[]): Answer<Arrangement> {
-  return { value: { map: '', cards: placementsFor(...systems), edges: [], troubles: [], score: 0, bounds: {}, scaling: null, card: CARD }, hint: null, view_url: null }
+export function layoutAnswer(...given: (ProductSystem | StageAnswer)[]): Answer<Arrangement> {
+  const last = given[given.length - 1]
+  const answer = last !== undefined && isStageAnswer(last) ? last : null
+  const systems = given.filter((item): item is ProductSystem => !isStageAnswer(item))
+  return { value: { map: '', cards: placementsFor(...systems), edges: [], troubles: [], score: 0, bounds: {}, scaling: null, stages: answer?.stages ?? [], shared_suppliers: answer?.shared_suppliers ?? [], card: CARD }, hint: null, view_url: null }
 }
 
 export function routesFor(...systems: ProductSystem[]): Route[] {

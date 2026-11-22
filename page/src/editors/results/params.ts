@@ -25,6 +25,12 @@ export function callOf(search: string): string | null {
   return new URLSearchParams(search).get('call')
 }
 
+/** The case or the scenario an address names, or null when it names none. */
+export function variantOf(search: string): string | null {
+  const name = new URLSearchParams(search).get('variant')
+  return name === null || name === '' ? null : name
+}
+
 export function serializeParams(p: ResultParams): string {
   const q = new URLSearchParams()
   if (p.method_id) q.set('method_id', p.method_id)

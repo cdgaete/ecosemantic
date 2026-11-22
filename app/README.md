@@ -24,7 +24,7 @@ ecosemantic serve --transport http
 
 ## Telemetry
 
-A server counts its starts and tool calls anonymously unless you turn that off: `ecosemantic telemetry off`, `ECOSEMANTIC_TELEMETRY=off` or `DO_NOT_TRACK=1`. The repository's `TELEMETRY.md` states exactly what is sent.
+A server counts its starts and tool calls under a random install identifier, and sends your country only after a yes you type at a terminal, unless you turn telemetry off: `ecosemantic telemetry off`, `ECOSEMANTIC_TELEMETRY=off` or `DO_NOT_TRACK=1`. The repository's `TELEMETRY.md` states exactly what is sent.
 
 ## What it depends on
 

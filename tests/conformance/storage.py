@@ -22,6 +22,16 @@ PERSON = Actor(kind="person", name="Carlos")
 
 
 class StorageConformance:
+    @pytest.mark.parametrize("named", ["../versions/{}", "./{}", "x/../{}"])
+    async def test_a_version_is_named_by_its_hash_and_by_no_path_to_it(
+        self, storage, product_system: ProductSystem, named: str
+    ) -> None:
+        entry = await storage.put_product_system(product_system, AGENT, "created")
+        path = named.format(entry.result_hash)
+        with pytest.raises(NotFound) as raised:
+            await storage.get_version(product_system.id, path)
+        assert str(raised.value) == str(no_version(product_system.id, path))
+
     async def test_empty_store_lists_nothing(self, storage) -> None:
         assert await storage.list_product_systems() == []
 

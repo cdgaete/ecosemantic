@@ -70,13 +70,15 @@
     },
     "processes": null,
     "root": null,
+    "stages": null,
     "total": {
       "method_id": "m_bff077f3bd",
       "unit": "kg CO2-Eq",
       "value": 4.158
     },
     "treatments_run_backwards": [],
-    "truncated": null
+    "truncated": null,
+    "variant": null
   },
   "view_url": null
 }

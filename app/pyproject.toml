@@ -1,6 +1,6 @@
 [project]
 name = "ecosemantic"
-version = "0.1.22"
+version = "0.1.23"
 description = "Agent-driven life cycle assessment on your own machine: the command and the local composition."
 requires-python = ">=3.12"
 license = "PolyForm-Noncommercial-1.0.0"
@@ -20,12 +20,12 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "ecosemantic-engine==0.1.22",
-    "ecosemantic-relay==0.1.22",
-    "ecosemantic-core==0.1.22",
-    "ecosemantic-databases[ecoinvent]==0.1.22",
-    "ecosemantic-mcp==0.1.22",
-    "ecosemantic-view==0.1.22",
+    "ecosemantic-engine==0.1.23",
+    "ecosemantic-relay==0.1.23",
+    "ecosemantic-core==0.1.23",
+    "ecosemantic-databases[ecoinvent]==0.1.23",
+    "ecosemantic-mcp==0.1.23",
+    "ecosemantic-view==0.1.23",
     "fastmcp>=4,<5",
     "fastmcp-slim>=4,<5",
     "httpx2>=2.12,<3",
@@ -33,7 +33,7 @@ dependencies = [
     "opentelemetry-api>=1.44,<2",
     "opentelemetry-exporter-otlp-proto-common>=1.44,<2",
     "opentelemetry-sdk>=1.44,<2",
-    "pydantic>=2.7,<3",
+    "pydantic>=2.12,<3",
     "pyjwt[crypto]>=2.14,<3",
     "starlette>=1.6.0,<2",
     "truststore>=0.10,<1",
@@ -42,7 +42,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-mkl = ["ecosemantic-engine[mkl]==0.1.22"]
+mkl = ["ecosemantic-engine[mkl]==0.1.23"]
 tray = [
     "filelock>=3.29.5,<4",
     "pystray==0.19.5; sys_platform == 'win32'",

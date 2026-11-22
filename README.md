@@ -110,7 +110,7 @@ with es.open() as ws:
 - [Quickstart: Python](docs/quickstart-python.md) — `import ecosemantic as es`, from a workspace to a result, with the conventions a caller needs.
 - [Getting a database](docs/getting-a-database.md) — the page and the command line, what each of the four sources needs, and the builder's own steps.
 - [Building a model](mcp/ecosemantic/mcp/guides/building-a-model.md), [interpreting a result](mcp/ecosemantic/mcp/guides/interpreting-a-result.md) and [a sensitivity study](mcp/ecosemantic/mcp/guides/sensitivity-study.md) — the three guides the server serves as resources, so every chatbot reaches them.
-- [Telemetry](TELEMETRY.md) — the anonymous counts of server starts and tool calls, exactly what is sent, and how to turn it off with `ecosemantic telemetry off`.
+- [Telemetry](TELEMETRY.md) — the pseudonymous counts of server starts and tool calls, the country sent only after your yes, exactly what is sent, and how to turn it off with `ecosemantic telemetry off`.
 - [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) and [PROVENANCE.md](PROVENANCE.md).
 
 ## What this repository holds

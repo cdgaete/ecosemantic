@@ -13,11 +13,13 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture
-def started(tmp_path):
+def started(tmp_path, monkeypatch):
+    monkeypatch.setattr(telemetry, "country_here", lambda environ: "CL", raising=False)
     return started_attributes(tmp_path)
 
 
 def started_attributes(tmp_path: Path) -> list[str]:
+    (tmp_path / telemetry.FILE).write_text('{"country": "yes"}', encoding="utf-8")
     reader = InMemoryMetricReader()
     provider = telemetry.begin({}, tmp_path, "stdio", io.StringIO(), reader)
     assert provider is not None
@@ -43,7 +45,7 @@ def test_the_page_names_what_the_code_sends(started):
         "5 second",
     ]
     assert [name for name in names if name not in page] == []
-    assert len(started) == 5
+    assert len(started) == 6
 
 
 def test_the_readme_links_the_page():

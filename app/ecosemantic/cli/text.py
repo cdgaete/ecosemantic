@@ -9,6 +9,7 @@ from typing import cast
 
 from ecosemantic.errors import ErrorEnvelope
 from ecosemantic.telemetry import DO_NOT_TRACK, NOTICE, SWITCH
+from ecosemantic.telemetry.location import country_source
 
 Renderer = Callable[[Mapping[str, object]], str]
 
@@ -204,6 +205,26 @@ def _client_row(client: str, answered: Mapping[str, object]) -> str:
     return _row(client, f"{where}: configured")
 
 
+def country_question(country: object) -> str:
+    """What a person is asked before their country is sent: the value, where it is read from,
+    what it sits beside and how it is withdrawn."""
+    return (
+        f"Also send this computer's country, now {country}, with the telemetry counts? It is read "
+        f"from the {country_source()}, never from an address, and goes as two letters beside the "
+        "random install identifier. `ecosemantic telemetry off` withdraws it. [y/N]"
+    )
+
+
+def _country_row(held: Mapping[str, object]) -> str:
+    country = held["country"]
+    if country is None:
+        return _row("country", f"none found in the {country_source()}, so none is sent")
+    if held["on"] and held["country_answer"] == "yes":
+        return _row("country", f"{country}, sent with the counts")
+    asks = "; `ecosemantic telemetry on` at a terminal asks" if held["on"] else ""
+    return _row("country", f"{country}, not sent{asks}")
+
+
 def _telemetry_rows(held: Mapping[str, object]) -> list[str]:
     if "error" in held:
         return [_row("error", held["error"])]
@@ -211,6 +232,7 @@ def _telemetry_rows(held: Mapping[str, object]) -> list[str]:
         _row("telemetry", f"{'on' if held['on'] else 'off'} ({held['reason']})"),
         _row("identifier", held["install_id"] or "none yet"),
         _row("endpoint", held["endpoint"]),
+        _country_row(held),
     ]
     if held["reason"] in (SWITCH, DO_NOT_TRACK):
         rows.append(

@@ -1,19 +1,28 @@
-"""The tool call in progress: who is making it, and what the tool hands the recorder about it."""
+"""The tool call in progress: the context of the caller who made it, and what the tool hands the
+recorder about it."""
 
 from __future__ import annotations
 
 import uuid
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+from ecosemantic.ports.types import Origin
+
+if TYPE_CHECKING:
+    from ecosemantic.mcp.context import ServerContext
 
 
 @dataclass
 class InProgress:
-    """One call while it runs: its agent and its client, the typed answer, and the system it is
-    about."""
+    """One call while it runs: its caller's context, its agent and its client, the door it came
+    through, the typed answer, and the system it is about."""
 
+    context: ServerContext
     agent: str
     client: str
+    origin: Origin
     answer: object = None
     product_system_id: uuid.UUID | None = None
 
@@ -34,6 +43,14 @@ def end(token: Token[InProgress | None]) -> None:
 def current() -> InProgress | None:
     """The call in progress, or none outside a tool call."""
     return _call.get()
+
+
+def calling() -> ServerContext:
+    """The context of the call in progress; a tool run outside a call raises."""
+    call = _call.get()
+    if call is None:
+        raise RuntimeError("a tool ran outside a call")
+    return call.context
 
 
 def note(answer: object) -> None:

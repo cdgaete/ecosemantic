@@ -5,11 +5,19 @@ from __future__ import annotations
 from importlib.metadata import version
 
 from fastmcp import FastMCP
+from fastmcp.exceptions import MCPError
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
-from mcp.types import InitializeRequest, InitializeResult
+from mcp.types import (
+    INVALID_REQUEST,
+    DiscoverRequest,
+    DiscoverResult,
+    InitializeRequest,
+    InitializeResult,
+)
 from opentelemetry.metrics import MeterProvider, NoOpMeterProvider
 from pydantic import JsonValue
 
+from ecosemantic.errors import EcoSemanticError
 from ecosemantic.mcp import (
     calculation,
     discovery,
@@ -25,7 +33,8 @@ from ecosemantic.mcp import (
     view,
 )
 from ecosemantic.mcp import graph as graph_tools
-from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.callers import calling_agent
+from ecosemantic.mcp.context import Callers, ServerContext
 from ecosemantic.mcp.counting import Counting
 from ecosemantic.mcp.effects import READ
 from ecosemantic.mcp.envelopes import Answer, ArgumentRefusal, boundary
@@ -165,35 +174,66 @@ ROSTER = [
 
 
 class Introducing(Middleware):
-    """Keeps the name and the version of the client that introduced itself to this server."""
+    """Answers each caller the instructions written for its own context, and keeps the name of the
+    client that introduced itself on that caller's context; a caller the host does not serve is
+    refused the handshake."""
 
-    def __init__(self, client: dict[str, str]) -> None:
-        self.client = client
+    def __init__(self, callers: Callers) -> None:
+        self.callers = callers
 
     async def on_initialize(
         self,
         context: MiddlewareContext[InitializeRequest],
         call_next: CallNext[InitializeRequest, InitializeResult | None],
     ) -> InitializeResult | None:
-        info = context.message.params.client_info
-        self.client.update({"name": info.name, "version": info.version})
-        return await call_next(context)
+        caller = await self._caller()
+        if context.message is not None:
+            info = context.message.params.client_info
+            caller.client.update({"name": info.name, "version": info.version})
+        answered = await call_next(context)
+        return (
+            None
+            if answered is None
+            else answered.model_copy(update={"instructions": instructions_for(caller)})
+        )
+
+    async def on_discover(
+        self,
+        context: MiddlewareContext[DiscoverRequest],
+        call_next: CallNext[DiscoverRequest, DiscoverResult | dict[str, JsonValue]],
+    ) -> DiscoverResult | dict[str, JsonValue]:
+        caller = await self._caller()
+        answered = await call_next(context)
+        written = instructions_for(caller)
+        if isinstance(answered, dict):
+            return {**answered, "instructions": written}
+        return answered.model_copy(update={"instructions": written})
+
+    async def _caller(self) -> ServerContext:
+        """The context of the caller this handshake belongs to, refused when the host does not
+        serve them."""
+        try:
+            return await calling_agent(self.callers)
+        except EcoSemanticError as refused:
+            raise MCPError(code=INVALID_REQUEST, message=str(refused)) from refused
 
 
 def build_server(
-    context: ServerContext | None = None,
+    context: Callers | None = None,
     graph: GraphQueryPort | None = None,
     meter_provider: MeterProvider | None = None,
 ) -> FastMCP:
-    """The server with its tools registered in roster order; no context registers none."""
+    """The server with its tools registered in roster order; `context` answers the context of each
+    request's caller, and none registers no tools. `graph` is one port for every caller, so a host
+    of several callers passes none."""
     server = FastMCP(
         name="ecosemantic",
         version=version("ecosemantic-mcp"),
-        instructions=instructions_for(context),
+        instructions=instructions_for(None),
         middleware=(
             [
                 Counting(ROSTER, meter_provider or NoOpMeterProvider()),
-                Introducing(context.client),
+                Introducing(context),
                 Recorder(context),
             ]
             if context is not None
@@ -203,19 +243,19 @@ def build_server(
     if context is None:
         return server
     server.add_middleware(ArgumentRefusal(server))
-    discovery.register(server, context)
-    systems.register(server, context)
-    graph_tools.register(server, context)
-    tables.register(server, context)
-    requests.register(server, context)
-    modelling.register(server, context)
-    parameters.register(server, context)
-    calculation.register(server, context)
-    runs.register(server, context)
-    installs.register(server, context)
+    discovery.register(server)
+    systems.register(server)
+    graph_tools.register(server)
+    tables.register(server)
+    requests.register(server)
+    modelling.register(server)
+    parameters.register(server)
+    calculation.register(server)
+    runs.register(server)
+    installs.register(server)
     panels.register(server)
     guides.register(server)
-    view.register(server, context)
+    view.register(server)
     if graph is not None:
         _register_graph(server, graph)
     return server

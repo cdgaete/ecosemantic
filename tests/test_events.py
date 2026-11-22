@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
+from ecosemantic.errors import Unavailable
 from ecosemantic.events import (
     Event,
     EventBus,
     NotifyingStorage,
+    following,
     pump_installs,
     pump_storage,
 )
@@ -22,15 +27,47 @@ from ecosemantic.ports.types import (
     InstallProgress,
     Layout,
     Outcome,
+    ProductSystemSummary,
     RequestDraft,
     Spot,
+    StoreChange,
 )
 from tests.conformance.activity import draft
 from tests.memory_installs import MemoryInstalls
+from tests.memory_runs import MemoryRuns
 from tests.memory_storage import MemoryStorage
 
 AGENT = Actor(kind="agent", id="mcp")
 PERSON = Actor(kind="person", name="Carlos")
+
+
+class UnwatchableRuns(MemoryRuns):
+    """A run store whose watch refuses to start."""
+
+    def changes(self) -> AsyncIterator[StoreChange]:
+        raise Unavailable("the run store is not watched here")
+
+
+class CancelledWatch(MemoryRuns):
+    """A run store whose watch is cancelled before it is armed."""
+
+    def changes(self) -> AsyncIterator[StoreChange]:
+        raise asyncio.CancelledError
+
+
+class CancelledPriming(MemoryStorage):
+    """A store whose listing is cancelled before the watch is armed."""
+
+    async def list_product_systems(self) -> list[ProductSystemSummary]:
+        raise asyncio.CancelledError
+
+
+class SilentStorage(MemoryStorage):
+    """A store whose listing never answers."""
+
+    async def list_product_systems(self) -> list[ProductSystemSummary]:
+        await asyncio.Event().wait()
+        return []
 
 
 def test_followers_counts_the_process_wide_queues() -> None:
@@ -237,3 +274,58 @@ async def test_pump_installs_publishes_an_install_another_process_moved() -> Non
     assert published.kind == "install"
     assert published.install is not None
     assert published.install.id == posted.id and published.install.status == "running"
+
+
+async def test_following_publishes_what_another_writer_stores(
+    product_system: ProductSystem,
+) -> None:
+    store = MemoryStorage()
+    writing = NotifyingStorage(store, EventBus())
+    bus = EventBus()
+    queue = bus.subscribe_all()
+    async with following(store, MemoryRuns(), MemoryInstalls(), bus):
+        entry = await writing.put_product_system(product_system, AGENT, "created")
+        published = await asyncio.wait_for(queue.get(), 5)
+    assert published.kind == "entry"
+    assert published.entry is not None and published.entry.seq == entry.seq
+
+
+async def test_following_raises_the_error_of_a_pump_that_ended_first() -> None:
+    bus = EventBus()
+    before = asyncio.all_tasks()
+    with pytest.raises(Unavailable, match="the run store is not watched here"):
+        async with following(MemoryStorage(), UnwatchableRuns(), MemoryInstalls(), bus):
+            pass
+    assert asyncio.all_tasks() - before == set()
+
+
+@pytest.mark.parametrize(
+    ("store", "runs"),
+    [(MemoryStorage, CancelledWatch), (CancelledPriming, MemoryRuns)],
+)
+async def test_following_refuses_a_pump_that_ended_with_no_error(
+    store: type[MemoryStorage], runs: type[MemoryRuns]
+) -> None:
+    bus = EventBus()
+    before = asyncio.all_tasks()
+    with pytest.raises(Unavailable, match="a pump of the store ended before it was ready"):
+        async with following(store(), runs(), MemoryInstalls(), bus):
+            pass
+    assert asyncio.all_tasks() - before == set()
+
+
+async def test_following_cancelled_while_starting_leaves_no_task() -> None:
+    entered = asyncio.Event()
+
+    async def enter() -> None:
+        async with following(SilentStorage(), MemoryRuns(), MemoryInstalls(), EventBus()):
+            entered.set()
+
+    before = asyncio.all_tasks()
+    task = asyncio.create_task(enter())
+    await asyncio.sleep(0.05)
+    assert not entered.is_set()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert asyncio.all_tasks() - before == set()

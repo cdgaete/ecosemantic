@@ -14,7 +14,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from ecosemantic.errors import Invalid, NotFound
-from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.context import Callers, ServerContext
 from ecosemantic.mcp.discovery import NO_DATABASE
 from ecosemantic.mcp.envelopes import Answer
 from ecosemantic.model.refs import Database
@@ -27,7 +27,7 @@ from ecosemantic.ports.classifications import (
 )
 from ecosemantic.ports.types import Compartment
 from ecosemantic.view.api import json_object
-from ecosemantic.view.handling import answering
+from ecosemantic.view.handling import for_caller
 
 T = TypeVar("T")
 DEFAULT_LIMIT = 20
@@ -81,11 +81,12 @@ def _ids(body: Mapping[str, JsonValue]) -> list[str]:
     return ids
 
 
-def routes(context: ServerContext) -> list[Route]:
-    """The databases the explorer browses, and the nine resources of one of them."""
+def routes(callers: Callers) -> list[Route]:
+    """The databases the explorer browses, and the nine resources of one of them, each read from
+    the ports of the request's caller."""
 
-    @answering
-    async def databases(request: Request) -> Response:
+    @for_caller(callers)
+    async def databases(request: Request, context: ServerContext) -> Response:
         listed = await context.inventory.list_databases()
         counted = [
             ListedDatabase(
@@ -96,12 +97,12 @@ def routes(context: ServerContext) -> list[Route]:
         ]
         return _answer(counted, hint=None if counted else NO_DATABASE)
 
-    @answering
-    async def summary(request: Request) -> Response:
+    @for_caller(callers)
+    async def summary(request: Request, context: ServerContext) -> Response:
         return _answer(await context.inventory.summarize(request.path_params["name"]))
 
-    @answering
-    async def classifications(request: Request) -> Response:
+    @for_caller(callers)
+    async def classifications(request: Request, context: ServerContext) -> Response:
         name = request.path_params["name"]
         schemes = await context.inventory.list_classifications(name)
         kinds = {
@@ -113,14 +114,14 @@ def routes(context: ServerContext) -> list[Route]:
         }
         return _answer(ordered_schemes(schemes, kinds))
 
-    @answering
-    async def tree(request: Request) -> Response:
+    @for_caller(callers)
+    async def tree(request: Request, context: ServerContext) -> Response:
         params = request.path_params
         values = await context.inventory.classification_values(params["name"], params["scheme"])
         return _answer(classification_tree(params["scheme"], values))
 
-    @answering
-    async def processes(request: Request) -> Response:
+    @for_caller(callers)
+    async def processes(request: Request, context: ServerContext) -> Response:
         params = request.path_params
         query = request.query_params
         node = query.get("node")
@@ -139,12 +140,12 @@ def routes(context: ServerContext) -> list[Route]:
             )
         )
 
-    @answering
-    async def compartments(request: Request) -> Response:
+    @for_caller(callers)
+    async def compartments(request: Request, context: ServerContext) -> Response:
         return _answer(await context.inventory.list_compartments(request.path_params["name"]))
 
-    @answering
-    async def flows(request: Request) -> Response:
+    @for_caller(callers)
+    async def flows(request: Request, context: ServerContext) -> Response:
         params = request.path_params
         query = request.query_params
         name = params["name"]
@@ -164,20 +165,20 @@ def routes(context: ServerContext) -> list[Route]:
             )
         )
 
-    @answering
-    async def read_flows(request: Request) -> Response:
+    @for_caller(callers)
+    async def read_flows(request: Request, context: ServerContext) -> Response:
         name = request.path_params["name"]
         database = await context.inventory.get_database(name)
         ids = _ids(await json_object(request))
         return _answer(await context.inventory.get_elementary_flows(database.elementary_flows, ids))
 
-    @answering
-    async def methods(request: Request) -> Response:
+    @for_caller(callers)
+    async def methods(request: Request, context: ServerContext) -> Response:
         listed = await context.inventory.list_methods(request.path_params["name"])
         return _answer(method_tree(listed))
 
-    @answering
-    async def factors(request: Request) -> Response:
+    @for_caller(callers)
+    async def factors(request: Request, context: ServerContext) -> Response:
         params = request.path_params
         query = request.query_params
         return _answer(

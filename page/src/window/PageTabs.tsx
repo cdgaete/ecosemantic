@@ -8,10 +8,10 @@ export interface PageTab {
   path: string
 }
 
-export function PageTabs({ pages, active }: { pages: PageTab[]; active: string }) {
+export function PageTabs({ pages, active, at = 'bottom' }: { pages: PageTab[]; active: string; at?: 'top' | 'bottom' }) {
   const location = useLocation()
   return (
-    <nav className="flex flex-wrap gap-1 border-t bg-chrome p-1" aria-label="Pages">
+    <nav className={cn('flex flex-wrap gap-1 bg-chrome p-1', at === 'top' ? 'border-b' : 'border-t')} aria-label="Pages">
       {pages.map((page) => (
         <AppLink
           key={page.key}

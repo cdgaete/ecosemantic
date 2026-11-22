@@ -144,7 +144,7 @@ function SideTable({
 }
 
 export function InventoryPage({ result }: { result: Result }) {
-  const { id, params, system, hash, root, stale, waiting } = result
+  const { id, params, system, hash, root, stale, waiting, state, variant } = result
   const [compartment, setCompartment] = useState('')
   const [typed, setTyped] = useState('')
   const [query, setQuery] = useState('')
@@ -158,12 +158,13 @@ export function InventoryPage({ result }: { result: Result }) {
     order,
     limit: 100,
     demand: demandOf(params!, root),
+    ...(variant !== null ? { variant } : {}),
   }
   const table = { id, hash, body, enabled: !stale, waiting, actions: action, system }
   const resetKey = `${compartment}|${query}|${order}`
   return (
     <>
-      <EditorHeader icon="result" page="Inventory results" entity={system?.name ?? ''} />
+      <EditorHeader icon="result" page="Inventory results" entity={system?.name ?? ''} state={state} />
       <div className="flex flex-wrap items-center gap-3 px-4 pb-2 text-xs">
         <label className="flex min-w-0 max-w-full items-center gap-1">
           Compartment

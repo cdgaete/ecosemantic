@@ -13,12 +13,13 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from ecosemantic.errors import Invalid
-from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.context import Callers, ServerContext
 from ecosemantic.mcp.envelopes import as_uuid
+from ecosemantic.mcp.host import refuse_replayed_path
 from ecosemantic.mcp.recording import current_hash
 from ecosemantic.ports.types import open_trail, trail
 from ecosemantic.view.api import IMPACT_TOOL, structured
-from ecosemantic.view.handling import answering
+from ecosemantic.view.handling import for_caller
 
 
 def _listed(items: Sequence[BaseModel]) -> JSONResponse:
@@ -34,15 +35,15 @@ def _time(text: str | None) -> datetime | None:
         raise Invalid(f"after={text!r} is not an ISO 8601 time") from error
 
 
-def routes(server: FastMCP, context: ServerContext) -> list[Route]:
-    """The six activity routes."""
+def routes(server: FastMCP, callers: Callers) -> list[Route]:
+    """The six activity routes, each over the context its request's caller resolves to."""
 
-    @answering
-    async def agents(request: Request) -> Response:
+    @for_caller(callers)
+    async def agents(request: Request, context: ServerContext) -> Response:
         return _listed(await context.activity.list_agents())
 
-    @answering
-    async def calls(request: Request) -> Response:
+    @for_caller(callers)
+    async def calls(request: Request, context: ServerContext) -> Response:
         query = request.query_params
         named = query.get("product_system_id")
         return _listed(
@@ -53,30 +54,31 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             )
         )
 
-    @answering
-    async def entry_trail(request: Request) -> Response:
+    @for_caller(callers)
+    async def entry_trail(request: Request, context: ServerContext) -> Response:
         system_id = as_uuid(request.path_params["id"])
         await context.storage.get_product_system(system_id)
         recorded = await context.activity.list_calls()
         return _listed(trail(recorded, system_id, request.path_params["seq"]))
 
-    @answering
-    async def calculations(request: Request) -> Response:
+    @for_caller(callers)
+    async def calculations(request: Request, context: ServerContext) -> Response:
         system_id = as_uuid(request.path_params["id"])
         await context.storage.get_product_system(system_id)
         recorded = await context.activity.list_calls(product_system_id=system_id)
         return _listed([call for call in reversed(recorded) if call.tool == IMPACT_TOOL])
 
-    @answering
-    async def agent_trail(request: Request) -> Response:
+    @for_caller(callers)
+    async def agent_trail(request: Request, context: ServerContext) -> Response:
         recorded = await context.activity.list_calls()
         named = request.query_params.get("product_system_id")
         system_id = as_uuid(named) if named is not None else None
         return _listed(open_trail(recorded, request.path_params["agent"], system_id))
 
-    @answering
-    async def rerun(request: Request) -> Response:
+    @for_caller(callers)
+    async def rerun(request: Request, context: ServerContext) -> Response:
         call = await context.activity.get_call(as_uuid(request.path_params["call_id"]))
+        refuse_replayed_path(call.tool, call.arguments)
         if call.effect in ("write", "delete"):
             raise Invalid(f"{call.tool} changes a model; the page reruns reads and calculations")
         result = await structured(server, context, call.tool, call.arguments, started=True)

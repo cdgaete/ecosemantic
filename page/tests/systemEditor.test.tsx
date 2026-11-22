@@ -8,7 +8,6 @@ import type { ProductSystem, SystemRead } from '@/api/types'
 import { useUi } from '@/store/ui'
 import system from './fixtures/system.json'
 import validation from './fixtures/validation.json'
-import anchors from './fixtures/anchors.json'
 import elementaryFlow from './fixtures/elementary_flow.json'
 import log from './fixtures/log.json'
 import requests from './fixtures/requests.json'
@@ -26,7 +25,6 @@ vi.mock('@/api/client', async (importOriginal) => {
       databases: vi.fn(async () => databases),
       system: vi.fn(async () => system),
       validation: vi.fn(async () => validation),
-      anchors: vi.fn(async () => anchors),
       elementaryFlow: vi.fn(async () => elementaryFlow),
       log: vi.fn(async () => log),
       requests: vi.fn(async () => requests),
@@ -43,6 +41,10 @@ vi.mock('@/api/client', async (importOriginal) => {
 const rootProcess = system.value.processes.find((p) => p.code === system.value.reference_process)!
 
 describe('system editor', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('shows General information with the reference process the system names', async () => {
     renderAt(`/systems/${system.value.id}/general`, <App router={false} />)
     await waitFor(() => expect(screen.getByText(`General information – ${system.value.name}`)).toBeInTheDocument())
@@ -62,14 +64,18 @@ describe('system editor', () => {
   })
 
   it('says when a request and its outcome were made as how long ago, keeping each instant on it', async () => {
-    renderAt(`/systems/${system.value.id}/requests`, <App router={false} />)
     const answered = requests.value[1]
     const outcome = answered.outcome!
+    // a millisecond before the request is nine hours old: a clock that moved between the page and the test would read 9
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(new Date(answered.timestamp).getTime() + 9 * 3_600_000 - 1))
+    renderAt(`/systems/${system.value.id}/requests`, <App router={false} />)
     const row = (await screen.findByText(answered.message)).closest('li') as HTMLElement
     const stamps = [...row.querySelectorAll('time')]
     expect(stamps).toHaveLength(2)
     expect(stamps[0].getAttribute('datetime')).toBe(answered.timestamp)
     expect(stamps[0].getAttribute('title')).toBe(answered.timestamp)
+    expect(stamps[0].textContent).toBe('8 h ago')
     expect(stamps[0].textContent).toBe(formatAgo(answered.timestamp))
     expect(stamps[1].getAttribute('datetime')).toBe(outcome.timestamp)
     expect(stamps[1].getAttribute('title')).toBe(outcome.timestamp)

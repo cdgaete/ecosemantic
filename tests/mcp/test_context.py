@@ -54,7 +54,8 @@ def test_outside_a_call_the_context_acts_as_its_own_actor(context: ServerContext
 
 
 def test_inside_a_call_the_context_acts_as_the_agent(context: ServerContext) -> None:
-    token = begin(InProgress(agent="electricity", client="claude-code"))
+    call = InProgress(context=context, agent="electricity", client="claude-code", origin="agent")
+    token = begin(call)
     try:
         assert context.acting() == Actor(kind="agent", id="electricity", name="claude-code")
     finally:

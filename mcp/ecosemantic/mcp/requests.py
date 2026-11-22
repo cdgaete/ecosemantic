@@ -96,7 +96,7 @@ async def resolve_request(
     return Answer[Request](value=request, view_url=context.deep_link(system_id))
 
 
-def register(server: FastMCP, context: ServerContext) -> None:
+def register(server: FastMCP) -> None:
     """Register the two request tools, in roster order."""
     server.tool(
         name="list_requests",
@@ -106,7 +106,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "requests without an outcome by default, everything with open_only=false. Answer "
             "a request in the conversation, then resolve_request."
         ),
-    )(boundary(bound(list_requests, context)))
+    )(boundary(bound(list_requests)))
     server.tool(
         name="resolve_request",
         annotations=WRITE,
@@ -114,4 +114,4 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "Record the answer to an open request: accepted, with the fix as the next write, "
             "or overridden, with the reason. The person sees the outcome beside the request."
         ),
-    )(boundary(serialised(context.lock)(bound(resolve_request, context))))
+    )(boundary(serialised(bound(resolve_request))))

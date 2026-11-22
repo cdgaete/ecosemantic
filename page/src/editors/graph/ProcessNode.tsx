@@ -1,7 +1,7 @@
 import { Handle, Position, useStore, type NodeProps } from '@xyflow/react'
 import { memo, type CSSProperties, type ReactNode } from 'react'
 import type { CardGeometry, Exchange } from '@/api/types'
-import { formatAmount } from '@/lib/format'
+import { formatAmount, formatShare } from '@/lib/format'
 import { AppLink } from '@/lib/router'
 import { paths } from '@/lib/paths'
 import { rowsOf } from '@/lib/placement'
@@ -71,7 +71,7 @@ function Row({ exchange, systemId, hot, scaled, card }: { exchange: Exchange; sy
 }
 
 function ProcessNodeComponent({ data }: NodeProps<ProcessNodeType>) {
-  const { process, reference, hot, hotExchanges, outline, systemId, placement, card } = data
+  const { process, reference, hot, hotExchanges, outline, systemId, placement, card, own, supplies } = data
   const { inputs, outputs } = rowsOf(process, placement)
   const detail = useStore((s) => detailAt(s.transform[2]))
   const chosen = useUi((s) => s.chosenProcess === process.id)
@@ -96,12 +96,15 @@ function ProcessNodeComponent({ data }: NodeProps<ProcessNodeType>) {
           <Handle key={port.exchange_id} type="target" position={Position.Left} id={port.exchange_id} style={{ top: port.y }} className="!bg-link-stroke" />
         ))}
         <Handle type="source" position={Position.Right} id="out" style={{ top: placement.output }} className="!bg-link-stroke" />
-        <div style={{ height: detail === 'rows' ? card.header_height : '100%' }} className={cn('flex gap-2 overflow-hidden px-3 font-semibold leading-snug', detail === 'rows' ? 'items-start py-1' : 'items-start py-3 text-2xl')}>
+        <div style={{ height: detail === 'rows' ? card.header_height : '100%' }} className={cn('grid grid-cols-[auto_minmax(0,1fr)_auto] gap-x-2 overflow-hidden px-3 font-semibold leading-snug', detail === 'rows' ? 'content-start items-start py-1' : 'content-start items-start py-3 text-2xl')}>
           <Icon name="process" />
           <AppLink to={paths.process(systemId, process.code)} title={process.name} className={cn('min-w-0 hover:underline nodrag nopan', detail === 'rows' ? 'line-clamp-1 break-all' : 'line-clamp-3 [overflow-wrap:anywhere]')}>
             {process.name}
           </AppLink>
-          <span className="ml-auto shrink-0 rounded-full bg-muted px-1.5 font-normal text-muted-foreground">{process.location}</span>
+          <span className="shrink-0 rounded-full bg-muted px-1.5 font-normal text-muted-foreground">{process.location}</span>
+          {supplies === null ? null : (
+            <span className="col-start-2 row-start-2 text-xs font-normal leading-tight text-muted-foreground">{`supplies ${supplies.processes} processes in ${supplies.stages} stages`}</span>
+          )}
         </div>
         {detail === 'rows' ? (
           <>
@@ -125,6 +128,15 @@ function ProcessNodeComponent({ data }: NodeProps<ProcessNodeType>) {
           </>
         ) : null}
       </div>
+      {own !== null ? (
+        <span
+          data-own
+          title={`Own part: ${formatAmount(own.score)} ${own.unit}, ${formatShare(own.fraction)}`}
+          className="nodrag nopan absolute bottom-0 right-1 translate-y-1/2 rounded-full border bg-background px-1.5 text-xs tabular-nums"
+        >
+          own {formatAmount(own.score)}
+        </span>
+      ) : null}
       {chosen ? <div aria-hidden data-selection className="pointer-events-none absolute inset-0 rounded-xl outline outline-2 outline-dashed outline-foreground outline-offset-[6px]" /> : null}
     </>
   )

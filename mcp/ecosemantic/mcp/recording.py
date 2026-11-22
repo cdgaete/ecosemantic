@@ -14,16 +14,18 @@ from fastmcp.tools.base import Tool, ToolResult
 from mcp.types import CallToolRequestParams
 from pydantic import JsonValue
 
-from ecosemantic.errors import ErrorEnvelope, Invalid, NotFound
+from ecosemantic.errors import EcoSemanticError, ErrorEnvelope, Invalid, NotFound, NotSupported
 from ecosemantic.events import Event
+from ecosemantic.mcp.callers import calling_agent, request_scope
 from ecosemantic.mcp.calls import InProgress, begin, end
-from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.context import Callers
 from ecosemantic.mcp.effects import effect_of
 from ecosemantic.mcp.envelopes import envelope_of, tool_error
+from ecosemantic.mcp.host import refuse_remote_path
 from ecosemantic.model.refs import slug
 from ecosemantic.model.summary import Summarising
 from ecosemantic.ports.storage import StoragePort
-from ecosemantic.ports.types import CallDraft, Effect, LogEntry, Origin, checked_agent
+from ecosemantic.ports.types import CallDraft, Effect, LogEntry, checked_agent
 
 VIEW = "view"
 AGENT_PARAMETER = "agent"
@@ -47,14 +49,14 @@ def client_name(context: MiddlewareContext[CallToolRequestParams]) -> str | None
 
 def agent_named(on_url: str | None, configured: str | None, client: str) -> str:
     """The calling agent's name: the one on the URL it calls, else the one the server was given,
-    else its client's name as a slug. The page's name is the page's alone."""
+    else its client's name as a slug. An agent is never named as the page."""
     if on_url is not None:
         name = on_url
     elif configured is not None:
         name = configured
     else:
         name = slug(client, "-")
-    if name == VIEW and client != VIEW:
+    if name == VIEW:
         raise Invalid(f"{VIEW!r} names the page; name the agent otherwise")
     return checked_agent(name)
 
@@ -80,11 +82,13 @@ def _named_system(arguments: Mapping[str, object]) -> uuid.UUID | None:
 
 
 class Recorder(Middleware):
-    """Records every tool call an agent makes, and every calculation a person starts from the
-    page; the calculations the page makes to draw a result are not recorded."""
+    """Resolves the caller of every tool call before anything reads a port, refuses a call through
+    the bridge that names a path, and records every call an agent makes, a refused one included,
+    and every calculation a person starts from the page; the calculations the page makes to draw a
+    result are not recorded."""
 
-    def __init__(self, context: ServerContext) -> None:
-        self.context = context
+    def __init__(self, callers: Callers) -> None:
+        self.callers = callers
 
     async def on_call_tool(
         self,
@@ -100,26 +104,37 @@ class Recorder(Middleware):
         client = client_name(context)
         if client is None:
             raise RuntimeError("a tool call arrived before its client introduced itself")
+        try:
+            caller = await calling_agent(self.callers)
+        except EcoSemanticError as refused:
+            raise tool_error(refused) from refused
         request = served.request_context.request if served.request_context else None
         on_url = request.query_params.get(AGENT_PARAMETER) if request is not None else None
         meta = served.request_context.meta if served.request_context else None
         started = isinstance(meta, dict) and meta.get(STARTED) is True
         try:
-            agent = agent_named(on_url, self.context.agent, client)
+            agent = agent_named(on_url, caller.agent, client)
         except Invalid as refused:
             raise tool_error(refused) from refused
+        arguments = dict(context.message.arguments or {})
+
+        async def run() -> ToolResult:
+            try:
+                refuse_remote_path(request_scope(), tool.name, arguments)
+            except NotSupported as refused:
+                raise tool_error(refused) from refused
+            return await call_next(context)
+
         return await recorded(
-            self.context,
             tool,
-            dict(context.message.arguments or {}),
-            InProgress(agent=agent, client=client),
+            arguments,
+            InProgress(context=caller, agent=agent, client=client, origin="agent"),
             started,
-            lambda: call_next(context),
+            run,
         )
 
 
 async def recorded(
-    context: ServerContext,
     tool: Tool,
     arguments: dict[str, JsonValue],
     progress: InProgress,
@@ -128,7 +143,7 @@ async def recorded(
 ) -> ToolResult:
     """Run one tool call as the call in progress, and record it when it is kept: every call an
     agent makes, and every calculation a person starts from the page."""
-    origin: Origin = "view" if progress.client == VIEW else "agent"
+    origin = progress.origin
     effect = effect_of(tool.annotations, tool.tags) if origin == "agent" or started else None
     token = begin(progress)
     started_at = datetime.now(UTC)
@@ -143,9 +158,7 @@ async def recorded(
         end(token)
         if effect is not None and (origin == "agent" or effect == "compute"):
             await _record(
-                context,
                 progress,
-                origin,
                 tool.name,
                 effect,
                 arguments,
@@ -156,9 +169,7 @@ async def recorded(
 
 
 async def _record(
-    context: ServerContext,
     progress: InProgress,
-    origin: Origin,
     tool: str,
     effect: Effect,
     arguments: dict[str, JsonValue],
@@ -166,6 +177,7 @@ async def _record(
     duration_ms: int,
     failed: ErrorEnvelope | None,
 ) -> None:
+    context = progress.context
     answer = progress.answer
     system = progress.product_system_id or _named_system(arguments)
     entry = answer.entry if isinstance(answer, Logged) else None
@@ -176,7 +188,8 @@ async def _record(
         CallDraft(
             agent=progress.agent,
             client=progress.client,
-            origin=origin,
+            person=context.person,
+            origin=progress.origin,
             tool=tool,
             effect=effect,
             arguments=arguments,

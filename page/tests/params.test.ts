@@ -1,4 +1,4 @@
-import { parseParams, serializeParams, toImpactArguments } from '@/editors/results/params'
+import { parseParams, serializeParams, toImpactArguments, variantOf } from '@/editors/results/params'
 
 describe('result params', () => {
   it('round-trips through the query string and reads no Monte Carlo block', () => {
@@ -24,6 +24,12 @@ describe('result params', () => {
       variants: ['small'],
       demand: [{ ref: { kind: 'foreground', code: 'widget' }, amount: 3 }],
     })
+  })
+
+  it('reads the case the address names, and none from an absent or an empty one', () => {
+    expect(variantOf('?method_id=m&variant=heavy')).toBe('heavy')
+    expect(variantOf('?method_id=m')).toBeNull()
+    expect(variantOf('?variant=')).toBeNull()
   })
 
   it('hands a demand on as it was recorded', () => {

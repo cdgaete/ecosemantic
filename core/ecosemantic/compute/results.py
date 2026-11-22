@@ -7,6 +7,7 @@ import uuid
 from pydantic import BaseModel, Field, model_validator
 
 from ecosemantic.compute.montecarlo import PairedDelta
+from ecosemantic.compute.stages import StagePart
 from ecosemantic.model.entities import Method, method_by_id
 from ecosemantic.model.refs import Database, DemandItem
 from ecosemantic.model.summary import Summary, SummaryScore
@@ -110,11 +111,12 @@ class InventoryResult(BaseModel):
 
 class ContributionResult(BaseModel):
     """One decomposition of a total over the database build `database` names: flat over
-    emitters, nested over paths, or flat over flows, with the processes of each loop holding a
-    credit, whose delivery no check decides, and each exchange sending a positive amount to a
-    treatment, which runs it backwards. `cut` is what a flat list leaves out, under its cut-off
-    and past its length, and a tree holds its own `truncated` beside none. `method` is the
-    method of `total`, which names it by `method_id`."""
+    emitters, nested over paths, flat over flows, or split over life-cycle stages, with the
+    processes of each loop holding a credit, whose delivery no check decides, and each exchange
+    sending a positive amount to a treatment, which runs it backwards. `cut` is what a flat list
+    leaves out, under its cut-off and past its length, and a tree holds its own `truncated`
+    beside none. `method` is the method of `total`, which names it by `method_id`, and `variant`
+    is the case or the scenario it decomposed, none for the base."""
 
     database: Database
     by: Decomposition
@@ -127,7 +129,9 @@ class ContributionResult(BaseModel):
     root: TreeNode | None = None
     truncated: bool | None = None
     flows: list[FlowHotspot] | None = None
+    stages: list[StagePart] | None = None
     cut: Cut | None = None
+    variant: str | None = None
 
     def summarise(self) -> Summary:
         """The total the decomposition divides."""
@@ -147,4 +151,9 @@ class ContributionResult(BaseModel):
         return self
 
 
-_ROWS: dict[Decomposition, str] = {"process": "processes", "path": "root", "flow": "flows"}
+_ROWS: dict[Decomposition, str] = {
+    "process": "processes",
+    "path": "root",
+    "flow": "flows",
+    "stage": "stages",
+}

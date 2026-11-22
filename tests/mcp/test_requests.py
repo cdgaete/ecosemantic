@@ -10,20 +10,16 @@ from fastmcp.exceptions import ToolError
 
 from ecosemantic.mcp import modelling, requests, systems
 from ecosemantic.mcp.context import ServerContext
-from ecosemantic.mcp.server import build_server
 from ecosemantic.model.entities import Actor
 from ecosemantic.ports.types import RequestDraft
+from tests.registered import registered
 
 PERSON = Actor(kind="person", name="Carlos")
 
 
 @pytest.fixture(scope="module")
 def server(context: ServerContext) -> FastMCP:
-    built = build_server()
-    systems.register(built, context)
-    requests.register(built, context)
-    modelling.register(built, context)
-    return built
+    return registered(context, systems, requests, modelling)
 
 
 async def test_a_request_rides_on_the_next_write_and_resolves_once(

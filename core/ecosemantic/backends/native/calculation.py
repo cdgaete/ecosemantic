@@ -19,7 +19,7 @@ from ecosemantic.compute.montecarlo import (
     standing,
     summarize_samples,
 )
-from ecosemantic.engine.calculation import Calculation, Solution
+from ecosemantic.engine.calculation import ActivityScore, Calculation, LinkedScore, Solution
 from ecosemantic.engine.foreground import Foreground
 from ecosemantic.engine.montecarlo import Counts, MonteCarlo, Refactorised, Serial
 from ecosemantic.engine.paths import PathNode
@@ -44,12 +44,15 @@ from ecosemantic.ports.types import (
     FlowType,
     Hotspot,
     Hotspots,
+    InputPart,
     InventoryResult,
     InventoryRow,
     LinkedLoop,
     MonteCarloCategory,
     MonteCarloConfig,
     MonteCarloResult,
+    OwnPart,
+    OwnParts,
     Score,
     Stopped,
     System,
@@ -349,6 +352,40 @@ class NativeCalculation:
 
         return await self._run(system, run)
 
+    async def own_parts(self, system: System, demand: list[DemandItem], method: Method) -> OwnParts:
+        def run(calculation: Calculation) -> OwnParts:
+            foreground = self._foreground(calculation, system)
+            if foreground is None:
+                raise Invalid("a split by stage needs a product_system")
+            scores = calculation.own_scores(foreground, demand, method)
+            activities = self._activities(
+                system.database,
+                (
+                    entry.label
+                    for part in scores.parts
+                    for entry in part.inputs
+                    if isinstance(entry, ActivityScore)
+                ),
+            )
+            parts = []
+            for part in scores.parts:
+                parts.append(
+                    OwnPart(
+                        ref=part.ref,
+                        direct=part.direct,
+                        inputs=[
+                            _input_part(entry, foreground, activities, system.database)
+                            for entry in part.inputs
+                        ],
+                        score=part.score,
+                    )
+                )
+            return OwnParts(
+                total=Score(value=scores.total, unit=method.unit, method_id=method.id), parts=parts
+            )
+
+        return await self._run(system, run)
+
     async def inventory(self, system: System, demand: list[DemandItem]) -> InventoryResult:
         def run(calculation: Calculation) -> InventoryResult:
             foreground = self._foreground(calculation, system)
@@ -517,3 +554,22 @@ def _nodes(root: PathNode) -> Sequence[PathNode]:
     for child in root.children:
         found += _nodes(child)
     return found
+
+
+def _input_part(
+    entry: ActivityScore | LinkedScore,
+    foreground: Foreground,
+    activities: dict[str, Named],
+    database: str,
+) -> InputPart:
+    """One input of an own process, named as people read it."""
+    if isinstance(entry, ActivityScore):
+        activity = activities[entry.label]
+        return InputPart(
+            ref=BackgroundRef(database=database, id=entry.label),
+            name=activity.name,
+            location=activity.location,
+            score=entry.score,
+        )
+    process = foreground.columns[entry.position].process
+    return InputPart(ref=entry.ref, name=process.name, location=process.location, score=entry.score)

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useContributions } from '@/api/queries'
 import { useCategory } from '@/lib/address'
 import { categoryLabel, formatAmount, formatShare, methodById } from '@/lib/format'
+import { stageByCode, stageNames } from '@/lib/stageColours'
 import { RequestAction } from '@/requests/RequestAction'
 import { DataTable, type Column } from '@/window/DataTable'
 import { EditorHeader } from '@/window/EditorHeader'
@@ -13,15 +14,18 @@ import { demandOf } from './params'
 import type { Result } from './ResultsEditor'
 
 export function SankeyPage({ result }: { result: Result }) {
-  const { id, params, system, impact, hash, root, stale, waiting } = result
+  const { id, params, system, impact, hash, root, stale, waiting, state, variant } = result
   const scores = impact.data?.value.scores ?? []
   const methods = impact.data?.value.methods ?? []
   const [share, setShare] = useState(1)
   const [maxNodes, setMaxNodes] = useState(10)
   const { chosen, choose } = useCategory(scores, id, (category) => category.value)
   const chosenMethod = chosen === undefined ? undefined : methodById(methods, chosen.method_id)
-  const tree = useContributions(id, hash, { by: 'path', method_id: chosen?.method_id, max_level: 6, max_nodes: maxNodes, cutoff: share / 100, demand: demandOf(params!, root) }, chosen !== undefined && !stale)
-  const figure = useMemo(() => (tree.data?.value.root ? sankeyFromTree(tree.data.value.root) : null), [tree.data])
+  const tree = useContributions(id, hash, { by: 'path', method_id: chosen?.method_id, max_level: 6, max_nodes: maxNodes, cutoff: share / 100, demand: demandOf(params!, root), ...(variant !== null ? { variant } : {}) }, chosen !== undefined && !stale)
+  const split = useContributions(id, hash, { by: 'stage', method_id: chosen?.method_id, demand: demandOf(params!, root), ...(variant !== null ? { variant } : {}) }, chosen !== undefined && !stale)
+  const byCode = useMemo(() => (split.data ? stageByCode(split.data.value) : new Map<string, string | null>()), [split.data])
+  const stages = useMemo(() => (split.data ? stageNames(split.data.value) : []), [split.data])
+  const figure = useMemo(() => (tree.data?.value.root ? sankeyFromTree(tree.data.value.root, (code) => byCode.get(code) ?? null) : null), [tree.data, byCode])
   const unit = tree.data?.value.total.unit ?? ''
   const action = <RequestAction systemId={id} entity="product_system" entityId={id} />
   const columns: Column<SankeyNodeDatum>[] = [
@@ -31,7 +35,7 @@ export function SankeyPage({ result }: { result: Result }) {
   ]
   return (
     <>
-      <EditorHeader icon="result" page="Sankey diagram" entity={system?.name ?? ''} />
+      <EditorHeader icon="result" page="Sankey diagram" entity={system?.name ?? ''} state={state} />
       <div className="grid grid-cols-1 gap-x-6 gap-y-1 border-b px-4 py-1 text-xs @lg:grid-cols-3">
         <span>
           <b>{system?.name}</b>
@@ -61,7 +65,7 @@ export function SankeyPage({ result }: { result: Result }) {
       </div>
       <Section title="Sankey diagram" sectionKey={`results:${id}:sankey`} actions={action}>
         {tree.error ? <p className="text-destructive">{tree.error.message}</p> : null}
-        {figure ? <Sankey nodes={figure.nodes} links={figure.links} unit={unit} title={chosenMethod ? categoryLabel(chosenMethod) : ''} /> : !tree.error ? <p className="text-muted-foreground">{waiting}</p> : null}
+        {figure ? <Sankey nodes={figure.nodes} links={figure.links} unit={unit} title={chosenMethod ? categoryLabel(chosenMethod) : ''} stages={stages} /> : !tree.error ? <p className="text-muted-foreground">{waiting}</p> : null}
       </Section>
       {figure ? (
         <Section title="Sankey nodes" sectionKey={`results:${id}:sankey-nodes`} actions={action}>

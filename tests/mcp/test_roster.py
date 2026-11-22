@@ -163,7 +163,8 @@ async def test_a_bound_graph_backend_registers_graph_query_last(context: ServerC
 
 
 async def test_the_instructions_walk_the_write_path(context: ServerContext) -> None:
-    text = build_server(context).instructions or ""
+    async with Client(build_server(context)) as client:
+        text = client.instructions or ""
     for name in (
         "list_databases",
         "search_processes",
@@ -200,8 +201,6 @@ READ_ONLY = {
     "get_product_system",
     "validate_product_system",
     "get_parameters",
-    "export_product_system",
-    "export_tables",
     "get_product_system_log",
     "graph_layout",
     "list_requests",
@@ -215,7 +214,14 @@ READ_ONLY = {
     "get_install",
     "view_link",
 }
-DESTRUCTIVE = {"delete_product_system", "delete_process", "delete_exchange", "delete_scenario"}
+DESTRUCTIVE = {
+    "delete_product_system",
+    "delete_process",
+    "delete_exchange",
+    "delete_scenario",
+    "export_product_system",
+    "export_tables",
+}
 
 
 async def test_every_tool_declares_its_effect(context: ServerContext) -> None:

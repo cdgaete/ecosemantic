@@ -10,6 +10,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 from ecosemantic.compute.results import ContributionResult, ImpactResult, InventoryResult
+from ecosemantic.compute.stages import StagePart
 from ecosemantic.model.entities import Method, method_by_id
 from ecosemantic.model.refs import DemandItem, slug
 from ecosemantic.ports.types import (
@@ -217,6 +218,59 @@ def _walk(node: TreeNode) -> list[TreeNode]:
     return [node, *[descendant for child in node.children for descendant in _walk(child)]]
 
 
+def _stage_rows(part: StagePart) -> list[dict[str, str]]:
+    """One stage's rows: the stage, then each process's own part with its direct emissions and
+    each of its inputs, under the stage the row sits beneath."""
+    stage = part.stage or ""
+    rows = [
+        {
+            "stage": stage,
+            "kind": "stage",
+            "ref": "",
+            "name": part.stage or "no stage",
+            "location": "",
+            "score": number(part.score),
+            "fraction": number(part.fraction),
+        }
+    ]
+    for process in part.processes:
+        rows.append(
+            {
+                "stage": stage,
+                "kind": "process",
+                "ref": process.ref.model_dump_json(),
+                "name": process.name,
+                "location": process.location or "",
+                "score": number(process.score),
+                "fraction": number(process.fraction),
+            }
+        )
+        rows.append(
+            {
+                "stage": stage,
+                "kind": "direct",
+                "ref": "",
+                "name": "",
+                "location": "",
+                "score": number(process.direct),
+                "fraction": "",
+            }
+        )
+        rows.extend(
+            {
+                "stage": stage,
+                "kind": "input" if one.kind == "process" else one.kind,
+                "ref": "" if one.ref is None else one.ref.model_dump_json(),
+                "name": one.name,
+                "location": one.location or "",
+                "score": number(one.score),
+                "fraction": number(one.fraction),
+            }
+            for one in process.inputs
+        )
+    return rows
+
+
 def write_contribution(
     root: Path, key: ResultKey, result: ContributionResult, at: datetime
 ) -> Path:
@@ -302,6 +356,12 @@ def write_contribution(
                 }
                 for node in _walk(result.root)
             ],
+        )
+    elif result.stages is not None:
+        write_csv(
+            folder / CONTRIBUTIONS,
+            ["stage", "kind", "ref", "name", "location", "score", "fraction"],
+            [row for part in result.stages for row in _stage_rows(part)],
         )
     return folder
 

@@ -12,10 +12,12 @@ from starlette.routing import Route
 
 from ecosemantic.errors import Invalid, Unauthorised
 from ecosemantic.mcp.accounts import account_advice, entry_for
-from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.context import Callers, ServerContext
+from ecosemantic.mcp.host import OPERATOR_ACCOUNTS, refuse_host
+from ecosemantic.mcp.reach import reach
 from ecosemantic.ports.types import Account, CredentialKind
-from ecosemantic.view.api import json_object, reach
-from ecosemantic.view.handling import answering
+from ecosemantic.view.api import json_object
+from ecosemantic.view.handling import for_caller
 
 KIND = TypeAdapter(CredentialKind)
 KINDS: tuple[str, ...] = get_args(CredentialKind)
@@ -40,22 +42,24 @@ def _kind(name: str) -> CredentialKind:
         ) from error
 
 
-def routes(context: ServerContext) -> list[Route]:
+def routes(callers: Callers) -> list[Route]:
     """The kinds held, how a request reached the engine, one kind entered and one cleared, from
     this machine only."""
 
-    @answering
-    async def held(request: Request) -> Response:
+    @for_caller(callers)
+    async def held(request: Request, context: ServerContext) -> Response:
+        refuse_host(context, "/api/credentials", instead=OPERATOR_ACCOUNTS)
         _peer(request, context)
         return JSONResponse({"held": sorted(context.credentials)})
 
-    @answering
-    async def entry(request: Request) -> Response:
+    @for_caller(callers)
+    async def entry(request: Request, context: ServerContext) -> Response:
         answer = entry_for(context.accounts, reach(request.scope))
         return JSONResponse(answer.model_dump(mode="json"))
 
-    @answering
-    async def entered(request: Request) -> Response:
+    @for_caller(callers)
+    async def entered(request: Request, context: ServerContext) -> Response:
+        refuse_host(context, "/api/credentials/{kind}", instead=OPERATOR_ACCOUNTS)
         _peer(request, context)
         kind = _kind(request.path_params["kind"])
         body = await json_object(request)
@@ -74,8 +78,9 @@ def routes(context: ServerContext) -> list[Route]:
         context.credentials[kind] = account
         return Response(status_code=204)
 
-    @answering
-    async def cleared(request: Request) -> Response:
+    @for_caller(callers)
+    async def cleared(request: Request, context: ServerContext) -> Response:
+        refuse_host(context, "/api/credentials/{kind}", instead=OPERATOR_ACCOUNTS)
         _peer(request, context)
         context.credentials.pop(_kind(request.path_params["kind"]), None)
         return Response(status_code=204)

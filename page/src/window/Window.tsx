@@ -5,6 +5,7 @@ import { BuildLine } from '@/activity/BuildLine'
 import { Timeline } from '@/activity/Timeline'
 import { withoutToken } from '@/api/client'
 import { useProcessStream } from '@/api/processStream'
+import { ResultBand } from '@/editors/results/ResultBand'
 import { cn } from '@/lib/utils'
 import { useUi } from '@/store/ui'
 import { Canvas } from './Canvas'
@@ -18,7 +19,7 @@ import { NameIsland } from './NameIsland'
 import { closeNavigation } from './navigation'
 import { NavigationSheet } from './NavigationSheet'
 import { Palette } from './Palette'
-import { originAfter, sheetOf, systemOf, useSheet, type Place } from './sheets'
+import { dockedOf, originAfter, sheetOf, systemOf, useSheet, type Place } from './sheets'
 import { useToolsPlace } from './tools'
 import { ToolsIsland } from './ToolsIsland'
 import { LEAVE_EVENT, useShortcuts } from './shortcuts'
@@ -49,14 +50,17 @@ export function Window() {
   const setOrigin = useUi((s) => s.setOrigin)
   const sheet = useSheet()
   const sheetTo = sheet?.to ?? null
+  const docked = sheet?.docked === true && named !== null
+  const overlay = sheet !== null && !docked
   const behind = named === null && sheetTo !== null && !narrow ? systemOf(sheetTo) : null
   const drawn = named ?? behind
-  const paged = named === null || sheet !== null
+  const paged = named === null || overlay
+  const setSheetOpen = useUi((s) => s.setSheetOpen)
   const toolsMoved = useToolsPlace((s) => (s.live ?? s.held) !== null)
   useIslandClearance(
     grid,
-    `${named ?? 'no system'} ${inspectorShown ? 'shown' : 'hidden'} ${inspectorMode} ${narrow ? 'narrow' : 'roomy'} ${toolsOpen ? 'tools open' : 'tools closed'} ${toolsMoved ? 'tools moved' : 'tools docked'}`,
-    sheet !== null && drawn !== null,
+    `${named ?? 'no system'} ${inspectorShown ? 'shown' : 'hidden'} ${inspectorMode} ${narrow ? 'narrow' : 'roomy'} ${toolsOpen ? 'tools open' : 'tools closed'} ${toolsMoved ? 'tools moved' : 'tools docked'} ${docked ? 'result docked' : 'result closed'}`,
+    overlay && drawn !== null,
   )
   const last = useRef<Place | null>(null)
   useEffect(() => {
@@ -72,6 +76,9 @@ export function Window() {
     return () => window.removeEventListener(LEAVE_EVENT, leave)
   }, [sheetTo, go])
   useEffect(() => {
+    if (docked && narrow) setSheetOpen(false)
+  }, [docked, narrow, setSheetOpen])
+  useEffect(() => {
     if (named !== null) setCanvasSystem(named)
     else if (location.pathname === '/') setCanvasSystem(null)
   }, [named, location.pathname, setCanvasSystem])
@@ -84,7 +91,7 @@ export function Window() {
   useEffect(() => {
     if (shownPath.current === location.pathname) return
     shownPath.current = location.pathname
-    if (opensInspector(location.pathname) && (narrow || sheetOf(location.pathname) === null)) openInspector()
+    if (opensInspector(location.pathname) && !dockedOf(location.pathname) && (narrow || sheetOf(location.pathname) === null)) openInspector()
     closeNavigation()
   }, [location.pathname, narrow])
   return (
@@ -95,12 +102,13 @@ export function Window() {
             <Canvas systemId={drawn} />
           </div>
         )}
-        {sheet === null ? null : <div aria-hidden data-scrim title={sheet.label} className="absolute inset-0 bg-black/30" onClick={() => go(sheet.to)} />}
+        {overlay ? <div aria-hidden data-scrim title={sheet.label} className="absolute inset-0 bg-black/30" onClick={() => go(sheet.to)} /> : null}
         <div
           ref={grid}
           className={cn(
             'pointer-events-none absolute inset-0 grid gap-3 p-3 [&>*]:pointer-events-auto [&>*]:min-w-0',
             narrow ? 'grid-cols-[auto_minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto]' : 'grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_minmax(0,1fr)_auto]',
+            docked && !narrow && 'grid-rows-[auto_minmax(0,2fr)_minmax(0,3fr)]',
           )}
         >
           <Dock menus={wide ? null : <MenuButton menus={menus} go={go} />} view={narrow || paged ? null : <Slot name="view" />} />
@@ -137,6 +145,24 @@ export function Window() {
                 <Outlet />
               </div>
             </section>
+          ) : docked ? (
+            <section
+              aria-label="Result"
+              data-clear={narrow ? undefined : 'bottom'}
+              className={cn(
+                'flex min-h-0 flex-col overflow-hidden rounded-xl border bg-background shadow-lg',
+                narrow ? 'col-span-2 col-start-1 row-span-2 row-start-2' : 'col-span-2 col-start-2 row-start-3',
+              )}
+            >
+              {narrow ? (
+                <div className="flex flex-wrap items-center gap-1 border-b p-1">
+                  <ResultBand systemId={named} />
+                </div>
+              ) : null}
+              <div className="@container min-h-0 flex-1 overflow-auto">
+                <Outlet />
+              </div>
+            </section>
           ) : (
             <>
               {narrow && toolsOpen ? (
@@ -159,7 +185,7 @@ export function Window() {
               <Slot name="notice" />
             </div>
           )}
-          {narrow && named !== null ? <BuildLine systemId={named} live={canvas.live} toolsOpen={toolsOpen} onTools={() => setToolsOpen(!toolsOpen)} /> : null}
+          {narrow && named !== null && !docked ? <BuildLine systemId={named} live={canvas.live} toolsOpen={toolsOpen} onTools={() => setToolsOpen(!toolsOpen)} /> : null}
           <NavigationSheet />
         </div>
         {dialog}

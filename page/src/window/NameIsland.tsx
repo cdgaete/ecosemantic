@@ -1,9 +1,11 @@
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, History } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
-import { useServer, useSystem } from '@/api/queries'
+import { said } from '@/activity/digest'
+import { useLog, useServer, useSystem } from '@/api/queries'
 import { Button } from '@/components/ui/button'
 import { AppLink } from '@/lib/router'
+import { useGo } from '@/lib/paths'
 import { cn } from '@/lib/utils'
 import { RequestsBadge, ValidationBadge } from './Badges'
 import { NARROW_BELOW } from './inspector'
@@ -19,6 +21,21 @@ function BackButton({ back }: { back: SheetReturn }) {
       <AppLink to={back.to}>
         <ArrowLeft /> {back.label}
       </AppLink>
+    </Button>
+  )
+}
+
+function BuildButton({ back, entries }: { back: SheetReturn; entries: number }) {
+  const go = useGo()
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      className="h-5 shrink-0 px-1"
+      title="Back to the graph and its build timeline"
+      onClick={() => go(back.to)}
+    >
+      <History /> {`Build · ${said(entries, 'entry', 'entries')}`}
     </Button>
   )
 }
@@ -42,6 +59,8 @@ function PageName({ back, narrow }: { back: SheetReturn | null; narrow: boolean 
 export function NameIsland({ menus, systemId }: { menus: ReactNode; systemId: string | null }) {
   const back = useSheet()
   const read = useSystem(systemId ?? '', systemId !== null)
+  const log = useLog(systemId ?? '', systemId !== null)
+  const entries = log.data?.value.length ?? 0
   const client = useServer().data?.client ?? null
   const name = read.data?.value.name ?? ''
   const narrow = !useMinWidth(NARROW_BELOW)
@@ -79,6 +98,7 @@ export function NameIsland({ menus, systemId }: { menus: ReactNode; systemId: st
                   Connected: {client.name}
                 </span>
               )}
+              {back?.docked === true ? <BuildButton back={back} entries={entries} /> : null}
             </div>
           )}
           {narrow ? null : <PinChips />}

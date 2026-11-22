@@ -438,6 +438,15 @@ def method_by_id(methods: list[Method], method_id: str) -> Method:
     raise Invalid(f"no method {method_id!r} among the {len(methods)} this answer lists")
 
 
+class Person(BaseModel):
+    """The signed-in person a record belongs to."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str = Field(min_length=1)
+    name: str | None = None
+
+
 class Actor(BaseModel):
     """Who performed a write: an agent, a person, or a service."""
 
@@ -446,6 +455,13 @@ class Actor(BaseModel):
     kind: ActorKind
     id: str | None = None
     name: str | None = None
+    on_behalf_of: Person | None = Field(default=None, exclude_if=lambda who: who is None)
+
+    @model_validator(mode="after")
+    def _a_person_acts_for_no_one(self) -> Actor:
+        if self.kind == "person" and self.on_behalf_of is not None:
+            raise ValueError("a person acts for no one")
+        return self
 
 
 class ProductSystem(BaseModel):

@@ -17,6 +17,9 @@ from ecosemantic.geometry import (
     ROW_GAP,
     Placement,
     Port,
+    Region,
+    SharedSupplier,
+    StageRegions,
     card_size,
     link_texts,
     linked_card,
@@ -26,11 +29,13 @@ from ecosemantic.geometry import (
     shown_inputs,
 )
 from ecosemantic.model.entities import Process, ProductSystem
+from ecosemantic.model.stages import stage_of, stage_order
 from ecosemantic.ports.types import Side
 from ecosemantic.routes import route
 from ecosemantic.troubles import score, troubles
 
 MAX_PERMUTED = 6
+REGION_PAD = 24.0
 
 
 class _Anatomy(BaseModel):
@@ -73,6 +78,94 @@ def nodes(system: ProductSystem) -> dict[str, list[str]]:
         if arrow.provider not in providers:
             providers.append(arrow.provider)
         found.setdefault(arrow.provider, [])
+    return found
+
+
+def card_stages(system: ProductSystem) -> dict[str, str | None]:
+    """The stage every card of a drawing belongs to: a process's own, and a linked system's the
+    one its consuming processes share, None when they share none or hold several."""
+    found: dict[str, str | None] = {p.code: stage_of(p) for p in system.processes}
+    consumers: dict[str, list[str]] = {}
+    for arrow in links(system):
+        consumers.setdefault(arrow.provider, []).append(arrow.consumer)
+    by_code = {p.code: p for p in system.processes}
+    for provider, taking in consumers.items():
+        if provider in found:
+            continue
+        held = {stage_of(by_code[code]) for code in taking}
+        found[provider] = held.pop() if len(held) == 1 else None
+    return found
+
+
+def _padded(cards: list[Placement]) -> Region:
+    """One region around these cards, padded by `REGION_PAD` on every side."""
+    left = min(card.x for card in cards)
+    top = min(card.y for card in cards)
+    right = max(card.x + card.width for card in cards)
+    bottom = max(card.y + card.height for card in cards)
+    return Region(
+        x=left - REGION_PAD,
+        y=top - REGION_PAD,
+        width=right - left + 2 * REGION_PAD,
+        height=bottom - top + 2 * REGION_PAD,
+    )
+
+
+def _within(card: Placement, left: float, right: float) -> bool:
+    """Whether the card's rectangle lies within these left and right edges."""
+    return left <= card.x and card.x + card.width <= right
+
+
+def stage_regions(system: ProductSystem, placements: list[Placement]) -> list[StageRegions]:
+    """Each stage that holds a card, in `stage_order`, with its cards in the order the drawing
+    places them and the regions that hold them: one around the cards nobody held and the held
+    cards within the columns those cards span, and one around each held card outside them. A
+    stage whose cards are all held answers one region per card."""
+    stages = card_stages(system)
+    by_stage: dict[str, list[Placement]] = {}
+    for placement in placements:
+        stage = stages[placement.code]
+        if stage is not None:
+            by_stage.setdefault(stage, []).append(placement)
+    found: list[StageRegions] = []
+    for stage in stage_order(system):
+        cards = by_stage.get(stage)
+        if cards is None:
+            continue
+        free = [card for card in cards if not card.held]
+        regions: list[Region] = []
+        if not free:
+            regions = [_padded([card]) for card in cards]
+        else:
+            left = min(card.x for card in free)
+            right = max(card.x + card.width for card in free)
+            inside = [card for card in cards if not card.held or _within(card, left, right)]
+            regions.append(_padded(inside))
+            regions += [
+                _padded([card]) for card in cards if card.held and not _within(card, left, right)
+            ]
+        found.append(
+            StageRegions(stage=stage, codes=[card.code for card in cards], regions=regions)
+        )
+    return found
+
+
+def shared_suppliers(system: ProductSystem) -> list[SharedSupplier]:
+    """Each card of no stage whose consumers hold two or more stages, in card order, with how many
+    processes it feeds and how many stages those processes hold."""
+    stages = card_stages(system)
+    consumers: dict[str, list[str]] = {}
+    for arrow in links(system):
+        consumers.setdefault(arrow.provider, []).append(arrow.consumer)
+    found: list[SharedSupplier] = []
+    for code, stage in stages.items():
+        if stage is not None:
+            continue
+        fed = consumers.get(code, [])
+        held = {stages[consumer] for consumer in fed} - {None}
+        if len(held) < 2:
+            continue
+        found.append(SharedSupplier(code=code, processes=len(set(fed)), stages=len(held)))
     return found
 
 
@@ -119,6 +212,31 @@ def depths(system: ProductSystem, anchors: list[str]) -> dict[str, int]:
         if code not in found:
             found[code] = deepest + 1
     return found
+
+
+def _columns(system: ProductSystem, distances: dict[str, int]) -> tuple[dict[str, int], int]:
+    """Each card's column and how many columns the drawing takes: the distances themselves when
+    no card carries a stage, and otherwise one band of columns per stage, from the first stage of
+    `stage_order` at the right and the cards of no stage at the left. Inside a band a card's column
+    is the rank of its distance among the band's cards, nearest first."""
+    stages = card_stages(system)
+    if all(stage is None for stage in stages.values()):
+        return distances, max(distances.values(), default=0) + 1
+    order = stage_order(system)
+    bands = {
+        code: len(order) if stage is None else order.index(stage) for code, stage in stages.items()
+    }
+    in_band: dict[int, list[str]] = {}
+    for code, band in bands.items():
+        in_band.setdefault(band, []).append(code)
+    columns: dict[str, int] = {}
+    total = 0
+    for band in sorted(in_band):
+        found = sorted({distances[code] for code in in_band[band]})
+        for code in in_band[band]:
+            columns[code] = total + found.index(distances[code])
+        total += len(found)
+    return columns, total
 
 
 def _ordered(column: list[str], previous: list[str], consumers: dict[str, list[str]]) -> list[str]:
@@ -221,10 +339,10 @@ def arrange(
     sides: Mapping[str, Side],
     amounts: Mapping[str, Mapping[uuid.UUID, float]] | None = None,
 ) -> list[Placement]:
-    """Every card's place: columns measured from the anchors, ordered by median to start, then
-    each column of two to six free cards tried in every order and kept when the drawing's score
-    falls, or ties with a lower height. Packed at real heights, and centred on the anchor when
-    there is exactly one.
+    """Every card's place: columns measured from the anchors, or one band of columns per stage
+    when any card carries one, ordered by median to start, then each column of two to six free
+    cards tried in every order and kept when the drawing's score falls, or ties with a lower
+    height. Packed at real heights, and centred on the anchor when there is exactly one.
 
     A card in `held` keeps the position it was given and the rest pack around it. `sides` puts
     each elementary flow of the system on its side, by the flow's native id. `amounts` are the
@@ -238,21 +356,21 @@ def arrange(
         if code.startswith(LINKED):
             anatomy[code] = _linked_anatomy()
     sizes = {code: (a.width, a.height) for code, a in anatomy.items()}
-    column_of = depths(system, anchors)
+    distances = depths(system, anchors)
+    column_of, total = _columns(system, distances)
     consumers: dict[str, list[str]] = {}
     for code, providers in drawn.items():
         for provider in providers:
             consumers.setdefault(provider, []).append(code)
-    deepest = max(column_of.values(), default=0)
     columns: dict[int, list[str]] = {}
     for code in drawn:
         columns.setdefault(column_of[code], []).append(code)
 
     def _place(orders: dict[int, list[str]]) -> list[Placement]:
         placements: list[Placement] = []
-        for depth in sorted(orders):
-            order = orders[depth]
-            x = float(deepest - depth) * (CARD_WIDTH + COLUMN_GAP)
+        for column in sorted(orders):
+            order = orders[column]
+            x = float(total - 1 - column) * (CARD_WIDTH + COLUMN_GAP)
             taken = _held_spans(held, sizes, x)
             free = [code for code in order if code not in held]
             tops = _stack(free, sizes, taken)
@@ -266,7 +384,7 @@ def arrange(
                         y=spot[1] if spot else tops[code],
                         width=card.width,
                         height=card.height,
-                        depth=depth,
+                        depth=distances[code],
                         shown_inputs=card.shown_inputs,
                         held=spot is not None,
                         inputs=card.inputs,
@@ -278,9 +396,9 @@ def arrange(
 
     orders: dict[int, list[str]] = {}
     previous: list[str] = []
-    for depth in sorted(columns):
-        orders[depth] = _ordered(sorted(columns[depth]), previous, consumers)
-        previous = orders[depth]
+    for column in sorted(columns):
+        orders[column] = _ordered(sorted(columns[column]), previous, consumers)
+        previous = orders[column]
     drawn_links = links(system)
     texts = link_texts(system, amounts)
 
@@ -291,12 +409,15 @@ def arrange(
 
     best = measured(orders)
     for _ in range(2):
-        for depth in sorted(orders):
-            free = [c for c in orders[depth] if c not in held]
+        for column in sorted(orders):
+            free = [c for c in orders[column] if c not in held]
             if len(free) < 2 or len(free) > MAX_PERMUTED:
                 continue
             for order in permutations(free):
-                candidate = {**orders, depth: [*order, *[c for c in orders[depth] if c in held]]}
+                candidate = {
+                    **orders,
+                    column: [*order, *[c for c in orders[column] if c in held]],
+                }
                 trial = measured(candidate)
                 if trial[:2] < best[:2]:
                     best, orders = trial, candidate

@@ -7,13 +7,13 @@ from starlette.responses import Response
 from starlette.routing import Route
 
 from ecosemantic.errors import Invalid
-from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.context import Callers, ServerContext
 from ecosemantic.mcp.envelopes import as_uuid
 from ecosemantic.mcp.systems import export_model
 from ecosemantic.view.handling import (
-    answering,
     created,
     download_name,
+    for_caller,
     sent,
     unchanged,
     uploaded,
@@ -31,24 +31,26 @@ def _entry_of(stated: object) -> int | None:
     return int(stated)
 
 
-def routes(context: ServerContext) -> list[Route]:
-    """The download and the return."""
+def routes(callers: Callers) -> list[Route]:
+    """The download and the return, over the context the request's caller resolves to."""
 
-    @answering
-    async def package_zip(request: Request) -> Response:
+    @for_caller(callers)
+    async def package_zip(request: Request, context: ServerContext) -> Response:
         system_id = as_uuid(request.path_params["id"])
         with working("ecosemantic-export-", keep=True) as work:
             zipped = work / f"{system_id}.zip"
             system, _ = await export_model(context, system_id, zipped)
             return sent(zipped, work, download_name(system, "openlca"))
 
-    @answering
-    async def returned(request: Request) -> Response:
+    @for_caller(callers)
+    async def returned(request: Request, context: ServerContext) -> Response:
         system_id = as_uuid(request.path_params["id"])
         with working("ecosemantic-return-") as work:
-            exported, actor = await uploaded(request, "package", "the exported zip", work)
+            exported, stated = await uploaded(request, "package", "the exported zip", work)
             at_entry = _entry_of((await request.form()).get("at_entry"))
-            entry = await context.storage.return_package(system_id, exported, actor, at_entry)
+            entry = await context.storage.return_package(
+                system_id, exported, context.posted_by(stated), at_entry
+            )
         if entry is None:
             return unchanged("The returned package changes nothing; no entry was written.")
         return created(entry)

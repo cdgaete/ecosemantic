@@ -51,11 +51,37 @@ async def test_the_map_names_every_card_and_says_what_is_wrong(
         "score",
         "bounds",
         "scaling",
+        "stages",
+        "shared_suppliers",
         "card",
     }
     assert all(t["kind"] != "cards_overlap" for t in answer["troubles"])
     assert all(len(e["points"]) >= 2 for e in answer["edges"])
     assert answer["bounds"]["width"] > 0
+
+
+async def test_graph_layout_answers_the_stages_and_their_regions(
+    full_server: FastMCP, fixture_system_stored: ProductSystem, context: ServerContext
+) -> None:
+    system = fixture_system_stored.model_copy(deep=True, update={"id": uuid.uuid4()})
+    system.process("widget").metadata["life_cycle_stage"] = "assembly"
+    system.process("frame").metadata["life_cycle_stage"] = "materials"
+    await context.storage.put_product_system(system, context.actor, "created")
+    async with Client(full_server) as client:
+        staged = (
+            await client.call_tool("graph_layout", {"product_system_id": str(system.id)})
+        ).structured_content["value"]
+        plain = (
+            await client.call_tool(
+                "graph_layout", {"product_system_id": str(fixture_system_stored.id)}
+            )
+        ).structured_content["value"]
+    assert [entry["stage"] for entry in staged["stages"]] == ["assembly", "materials"]
+    assert [entry["codes"] for entry in staged["stages"]] == [["widget"], ["frame"]]
+    assert all(len(entry["regions"]) == 1 for entry in staged["stages"])
+    assert staged["shared_suppliers"] == []
+    assert plain["stages"] == []
+    assert plain["shared_suppliers"] == []
 
 
 async def test_arranging_holds_the_cards_it_names(

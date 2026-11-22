@@ -228,7 +228,7 @@ async def rebase_links(
     return await answer_write(context, moved, entry, stored, changed)
 
 
-def register(server: FastMCP, context: ServerContext) -> None:
+def register(server: FastMCP) -> None:
     """Register the process tools, then the exchange tools, in roster order."""
     server.tool(
         name="create_process",
@@ -238,7 +238,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "production_amount of the reference product in the process unit. An "
             "alternative supplier is an ordinary process whose amount a parameter sets."
         ),
-    )(boundary(serialised(context.lock)(bound(create_process, context))))
+    )(boundary(serialised(bound(create_process))))
     server.tool(
         name="update_process",
         annotations=WRITE,
@@ -247,7 +247,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "metadata keys given replace, others stay. The unit changes only while nothing "
             "consumes the process. The code is fixed."
         ),
-    )(boundary(serialised(context.lock)(bound(update_process, context))))
+    )(boundary(serialised(bound(update_process))))
     server.tool(
         name="delete_process",
         annotations=DELETE,
@@ -255,7 +255,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "Remove a process and its exchanges. Refused while another process consumes it "
             "or a scenario references it; delete those first."
         ),
-    )(boundary(serialised(context.lock)(bound(delete_process, context))))
+    )(boundary(serialised(bound(delete_process))))
     server.tool(
         name="create_exchange",
         annotations=WRITE,
@@ -279,7 +279,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             '"database": ..., "id": ...}, {"type": "lognormal", "params": {"loc": ..., '
             '"scale": ...}}.'
         ),
-    )(boundary(serialised(context.lock)(bound(create_exchange, context))))
+    )(boundary(serialised(bound(create_exchange))))
     server.tool(
         name="update_exchange",
         annotations=WRITE,
@@ -292,12 +292,12 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "uncertainty moves the exchange's distribution onto the new amount. Type and "
             "input are fixed; delete and create to change them."
         ),
-    )(boundary(serialised(context.lock)(bound(update_exchange, context))))
+    )(boundary(serialised(bound(update_exchange))))
     server.tool(
         name="delete_exchange",
         annotations=DELETE,
         description="Remove an exchange. Refused while a scenario overrides it; delete that first.",
-    )(boundary(serialised(context.lock)(bound(delete_exchange, context))))
+    )(boundary(serialised(bound(delete_exchange))))
     server.tool(
         name="rebase_links",
         annotations=WRITE,
@@ -306,4 +306,4 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "or only its links to one of them. A link names the state it was made against, and "
             "a linked system's later edits reach this system through this write alone."
         ),
-    )(boundary(serialised(context.lock)(bound(rebase_links, context))))
+    )(boundary(serialised(bound(rebase_links))))

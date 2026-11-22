@@ -88,6 +88,32 @@ class Placement(BaseModel):
         return SummaryItem(label=self.code)
 
 
+class Region(BaseModel):
+    """A rectangle in the drawing's own coordinates, holding the cards of one stage."""
+
+    x: float
+    y: float
+    width: float
+    height: float
+
+
+class StageRegions(BaseModel):
+    """One stage's cards in the order the drawing places them, and the regions that hold them."""
+
+    stage: str
+    codes: list[str]
+    regions: list[Region]
+
+
+class SharedSupplier(BaseModel):
+    """A card of no stage: how many processes it feeds and how many of the system's stages those
+    processes span."""
+
+    code: str
+    processes: int
+    stages: int
+
+
 def _is_input(exchange: Exchange, sides: Mapping[str, Side]) -> bool:
     if exchange.type == "product":
         return True

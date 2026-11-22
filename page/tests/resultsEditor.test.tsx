@@ -104,7 +104,8 @@ it('names both hashes when the calculation was recorded on an earlier version', 
   vi.mocked(api.system).mockResolvedValue(system as SystemRead)
   vi.mocked(api.calculations).mockResolvedValue(callOn({ at_hash: 'feedbeef0000aaaa' }))
   renderAt(`/systems/${system.value.id}/results/impact?call=${recorded.id}`, <Screens />)
-  expect(await screen.findByText(/Recorded on feedbe…aaaa; computed here on the current model/)).toBeInTheDocument()
+  const docked = await screen.findByRole('region', { name: 'Result' })
+  expect(await within(docked).findByText(/Recorded on feedbe…aaaa; computed here on the current model/)).toBeInTheDocument()
 })
 
 it('says when no calculation of that id is recorded', async () => {

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ecosemantic.compute.parameters import refuse_double_spread, require_centred
 from ecosemantic.errors import Conflict, Invalid
-from ecosemantic.model.canonical import content_hash
+from ecosemantic.model.canonical import content_hash, is_content_hash
 from ecosemantic.model.entities import Actor, ProductSystem
 from ecosemantic.package.jsonld import BASE_TAG, Stated, read_jsonld, stated_base, write_jsonld
 from ecosemantic.package.log import changes_nothing, next_entry, read_log, refuse_base, write_log
@@ -42,7 +42,11 @@ def _snapshot(root: Path, product_system: ProductSystem) -> None:
 
 
 def read_version(root: Path, product_system_id: uuid.UUID, version_hash: str) -> ProductSystem:
-    """The product system state a content hash names, as the package snapshotted it."""
+    """The product system state a content hash names, as the package snapshotted it. A caller
+    states the hash, so a text of another shape names no version and is never joined into a
+    path."""
+    if not is_content_hash(version_hash):
+        raise no_version(product_system_id, version_hash)
     path = _versions(root) / f"{version_hash}.json"
     if not path.is_file():
         raise no_version(product_system_id, version_hash)

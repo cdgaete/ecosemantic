@@ -7,7 +7,7 @@ import shutil
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import olca_schema as o
 from olca_schema import units as olca_units
@@ -121,6 +121,16 @@ def _unit_refs(unit: str) -> tuple[o.Ref, o.Ref, o.Ref]:
     if unit_ref is None:
         unit_ref = _ref(o.RefType.Unit, keygen("unit", symbol), symbol)
     return unit_ref, group_ref, property_ref
+
+
+def _refuse_path_id(entity: o.RootEntity) -> None:
+    """Invalid for an entity whose id would name a path as its file. An installed database's ids
+    are its publisher's text, and a package is refused before any of its files is replaced."""
+    filed = f"{entity.id}.json"
+    if PureWindowsPath(filed).name != filed:
+        raise Invalid(
+            f"the id {entity.id!r} of {entity.name!r} is a path, and an entity's id names its file"
+        )
 
 
 def _write_entity(root: Path, entity: o.RootEntity) -> None:
@@ -478,6 +488,8 @@ class _Writer:
             *parameters,
             system,
         ]
+        for entity in entities:
+            _refuse_path_id(entity)
         for folder in _FOLDERS.values():
             shutil.rmtree(root / folder, ignore_errors=True)
         root.mkdir(parents=True, exist_ok=True)

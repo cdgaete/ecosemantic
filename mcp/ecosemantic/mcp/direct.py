@@ -38,10 +38,9 @@ async def run_tool(
             raise tool_error(Invalid(f"{name}: {error.title} does not validate")) from error
 
     result = await recorded(
-        context,
         tool,
         dict(arguments),
-        InProgress(agent=VIEW, client=VIEW),
+        InProgress(context=context, agent=VIEW, client=VIEW, origin="view"),
         started,
         run,
     )

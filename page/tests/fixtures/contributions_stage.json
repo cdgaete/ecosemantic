@@ -1,0 +1,115 @@
+{
+  "hint": null,
+  "value": {
+    "by": "stage",
+    "credit_loops": [],
+    "cut": null,
+    "database": {
+      "elementary_flows": "fixture-biosphere",
+      "fingerprint": "ab4a4851ae4bc8a41d356d0da3b12a8727e59dcd7f46776f7016caa670b616d9",
+      "name": "fixture",
+      "revision": null,
+      "scheme": "olca",
+      "system_model": "unit process",
+      "version": "1"
+    },
+    "flows": null,
+    "linked_credit_loops": [],
+    "method": {
+      "id": "m_bff077f3bd",
+      "impact_category": "climate change",
+      "impact_method": "gwp",
+      "indicator": "GWP100",
+      "spec": "fixture > gwp > climate change > GWP100",
+      "tuple": [
+        "fixture",
+        "gwp",
+        "climate change",
+        "GWP100"
+      ],
+      "unit": "kg CO2-Eq"
+    },
+    "processes": null,
+    "root": null,
+    "stages": [
+      {
+        "fraction": 1.0,
+        "processes": [
+          {
+            "direct": 0.1,
+            "fraction": 0.5988455988455988,
+            "inputs": [
+              {
+                "fraction": 0.3342953342953343,
+                "kind": "process",
+                "location": "GLO",
+                "name": "steel production",
+                "ref": {
+                  "database": "fixture",
+                  "id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c",
+                  "kind": "background"
+                },
+                "score": 1.3900000000000001
+              },
+              {
+                "fraction": 0.2405002405002405,
+                "kind": "process",
+                "location": "GLO",
+                "name": "electricity production",
+                "ref": {
+                  "database": "fixture",
+                  "id": "4a018168-2ca8-56de-a7f7-c7ce8f6a5040_81c36885-6d13-58e3-ba9a-869123a0f84c",
+                  "kind": "background"
+                },
+                "score": 1.0
+              }
+            ],
+            "location": "GLO",
+            "name": "widget assembly",
+            "ref": {
+              "code": "widget",
+              "kind": "foreground"
+            },
+            "score": 2.49
+          },
+          {
+            "direct": 0.0,
+            "fraction": 0.40115440115440115,
+            "inputs": [
+              {
+                "fraction": 0.40115440115440115,
+                "kind": "process",
+                "location": "GLO",
+                "name": "steel production",
+                "ref": {
+                  "database": "fixture",
+                  "id": "4f4cd935-e76c-526e-ab03-7655288e357a_492f207c-0a66-5f26-acf9-c12ac5accb4c",
+                  "kind": "background"
+                },
+                "score": 1.6680000000000001
+              }
+            ],
+            "location": "GLO",
+            "name": "frame production",
+            "ref": {
+              "code": "frame",
+              "kind": "foreground"
+            },
+            "score": 1.6680000000000001
+          }
+        ],
+        "score": 4.158,
+        "stage": null
+      }
+    ],
+    "total": {
+      "method_id": "m_bff077f3bd",
+      "unit": "kg CO2-Eq",
+      "value": 4.158
+    },
+    "treatments_run_backwards": [],
+    "truncated": null,
+    "variant": null
+  },
+  "view_url": null
+}

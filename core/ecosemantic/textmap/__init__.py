@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import math
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 from ecosemantic.errors import Invalid
-from ecosemantic.geometry import FOLD_AFTER, ROW_HEIGHT, Placement, linked_code
+from ecosemantic.geometry import FOLD_AFTER, ROW_HEIGHT, Placement, StageRegions, linked_code
 from ecosemantic.model.entities import Exchange, ProductSystem
 from ecosemantic.model.refs import SystemRef
 from ecosemantic.quantity import written
@@ -21,6 +21,7 @@ LEGEND = (
     "1 char = 10 px across, 1 line = 11 px down; ● a card's output, ▶ an arrow entering an "
     "input row, ┼ two arrows crossing, # an arrow over a card"
 )
+REGION_LEGEND = f"{LEGEND}, · a stage's region"
 GLYPHS: dict[frozenset[str], str] = {
     frozenset("LR"): "─",
     frozenset("UD"): "│",
@@ -136,11 +137,34 @@ def _title(
     return _fit(placement.code, " · ", amount, room)
 
 
-def as_text(system: ProductSystem, placements: list[Placement], routes: list[Route]) -> str:
+def _region(
+    grid: list[list[str]],
+    stage: str,
+    c0: int,
+    c1: int,
+    l0: int,
+    l1: int,
+) -> None:
+    """One stage's region drawn in `·`, its name written into the top border after one `·`."""
+    for line in range(l0, l1 + 1):
+        for col in range(c0, c1 + 1):
+            if line in (l0, l1) or col in (c0, c1):
+                grid[line][col] = "·"
+    for n, ch in enumerate(stage[: max(c1 - c0 - 1, 0)]):
+        grid[l0][c0 + 1 + n] = ch
+
+
+def as_text(
+    system: ProductSystem,
+    placements: list[Placement],
+    routes: list[Route],
+    stages: Sequence[StageRegions] = (),
+) -> str:
     """The legend, then the canvas: cards as boxes titled by code, and by scaled output when
     scaled, with the first `FOLD_AFTER` input rows named and one row reading how many inputs sit
     behind the fold; arrows in box-drawing characters, `▶` on the row an arrow feeds, `┼` where
-    arrows of two providers cross, `#` where an arrow runs over a card."""
+    arrows of two providers cross, `#` where an arrow runs over a card. Each region of `stages`
+    is drawn in `·` under the cards, with its stage's name on its top border."""
     if not placements:
         return LEGEND + "\n(no processes)"
     xs = [p.x for p in placements] + [p.x + p.width for p in placements]
@@ -148,6 +172,10 @@ def as_text(system: ProductSystem, placements: list[Placement], routes: list[Rou
     for r in routes:
         xs += [x for x, _ in r.points]
         ys += [y for _, y in r.points]
+    for stage in stages:
+        for region in stage.regions:
+            xs += [region.x, region.x + region.width]
+            ys += [region.y, region.y + region.height]
     left, top = min(xs), min(ys)
     width = math.ceil((max(xs) - left) / SCALE_X) + 1
     height = math.floor((max(ys) - top) / SCALE_Y) + 1
@@ -167,6 +195,16 @@ def as_text(system: ProductSystem, placements: list[Placement], routes: list[Rou
         for e in p.exchanges
         if isinstance(e.input, SystemRef)
     }
+    for stage in stages:
+        for region in stage.regions:
+            _region(
+                grid,
+                stage.stage,
+                col(region.x),
+                col(region.x + region.width),
+                row(region.y),
+                row(region.y + region.height),
+            )
     for p in placements:
         c0, c1 = col(p.x), col(p.x + p.width) - 1
         l0, l1 = row(p.y), row(p.y + p.height - 0.001)
@@ -228,4 +266,5 @@ def as_text(system: ProductSystem, placements: list[Placement], routes: list[Rou
                 grid[line][c] = "┼"
         line, c = cells[-1]
         grid[line][c] = "▶"
-    return "\n".join([LEGEND] + ["".join(line).rstrip() for line in grid])
+    legend = REGION_LEGEND if stages else LEGEND
+    return "\n".join([legend] + ["".join(line).rstrip() for line in grid])

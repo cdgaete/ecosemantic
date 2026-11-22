@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Mapping
 from importlib import metadata
 
 from fastmcp import FastMCP
@@ -11,11 +11,9 @@ from pydantic import JsonValue, ValidationError
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
-from starlette.types import Scope
 
 from ecosemantic.errors import Invalid
-from ecosemantic.mcp.accounts import Reach
-from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.context import Callers, ServerContext
 from ecosemantic.mcp.direct import run_tool
 from ecosemantic.mcp.envelopes import Answer, Listing, as_uuid, envelope_of
 from ecosemantic.mcp.parameters import ParameterSpace, space_of
@@ -23,27 +21,16 @@ from ecosemantic.mcp.systems import get_product_system
 from ecosemantic.model.validation import anchors
 from ecosemantic.ports.types import LogEntry, MonteCarloConfig, RequestDraft
 from ecosemantic.view.handling import (
+    ContextHandler,
     ToolRefused,
-    answering,
     created,
     envelope_response,
+    for_caller,
 )
 
-BRIDGE_EXTENSION = "ecosemantic.bridge"
 GATE_PARAMETER = "token"
 IMPACT_TOOL = "calculate_impact"
 STARTED_PARAMETER = "started"
-LOOPBACK_PEERS = frozenset({"127.0.0.1", "::1"})
-
-
-def reach(scope: Scope) -> Reach:
-    """How a request reached the engine: through the bridge when its scope carries the bridge's
-    extension, on this computer from a loopback peer, and across the network otherwise."""
-    if BRIDGE_EXTENSION in (scope.get("extensions") or {}):
-        return "bridge"
-    client = scope.get("client")
-    peer = "" if client is None else client[0]
-    return "here" if peer in LOOPBACK_PEERS else "network"
 
 
 async def structured(
@@ -92,22 +79,26 @@ def arguments(query: Mapping[str, str]) -> dict[str, JsonValue]:
     return {key: value for key, value in query.items() if key != GATE_PARAMETER}
 
 
-def routes(server: FastMCP, context: ServerContext) -> list[Route]:
-    """Every JSON route under /api, in the order the spec lists them."""
+def routes(server: FastMCP, callers: Callers) -> list[Route]:
+    """Every JSON route under /api, each answering over the context the host binds to its
+    request's caller."""
 
-    async def vocabulary(request: Request) -> Response:
+    @for_caller(callers)
+    async def vocabulary(request: Request, context: ServerContext) -> Response:
         params = request.path_params
         return await call_tool(
             server, context, "list_vocabulary", {"database": params["name"], "kind": params["kind"]}
         )
 
-    async def processes(request: Request) -> Response:
+    @for_caller(callers)
+    async def processes(request: Request, context: ServerContext) -> Response:
         args = arguments(request.query_params)
         return await call_tool(
             server, context, "search_processes", {"database": request.path_params["name"], **args}
         )
 
-    async def elementary_flows(request: Request) -> Response:
+    @for_caller(callers)
+    async def elementary_flows(request: Request, context: ServerContext) -> Response:
         args = arguments(request.query_params)
         return await call_tool(
             server,
@@ -116,13 +107,15 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             {"database": request.path_params["name"], **args},
         )
 
-    async def methods(request: Request) -> Response:
+    @for_caller(callers)
+    async def methods(request: Request, context: ServerContext) -> Response:
         args = arguments(request.query_params)
         return await call_tool(
             server, context, "search_methods", {"database": request.path_params["name"], **args}
         )
 
-    async def process(request: Request) -> Response:
+    @for_caller(callers)
+    async def process(request: Request, context: ServerContext) -> Response:
         params = request.path_params
         return await call_tool(
             server,
@@ -131,7 +124,8 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             {"database": params["name"], "process_id": params["ref"], "exchanges": True},
         )
 
-    async def elementary_flow(request: Request) -> Response:
+    @for_caller(callers)
+    async def elementary_flow(request: Request, context: ServerContext) -> Response:
         params = request.path_params
         return await call_tool(
             server,
@@ -140,10 +134,12 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             {"database": params["name"], "flow_id": params["ref"]},
         )
 
-    async def systems(request: Request) -> Response:
+    @for_caller(callers)
+    async def systems(request: Request, context: ServerContext) -> Response:
         return await call_tool(server, context, "list_product_systems", {})
 
-    async def system(request: Request) -> Response:
+    @for_caller(callers)
+    async def system(request: Request, context: ServerContext) -> Response:
         args = arguments(request.query_params)
         return await call_tool(
             server,
@@ -152,8 +148,8 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             {"product_system_id": request.path_params["id"], "variant": args.get("variant")},
         )
 
-    @answering
-    async def parameters(request: Request) -> Response:
+    @for_caller(callers)
+    async def parameters(request: Request, context: ServerContext) -> Response:
         query = request.query_params
         content_hash = query.get("hash")
         variant = query.get("variant")
@@ -171,8 +167,8 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             Answer[ParameterSpace](value=space_of(read.value)).model_dump(mode="json")
         )
 
-    @answering
-    async def log(request: Request) -> Response:
+    @for_caller(callers)
+    async def log(request: Request, context: ServerContext) -> Response:
         entries: list[LogEntry] = []
         cursor: str | None = None
         while True:
@@ -189,18 +185,19 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             if cursor is None:
                 return JSONResponse(Answer[list[LogEntry]](value=entries).model_dump(mode="json"))
 
-    @answering
-    async def version(request: Request) -> Response:
+    @for_caller(callers)
+    async def version(request: Request, context: ServerContext) -> Response:
         params = request.path_params
         stored = await context.storage.get_version(as_uuid(params["id"]), params["hash"])
         return JSONResponse(stored.model_dump(mode="json"))
 
-    @answering
-    async def system_anchors(request: Request) -> Response:
+    @for_caller(callers)
+    async def system_anchors(request: Request, context: ServerContext) -> Response:
         stored = await context.storage.get_product_system(as_uuid(request.path_params["id"]))
         return JSONResponse(Answer[list[str]](value=anchors(stored)).model_dump(mode="json"))
 
-    async def validation(request: Request) -> Response:
+    @for_caller(callers)
+    async def validation(request: Request, context: ServerContext) -> Response:
         args = arguments(request.query_params)
         return await call_tool(
             server,
@@ -209,13 +206,15 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             {"product_system_id": request.path_params["id"], **args},
         )
 
-    async def monte_carlo(request: Request) -> Response:
+    @for_caller(callers)
+    async def monte_carlo(request: Request, context: ServerContext) -> Response:
         """What a simulation samples, at the defaults its form starts from."""
         return JSONResponse(
             Answer[MonteCarloConfig](value=MonteCarloConfig()).model_dump(mode="json")
         )
 
-    async def server_details(request: Request) -> Response:
+    @for_caller(callers)
+    async def server_details(request: Request, context: ServerContext) -> Response:
         """The client that introduced itself, this package's version and the two directories."""
         return JSONResponse(
             {
@@ -226,9 +225,8 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             }
         )
 
-    def calculation(tool: str, **fixed: JsonValue) -> Callable[[Request], Awaitable[Response]]:
-        @answering
-        async def handler(request: Request) -> Response:
+    def calculation(tool: str, **fixed: JsonValue) -> ContextHandler:
+        async def handler(request: Request, context: ServerContext) -> Response:
             body = await json_object(request)
             return await call_tool(
                 server,
@@ -240,22 +238,26 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
 
         return handler
 
-    async def runs_listed(request: Request) -> Response:
+    @for_caller(callers)
+    async def runs_listed(request: Request, context: ServerContext) -> Response:
         return await call_tool(
             server, context, "list_runs", {"product_system_id": request.path_params["id"]}
         )
 
-    async def run_read(request: Request) -> Response:
+    @for_caller(callers)
+    async def run_read(request: Request, context: ServerContext) -> Response:
         return await call_tool(
             server, context, "get_run", {"run_id": request.path_params["run_id"], "samples": True}
         )
 
-    async def run_cancelled(request: Request) -> Response:
+    @for_caller(callers)
+    async def run_cancelled(request: Request, context: ServerContext) -> Response:
         return await call_tool(
             server, context, "cancel_run", {"run_id": request.path_params["run_id"]}
         )
 
-    async def requests_listed(request: Request) -> Response:
+    @for_caller(callers)
+    async def requests_listed(request: Request, context: ServerContext) -> Response:
         args = arguments(request.query_params)
         return await call_tool(
             server,
@@ -264,14 +266,14 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             {"product_system_id": request.path_params["id"], "open_only": False, **args},
         )
 
-    @answering
-    async def request_posted(request: Request) -> Response:
+    @for_caller(callers)
+    async def request_posted(request: Request, context: ServerContext) -> Response:
         body = await json_object(request)
         system_id = as_uuid(request.path_params["id"])
         try:
             draft = RequestDraft.model_validate(
                 {
-                    "actor": {"kind": "person", "name": str(body.get("actor", ""))},
+                    "actor": context.posted_by(str(body.get("actor", ""))),
                     "kind": body.get("kind"),
                     "at_hash": body.get("at_hash", ""),
                     "message": body.get("message", ""),
@@ -284,7 +286,8 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
         posted = await context.storage.post_request(system_id, draft)
         return created(posted)
 
-    async def layout(request: Request) -> Response:
+    @for_caller(callers)
+    async def layout(request: Request, context: ServerContext) -> Response:
         args = arguments(request.query_params)
         return await call_tool(
             server,
@@ -293,8 +296,8 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             {"product_system_id": request.path_params["id"], "variant": args.get("variant")},
         )
 
-    @answering
-    async def place(request: Request) -> Response:
+    @for_caller(callers)
+    async def place(request: Request, context: ServerContext) -> Response:
         body = await json_object(request)
         return await call_tool(
             server,
@@ -303,7 +306,8 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             {"product_system_id": request.path_params["id"], **body},
         )
 
-    async def release(request: Request) -> Response:
+    @for_caller(callers)
+    async def release(request: Request, context: ServerContext) -> Response:
         return await call_tool(
             server,
             context,
@@ -316,6 +320,7 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
             },
         )
 
+    resolve = for_caller(callers)
     base = "/api/product-systems/{id}"
     return [
         Route("/api/server", server_details),
@@ -333,11 +338,23 @@ def routes(server: FastMCP, context: ServerContext) -> list[Route]:
         Route(f"{base}/versions/{{hash}}", version),
         Route(f"{base}/validation", validation),
         Route(f"{base}/anchors", system_anchors),
-        Route(f"{base}/impact", calculation(IMPACT_TOOL, samples=True), methods=["POST"]),
-        Route(f"{base}/contributions", calculation("contribution_analysis"), methods=["POST"]),
-        Route(f"{base}/inventory", calculation("calculate_inventory"), methods=["POST"]),
+        Route(f"{base}/impact", resolve(calculation(IMPACT_TOOL, samples=True)), methods=["POST"]),
+        Route(
+            f"{base}/contributions",
+            resolve(calculation("contribution_analysis")),
+            methods=["POST"],
+        ),
+        Route(
+            f"{base}/inventory",
+            resolve(calculation("calculate_inventory")),
+            methods=["POST"],
+        ),
         Route(f"{base}/runs", runs_listed),
-        Route(f"{base}/runs", calculation("start_monte_carlo"), methods=["POST"]),
+        Route(
+            f"{base}/runs",
+            resolve(calculation("start_monte_carlo")),
+            methods=["POST"],
+        ),
         Route("/api/runs/{run_id}", run_read),
         Route("/api/runs/{run_id}/cancel", run_cancelled, methods=["POST"]),
         Route(f"{base}/requests", requests_listed),

@@ -19,6 +19,7 @@ from ecosemantic.compute.results import (
     PinBehind,
     VariantScores,
 )
+from ecosemantic.compute.stages import by_stage
 from ecosemantic.compute.totals import total_deltas, totals_of, with_totals
 from ecosemantic.errors import Invalid, NotFound, StaleScenario
 from ecosemantic.mcp.context import ServerContext
@@ -66,6 +67,13 @@ from ecosemantic.ports.types import (
 
 MAX_ITERATIONS = 200
 
+DECOMPOSITION_PAGES: dict[Decomposition, str] = {
+    "process": "processes",
+    "path": "tree",
+    "flow": "impact",
+    "stage": "stages",
+}
+
 
 class ImpactMonteCarlo(MonteCarloConfig):
     """What `calculate_impact` samples: `MonteCarloConfig`, with every count capped at the draws
@@ -88,6 +96,7 @@ class InventoryListing(Listing[InventoryRow]):
     dropped: int
     linked_credit_loops: list[LinkedLoop] = Field(default_factory=list)
     treatments_run_backwards: list[str] = Field(default_factory=list)
+    variant: str | None = None
 
 
 def inventory_page(
@@ -250,10 +259,12 @@ def result_link(
     impact_method: str | None = None,
     variants: Sequence[str] = (),
     demand: list[DemandItem] | None = None,
+    variant: str | None = None,
 ) -> str | None:
-    """The result page that reproduces a calculation, in the query parameters the page's
-    results editor reads: the method, the variants, and the amount of the reference process
-    when the demand is that process alone."""
+    """The result page that reproduces a calculation: the method, the variants and the amount of
+    the reference process when the demand is that process alone, in the query parameters the
+    page's results editor reads; and `variant`, naming the case or the scenario a decomposition
+    or an inventory read."""
     params = [("method_id", method_id), ("impact_method", impact_method)]
     params.extend(("variants", name) for name in variants)
     if (
@@ -263,6 +274,7 @@ def result_link(
         and demand[0].ref.code == system.reference_process
     ):
         params.append(("amount", str(demand[0].amount)))
+    params.append(("variant", variant))
     given = [(k, v) for k, v in params if v is not None]
     return context.page_link(system.id, f"/results/{page}", given)
 
@@ -353,10 +365,12 @@ async def contributions_of(
     max_level: int = MAX_LEVEL,
     max_nodes: int = MAX_NODES,
     cutoff: float = CUTOFF,
+    variant: str | None = None,
 ) -> ContributionResult:
     """One score of a materialised product system, decomposed along `by`, with the loops holding
-    a credit and the exchanges running a treatment backwards. A flat list keeps the `top_n`
-    largest items whose fraction reaches `cutoff` and says what it leaves out."""
+    a credit, the exchanges running a treatment backwards, and the case or scenario `variant`
+    names when it decomposed one. A flat list keeps the `top_n` largest items whose fraction
+    reaches `cutoff` and says what it leaves out."""
     system = System.of(base, linked)
     named = credit_loops(base)
     inside = linked_credit_loops(linked.values())
@@ -373,6 +387,7 @@ async def contributions_of(
             credit_loops=named,
             linked_credit_loops=inside,
             treatments_run_backwards=backwards,
+            variant=variant,
         )
     elif by == "flow":
         flows = await calculation.flow_hotspots(system, items, method, top_n, cutoff)
@@ -386,6 +401,20 @@ async def contributions_of(
             credit_loops=named,
             linked_credit_loops=inside,
             treatments_run_backwards=backwards,
+            variant=variant,
+        )
+    elif by == "stage":
+        parts = await calculation.own_parts(system, items, method)
+        value = ContributionResult(
+            database=base.database,
+            by=by,
+            method=method,
+            total=parts.total,
+            stages=by_stage(base, parts, cutoff),
+            credit_loops=named,
+            linked_credit_loops=inside,
+            treatments_run_backwards=backwards,
+            variant=variant,
         )
     else:
         tree = await calculation.contribution_tree(
@@ -401,6 +430,7 @@ async def contributions_of(
             credit_loops=named,
             linked_credit_loops=inside,
             treatments_run_backwards=backwards,
+            variant=variant,
         )
     return value
 
@@ -416,10 +446,11 @@ async def contribution_analysis(
     max_level: int = MAX_LEVEL,
     max_nodes: int = MAX_NODES,
     cutoff: float = CUTOFF,
+    variant: str | None = None,
 ) -> Answer[ContributionResult]:
     stored = await context.storage.get_product_system(as_uuid(product_system_id))
     linked = await linked_documents(stored, context.storage.get_version)
-    base = materialize(stored)
+    base = materialize(stored) if variant is None else await variant_of(context, stored, variant)
     method, hint = await one_method(
         context.inventory, stored.database.name, method_id, impact_method
     )
@@ -436,8 +467,17 @@ async def contribution_analysis(
         max_level,
         max_nodes,
         cutoff,
+        variant,
     )
-    link = result_link(context, stored, "tree", method_id, impact_method, demand=demand)
+    link = result_link(
+        context,
+        stored,
+        DECOMPOSITION_PAGES[by],
+        method_id,
+        impact_method,
+        demand=demand,
+        variant=variant,
+    )
     return Answer[ContributionResult](value=value, hint=hint, view_url=link)
 
 
@@ -472,10 +512,11 @@ async def calculate_inventory(
     query: str | None = None,
     limit: Limit = 100,
     cursor: str | None = None,
+    variant: str | None = None,
 ) -> InventoryListing:
     stored = await context.storage.get_product_system(as_uuid(product_system_id))
     linked = await linked_documents(stored, context.storage.get_version)
-    base = materialize(stored)
+    base = materialize(stored) if variant is None else await variant_of(context, stored, variant)
     items = demand_of(base, demand)
     treatments = await treatments_of(context.inventory, base, linked)
     result, rows = await inventory_of(context.calculation, treatments, base, linked, items)
@@ -499,16 +540,17 @@ async def calculate_inventory(
         has_more=out.has_more,
         next_cursor=out.next_cursor,
         hint=out.hint,
-        view_url=result_link(context, stored, "inventory", demand=demand),
+        view_url=result_link(context, stored, "inventory", demand=demand, variant=variant),
         credit_loops=result.credit_loops,
         linked_credit_loops=result.linked_credit_loops,
         treatments_run_backwards=result.treatments_run_backwards,
         floor=result.floor,
         dropped=result.dropped,
+        variant=variant,
     )
 
 
-def register(server: FastMCP, context: ServerContext) -> None:
+def register(server: FastMCP) -> None:
     """Register the three calculation tools, in roster order."""
     server.tool(
         name="calculate_impact",
@@ -532,7 +574,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "each uncertainty category names one of them by method_id."
         ),
         app=panel("impact"),
-    )(boundary(bound(calculate_impact, context)))
+    )(boundary(bound(calculate_impact)))
     server.tool(
         name="contribution_analysis",
         annotations=READ,
@@ -542,7 +584,12 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "that emit it, each appearing once. "
             "by='path' nests it under the demanded process along the supply chain that "
             "caused it, with elementary flows itemised at each node. by='flow' partitions "
-            "it over the substances emitted or drawn, ranked by characterised score. Same "
+            "it over the substances emitted or drawn, ranked by characterised score. "
+            "by='stage' splits it over the life-cycle stages the processes' life_cycle_stage "
+            "metadata names, in the order a walk from the functional unit meets them, processes "
+            "of no stage last: each stage holds each of its processes' own part, its direct "
+            "emissions and each input's cumulative score, and the stages sum to the total. "
+            "variant names a case or a scenario to decompose in place of the base. Same "
             f"total every way. by='path' stops at max_level (default {MAX_LEVEL}) and "
             f"max_nodes (default {MAX_NODES}) and folds a branch below cutoff (default "
             f"{CUTOFF}) of the total into a remainder; by='process' and by='flow' answer the "
@@ -557,7 +604,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             '"…", "by": "path", "method_id": "m_…", "max_level": 4}.'
         ),
         app=panel("contribution"),
-    )(boundary(bound(contribution_analysis, context)))
+    )(boundary(bound(contribution_analysis)))
     server.tool(
         name="calculate_inventory",
         annotations=READ,
@@ -569,7 +616,8 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "side and inputs come first. Rows are ordered by compartment then name, or by "
             "order='amount' by falling magnitude, and paged; filter by compartment or by "
             "words in the flow name. contribution_analysis by='flow' ranks them by "
-            "characterised score."
+            "characterised score. variant names a case or a scenario to list in place of the "
+            "base."
         ),
         app=panel("inventory"),
-    )(boundary(bound(calculate_inventory, context)))
+    )(boundary(bound(calculate_inventory)))

@@ -3,9 +3,10 @@ import { useLocation } from 'react-router-dom'
 import { toast } from 'sonner'
 import { api } from '@/api/client'
 import { useSystem } from '@/api/queries'
-import { demandOf, toImpactArguments } from '@/editors/results/params'
+import { demandOf, toImpactArguments, variantOf } from '@/editors/results/params'
 import { useResultParams } from '@/editors/results/useResultParams'
 import { useUi } from '@/store/ui'
+import { heldVariant } from './useCanvasState'
 import { ImportDialog } from './ImportDialog'
 import type { Format, ResultKind } from './menus'
 
@@ -26,11 +27,14 @@ export function useFiles(): { importFile: (format: Format) => void; downloadResu
   const [format, setFormat] = useState<Format | null>(null)
   const downloadResult = (kind: ResultKind): void => {
     const params = resolved.params
-    if (systemId === null || params === null) return
-    const root = system.data?.value.reference_process ?? null
+    if (systemId === null || params === null || system.data === undefined) return
+    const addressed = variantOf(location.search)
+    const held = heldVariant(system.data.value, addressed)
+    const carried = held === null ? {} : { variant: held.name }
+    const root = system.data.value.reference_process ?? null
     const method = { ...(params.method_id ? { method_id: params.method_id } : {}), ...(params.impact_method ? { impact_method: params.impact_method } : {}) }
     const demand = demandOf(params, root)
-    const body = kind === 'impact' ? toImpactArguments(params, root) : kind === 'contributions' ? { by: 'process', ...method, ...(demand ? { demand } : {}) } : { ...(demand ? { demand } : {}) }
+    const body = kind === 'impact' ? toImpactArguments(params, root) : kind === 'contributions' ? { by: 'process', ...method, ...(demand ? { demand } : {}), ...carried } : { ...(demand ? { demand } : {}), ...carried }
     api.resultZip(systemId, kind, body).then(
       (file) => save(file.blob, file.name),
       (error: Error) => toast.error(error.message),

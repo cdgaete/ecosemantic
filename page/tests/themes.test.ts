@@ -36,7 +36,7 @@ it('defines two themes, light then dark', () => {
 it('gives the two themes the same token names in the same order, and no typeface', () => {
   const [light, dark] = blocks.map((block) => block.names)
   expect(dark).toEqual(light)
-  expect(light).toHaveLength(51)
+  expect(light).toHaveLength(57)
   expect(light.filter((name) => name.startsWith('--font'))).toEqual([])
 })
 

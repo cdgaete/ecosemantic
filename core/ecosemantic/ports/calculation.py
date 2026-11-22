@@ -14,6 +14,7 @@ from ecosemantic.ports.types import (
     InventoryResult,
     MonteCarloConfig,
     MonteCarloResult,
+    OwnParts,
     Score,
     System,
     Tree,
@@ -60,6 +61,10 @@ class CalculationPort(Protocol):
         max_nodes: int = MAX_NODES,
         cutoff: float = CUTOFF,
     ) -> Tree: ...
+
+    async def own_parts(
+        self, system: System, demand: list[DemandItem], method: Method
+    ) -> OwnParts: ...
 
     async def supply(self, system: System, demand: list[DemandItem]) -> list[Activity]: ...
 

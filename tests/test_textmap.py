@@ -6,10 +6,12 @@ import pytest
 
 from ecosemantic.errors import Invalid
 from ecosemantic.geometry import Placement, Port, card_size, ports, shown_inputs
+from ecosemantic.layout import arrange, stage_regions
 from ecosemantic.model.entities import Exchange, Process, ProductSystem
 from ecosemantic.model.refs import BackgroundRef, Database, ForegroundRef, SystemRef
 from ecosemantic.routes import Label, Route
 from ecosemantic.textmap import LEGEND, as_text
+from tests.test_layout import emitted, water_chain
 
 DATABASE = Database(
     name="d", elementary_flows="b", scheme="ecoinvent", version="1", system_model="cutoff"
@@ -283,3 +285,15 @@ def test_a_card_with_six_inputs_draws_no_fold_row() -> None:
     text = as_text(system, cards, [])
     assert all(f"i{n}" in text for n in range(6))
     assert "more inputs" not in text
+
+
+def test_the_map_marks_each_stage_s_region() -> None:
+    drawn = water_chain()
+    placed = arrange(drawn, ["drinking_water"], {}, emitted(drawn))
+    found = stage_regions(drawn, placed)
+    lines = as_text(drawn, placed, [], found).splitlines()
+    assert lines[0].endswith("· a stage's region")
+    assert all(any(entry.stage in line and "·" in line for line in lines) for entry in found)
+    plain = as_text(system(), placements(), [])
+    assert as_text(system(), placements(), [], ()) == plain
+    assert as_text(system(), placements(), [], stage_regions(system(), placements())) == plain

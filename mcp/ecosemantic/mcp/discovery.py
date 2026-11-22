@@ -231,7 +231,7 @@ async def list_vocabulary(
     return Answer[list[Term]](value=terms)
 
 
-def register(server: FastMCP, context: ServerContext) -> None:
+def register(server: FastMCP) -> None:
     """Register the seven discovery tools, in roster order."""
     server.tool(
         name="list_databases",
@@ -240,7 +240,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "The background databases this server serves: name, scheme, version, system model, "
             "and the elementary_flows database that flow refs carry."
         ),
-    )(boundary(bound(list_databases, context)))
+    )(boundary(bound(list_databases)))
     server.tool(
         name="search_processes",
         annotations=READ,
@@ -253,7 +253,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             '"ecoinvent-3.12-cutoff", "query": "electricity high voltage", '
             '"location": "CL"}.'
         ),
-    )(boundary(bound(search_processes, context)))
+    )(boundary(bound(search_processes)))
     server.tool(
         name="search_elementary_flows",
         annotations=READ,
@@ -261,7 +261,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "Search elementary flows by name, compartment or CAS. database is the background "
             "database or its elementary_flows database; the hits are the same."
         ),
-    )(boundary(bound(search_elementary_flows, context)))
+    )(boundary(bound(search_elementary_flows)))
     server.tool(
         name="search_methods",
         annotations=READ,
@@ -271,7 +271,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "list_vocabulary names every impact method family and every category. Pass "
             "next_cursor to continue."
         ),
-    )(boundary(bound(search_methods, context)))
+    )(boundary(bound(search_methods)))
     server.tool(
         name="get_background_process",
         annotations=READ,
@@ -281,7 +281,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "reference output, and, for an input the install cut off, the reason it carries and "
             "no input."
         ),
-    )(boundary(bound(get_background_process, context)))
+    )(boundary(bound(get_background_process)))
     server.tool(
         name="get_elementary_flow",
         annotations=READ,
@@ -289,7 +289,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "One elementary flow by its id, with compartment, unit, CAS and synonyms. database "
             "is the background database or its elementary_flows database."
         ),
-    )(boundary(bound(get_elementary_flow, context)))
+    )(boundary(bound(get_elementary_flow)))
     server.tool(
         name="list_vocabulary",
         annotations=READ,
@@ -298,4 +298,4 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "impact_methods or impact_categories. Use it to find the exact spelling a filter "
             "or calculate_impact takes."
         ),
-    )(boundary(bound(list_vocabulary, context)))
+    )(boundary(bound(list_vocabulary)))

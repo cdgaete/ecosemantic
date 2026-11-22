@@ -9,6 +9,14 @@ Two searches over the package's 143 Python source files outside `tests/` and aga
 - **Shared code.** Each file's lines, stripped of comments, imports, decorators and lines under twelve characters, cut into runs of four consecutive lines; a run present in both a package file and a frozen file is shared code. Seven pairs of files share a run, the largest two runs, and each is listed below.
 - **Shared names.** Every function and class name of eight characters or more in the package's source outside `tests/` and `scripts/` (697) against the frozen system's (2,075). The 28 shared are the tool names of the MCP roster both systems serve, the four functions of the Monte Carlo summary and `evaluate`, listed below, and names a vocabulary shares without shared code: `__init__`, `database`, `download`, `lifespan`, `difference`, `get_version`, `read_log`, `unsubscribe_all`, `Activity`, `Exchange`, `ValidationReport`, `add_exchange`, `patch_exchange`, `_references`.
 
+## The time zones' countries
+
+The country of each time zone's name travels inside `ecosemantic`, in `app/ecosemantic/telemetry/data/zone_countries.tab`, and `ecosemantic.telemetry.location` reads it after a yes to send a country, and to show it.
+
+| Source | Destination | Changed |
+| ------ | ----------- | ------- |
+| IANA time zone database 2026f, in the public domain, `https://data.iana.org/time-zones/tzdata-latest.tar.gz`, sha256 `01b4a91cec5167ed48c11e8ab78f2048cead78ce94b0cafcad0ae8c5a3044d3d`: `zone.tab` and `backward` | `app/ecosemantic/telemetry/data/zone_countries.tab`, sha256 `86dcf23568db9a677986c0d38ac6fbdacc866853ae2834b527f0173707dc787c` | the 418 zones of `zone.tab` under the country it gives, and 118 aliases of `backward` under the country of the name each stands for, its `#=` name where it has one. An alias is left out where ICU 78.2 gives another country (`Africa/Timbuktu`, `Antarctica/South_Pole`, `Atlantic/Jan_Mayen`, `Pacific/Yap`), where its link crosses a border ICU does not follow (`America/Coral_Harbour`, `Pacific/Johnston`) and where it names no place (`CET`, `EET`, `EST`, `HST`, `MET`, `MST`, `WET`). A zone `zone.tab` lists keeps its country whatever zone tzdata links it to |
+
 ## Taken from the frozen system
 
 | Source | Destination | Changed |

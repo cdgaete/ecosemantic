@@ -56,6 +56,7 @@ from ecosemantic.cli.text import (
     bridge_status_text,
     compute_text,
     connect_text,
+    country_question,
     database_text,
     doctor_text,
     init_text,
@@ -116,7 +117,7 @@ from ecosemantic.tables.results import (
     write_impact,
     write_inventory,
 )
-from ecosemantic.telemetry import CHOICES, begin, record, serving, status
+from ecosemantic.telemetry import CHOICES, begin, record, record_country, serving, status
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -623,6 +624,7 @@ INSTALL_CHATBOT = (
     "install Claude Desktop from https://claude.ai/download, then run: ecosemantic init"
 )
 NEXT = "Restart your chatbot; the EcoSemantic page opens in your browser."
+YES = frozenset({"y", "yes"})
 
 
 def _choice(answer: str, clients: list[str]) -> list[str] | None:
@@ -654,21 +656,42 @@ def _asked(clients: list[str]) -> list[str]:
     return chosen
 
 
+def _at_terminal() -> bool:
+    """Whether a person can read a question on standard error and type its answer."""
+    return all(stream is not None and stream.isatty() for stream in (sys.stdin, sys.stderr))
+
+
+def _country_asked(data: Path, held: dict[str, object]) -> dict[str, object]:
+    """The install's telemetry once the person at a terminal has answered whether its country is
+    sent: asked only where counts are on and a country is found to show them. A typed y or yes is
+    a yes, any other line a no, and input that ends unanswered records nothing."""
+    if not held["on"] or held["country"] is None or not _at_terminal():
+        return held
+    print(country_question(held["country"]), file=sys.stderr, flush=True)
+    typed = sys.stdin.readline()
+    if not typed:
+        return held
+    record_country(data, typed.strip().lower() in YES)
+    return status(os.environ, data)
+
+
 def _init(args: argparse.Namespace) -> dict[str, object]:
     """Connect every chatbot the person names, or every one this platform holds, asking which of
     them at a terminal when it holds several; answer with the ones connected, the install as it
-    now stands and the step that comes next."""
+    now stands and the step that comes next. An install that has not answered for its country is
+    asked for it there, unless the answer is wanted as JSON."""
     clients = list(args.clients) if args.clients else found()
     if not clients:
         raise Unavailable(NO_CHATBOT, INSTALL_CHATBOT)
     if args.clients is None and len(clients) > 1 and sys.stdin.isatty():
         clients = _asked(clients)
     data, systems = directories(None, None)
-    return {
-        "connected": [connect(client, None, None) for client in clients],
-        "doctor": report(data, systems, _databases(data)),
-        "next": NEXT,
-    }
+    connected = [connect(client, None, None) for client in clients]
+    made = report(data, systems, _databases(data))
+    held = cast("dict[str, object]", made["telemetry"])
+    if "error" not in held and held["country_answer"] is None and not args.as_json:
+        made["telemetry"] = _country_asked(data, held)
+    return {"connected": connected, "doctor": made, "next": NEXT}
 
 
 def _databases(data: Path) -> object:
@@ -831,7 +854,10 @@ def main(argv: list[str] | None = None) -> int:
                 data = directories(args.data, None)[0]
                 if args.choice is not None:
                     record(os.environ, data, args.choice == "on")
-                _answered(status(os.environ, data), as_json, telemetry_text)
+                held = status(os.environ, data)
+                if args.choice == "on" and not as_json:
+                    held = _country_asked(data, held)
+                _answered(held, as_json, telemetry_text)
             else:
                 data, systems = directories(args.data, args.systems)
                 answered = report(data, systems, _databases(data))

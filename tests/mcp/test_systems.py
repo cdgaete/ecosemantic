@@ -23,13 +23,12 @@ from ecosemantic.ports.types import MonteCarloConfig, RunDraft, RunPatch
 from tests.conftest import fixture_system
 from tests.engine_fixture import LOOP_DB, install_fixtures
 from tests.fixture_data import FIXTURE_BIO, FIXTURE_DB, FIXTURE_FINGERPRINT
+from tests.registered import registered
 
 
 @pytest.fixture(scope="module")
 def server(context: ServerContext) -> FastMCP:
-    built = build_server()
-    systems.register(built, context)
-    return built
+    return registered(context, systems)
 
 
 @pytest.fixture(scope="module")

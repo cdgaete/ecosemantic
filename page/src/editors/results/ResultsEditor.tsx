@@ -1,7 +1,7 @@
 import { Route, Routes, useLocation } from 'react-router-dom'
 import { useSystemStream } from '@/api/stream'
-import { backwardsTreatmentNote, creditLoopNote, shortHash } from '@/lib/format'
-import { movedSince } from '@/lib/hashes'
+import { backwardsTreatmentNote, creditLoopNote } from '@/lib/format'
+import { hashLine } from '@/lib/hashes'
 import { paths, useGo } from '@/lib/paths'
 import { PageTabs } from '@/window/PageTabs'
 import { useEditorTab } from '@/window/useEditorTab'
@@ -14,6 +14,7 @@ import { RESULT_PAGES } from './pages'
 import { ProcessResultsPage } from './ProcessResultsPage'
 import { ResultsList } from './ResultsList'
 import { SankeyPage } from './SankeyPage'
+import { StagesPage } from './StagesPage'
 import { useResult } from './useResult'
 
 export function ResultsEditor() {
@@ -49,13 +50,18 @@ function ResultPages({ result }: { result: Result }) {
         ...scored.variants.flatMap((v) => v.treatments_run_backwards.map((named) => backwardsTreatmentNote(named, v.name))),
       ]
     : []
-  const recordedOn = result.call?.at_hash ?? null
-  const currentOn = result.system?.hash ?? null
+  const recorded = hashLine(result.call?.at_hash ?? null, result.system?.hash ?? null)
   return (
     <div className="flex h-full flex-col">
-      {movedSince(recordedOn, currentOn) ? (
+      <PageTabs pages={pages} active={active} at="top" />
+      {recorded !== null ? (
         <div className="border-b border-warning bg-warning/10 px-4 py-1 text-xs text-warning">
-          {`Recorded on ${shortHash(recordedOn)}; computed here on the current model, ${shortHash(currentOn)}.`}
+          {recorded}
+        </div>
+      ) : null}
+      {result.missingCase !== null ? (
+        <div className="border-b border-warning bg-warning/10 px-4 py-1 text-xs text-warning">
+          {`Case ${result.missingCase} is not in this system; the pages read the base values.`}
         </div>
       ) : null}
       {result.stale ? (
@@ -79,12 +85,12 @@ function ResultPages({ result }: { result: Result }) {
           <Route path="general" element={<GeneralPage result={result} />} />
           <Route path="inventory" element={<InventoryPage result={result} />} />
           <Route path="impact" element={<ImpactPage result={result} />} />
+          <Route path="stages" element={<StagesPage result={result} />} />
           <Route path="processes" element={<ProcessResultsPage result={result} />} />
           <Route path="tree" element={<ContributionTreePage result={result} />} />
           <Route path="sankey" element={<SankeyPage result={result} />} />
         </Routes>
       </div>
-      <PageTabs pages={pages} active={active} />
     </div>
   )
 }

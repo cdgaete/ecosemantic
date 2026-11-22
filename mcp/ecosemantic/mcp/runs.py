@@ -93,7 +93,7 @@ async def cancel_run(context: ServerContext, run_id: str) -> Answer[Run]:
     return Answer[Run](value=run, view_url=simulation_link(context, run))
 
 
-def register(server: FastMCP, context: ServerContext) -> None:
+def register(server: FastMCP) -> None:
     """Register the four run tools, in roster order."""
     server.tool(
         name="start_monte_carlo",
@@ -105,7 +105,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "run at a time: a second start is refused while one is open. calculate_impact "
             "takes a monte_carlo block instead when the iterations fit in one call."
         ),
-    )(boundary(bound(start_monte_carlo, context)))
+    )(boundary(bound(start_monte_carlo)))
     server.tool(
         name="get_run",
         annotations=READ,
@@ -116,7 +116,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "twenty bins. methods names every method the run sampled once, and each result "
             "category names one of them by method_id."
         ),
-    )(boundary(bound(get_run, context)))
+    )(boundary(bound(get_run)))
     server.tool(
         name="list_runs",
         annotations=READ,
@@ -124,7 +124,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "The runs of a product system, newest first, or every run without one, each "
             "without its result, which get_run answers. start_monte_carlo makes them."
         ),
-    )(boundary(bound(list_runs, context)))
+    )(boundary(bound(list_runs)))
     server.tool(
         name="cancel_run",
         annotations=WRITE,
@@ -132,4 +132,4 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "Ask a run to stop. It finishes the iteration it is on and keeps the samples it "
             "has, so the answer is cancelled rather than lost. A finished run is refused."
         ),
-    )(boundary(bound(cancel_run, context)))
+    )(boundary(bound(cancel_run)))

@@ -14,6 +14,7 @@ from ecosemantic.mcp.accounts import account_advice
 from ecosemantic.mcp.context import ServerContext
 from ecosemantic.mcp.effects import READ, WRITE
 from ecosemantic.mcp.envelopes import Answer, as_uuid, bound, boundary
+from ecosemantic.mcp.host import OPERATOR_INSTALLS, refuse_host
 from ecosemantic.mcp.watcher import reap_install, watch_install
 from ecosemantic.ports.types import (
     DatabaseSource,
@@ -115,6 +116,7 @@ async def install_database(
     install cuts off the inputs no dataset provides, and its summary's cut_off names them: a
     release cuts off what its profile lists, an openlca package only with drop_unlinked. It
     refuses a version or system model its source does not offer before it asks for the account."""
+    refuse_host(context, "install_database", instead=OPERATOR_INSTALLS)
     needed = _offered(context, source)
     try:
         draft = InstallDraft(
@@ -181,11 +183,12 @@ async def cancel_install(context: ServerContext, install_id: str) -> Answer[Inst
     """Ask an install to stop. It stops at the next step boundary and at each progress report, and
     leaves the database as it was. An install already finished is refused; post it again
     instead."""
+    refuse_host(context, "cancel_install", instead=OPERATOR_INSTALLS)
     install = await context.installs.cancel_install(as_uuid(install_id))
     return Answer[Install](value=install, view_url=databases_link(context))
 
 
-def register(server: FastMCP, context: ServerContext) -> None:
+def register(server: FastMCP) -> None:
     """Register the five install tools, in roster order."""
     server.tool(
         name="list_sources",
@@ -196,7 +199,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "server holds the account its install needs, and while an account is not held, "
             "where the person enters it. install_database posts one of them."
         ),
-    )(boundary(bound(list_sources, context)))
+    )(boundary(bound(list_sources)))
     server.tool(
         name="install_database",
         annotations=WRITE,
@@ -209,7 +212,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "where the engine runs: never ask them for a password here. list_installs and "
             "get_install follow the install, cancel_install asks it to stop."
         ),
-    )(boundary(bound(install_database, context)))
+    )(boundary(bound(install_database)))
     server.tool(
         name="list_installs",
         annotations=READ,
@@ -218,7 +221,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "finished, the terms one stopped at and the failure of one that failed. An install "
             "whose process is gone answers as failed."
         ),
-    )(boundary(bound(list_installs, context)))
+    )(boundary(bound(list_installs)))
     server.tool(
         name="get_install",
         annotations=READ,
@@ -226,7 +229,7 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "One install by its id: its status, the step it is on with that step's count, its "
             "summary once it is done, and the failure of one whose process is gone."
         ),
-    )(boundary(bound(get_install, context)))
+    )(boundary(bound(get_install)))
     server.tool(
         name="cancel_install",
         annotations=WRITE,
@@ -236,4 +239,4 @@ def register(server: FastMCP, context: ServerContext) -> None:
             "already finished is refused, and one that stopped is posted again rather than "
             "resumed."
         ),
-    )(boundary(bound(cancel_install, context)))
+    )(boundary(bound(cancel_install)))

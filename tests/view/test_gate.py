@@ -14,9 +14,9 @@ from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from ecosemantic.mcp.context import ServerContext
+from ecosemantic.mcp.reach import BRIDGE_EXTENSION
 from ecosemantic.mcp.server import build_server
 from ecosemantic.serve import ViewSettings, listener_for
-from ecosemantic.view.api import BRIDGE_EXTENSION
 from ecosemantic.view.app import TokenGate, build_view
 
 PROOF = "a proof"

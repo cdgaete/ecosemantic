@@ -1,5 +1,8 @@
+import { renderHook } from '@testing-library/react'
+import { createElement, type ReactNode } from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import type { SheetKind } from '@/store/ui'
-import { originAfter, returnLabel, sheetOf, systemOf, type Place } from '@/window/sheets'
+import { dockedOf, originAfter, returnLabel, sheetOf, systemOf, useSheet, type Place } from '@/window/sheets'
 
 const GRAPH: Place = { address: '/systems/s1', kind: null }
 const FORM: Place = { address: '/systems/s1/results/setup', kind: null }
@@ -25,6 +28,42 @@ describe('sheetOf', () => {
     ['/', null],
   ])('answers %s as %s', (pathname, kind) => {
     expect(sheetOf(pathname)).toBe(kind)
+  })
+})
+
+describe('dockedOf', () => {
+  it.each([
+    ['/systems/s1/results/sankey', true],
+    ['/systems/s1/results/impact', true],
+    ['/systems/s1/results/tree', true],
+    ['/systems/s1/results', false],
+    ['/systems/s1/results/setup', false],
+    ['/systems/s1/simulations/r1', false],
+    ['/systems/s1', false],
+    ['/', false],
+  ])('answers %s as %s', (pathname, docked) => {
+    expect(dockedOf(pathname)).toBe(docked)
+  })
+})
+
+describe('useSheet', () => {
+  const sheetAt = (address: string) => {
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(MemoryRouter, { initialEntries: [address] }, children)
+    return renderHook(() => useSheet(), { wrapper }).result.current
+  }
+
+  afterEach(() => {
+    window.innerWidth = 1024
+  })
+
+  it.each([700, 1440])('answers a result page at %i px as a docked result', (width) => {
+    window.innerWidth = width
+    expect(sheetAt('/systems/s1/results/sankey')).toEqual({ kind: 'results', to: '/systems/s1', label: 'Back to graph', docked: true })
+  })
+
+  it('answers a simulation as a sheet rather than a docked result', () => {
+    window.innerWidth = 700
+    expect(sheetAt('/systems/s1/simulations/r1')).toEqual({ kind: 'results', to: '/systems/s1', label: 'Back to graph', docked: false })
   })
 })
 

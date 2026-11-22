@@ -40,7 +40,21 @@ def test_a_name_that_is_not_one_and_the_pages_name_are_refused() -> None:
     for on_url, client in (("has space", "claude-code"), (None, "!!!"), ("view", "claude-code")):
         with pytest.raises(Invalid):
             agent_named(on_url, None, client)
-    assert agent_named(None, None, "view") == "view"
+    with pytest.raises(Invalid):
+        agent_named(None, None, VIEW)
+
+
+async def test_a_client_named_view_is_refused_and_writes_nothing(
+    context: ServerContext, full_server: FastMCP
+) -> None:
+    stored = {summary.id for summary in await context.storage.list_product_systems()}
+    async with named(full_server, VIEW) as client:
+        with pytest.raises(ToolError) as refused:
+            await client.call_tool(
+                "create_product_system", {"name": "posed", "database": FIXTURE_DB}
+            )
+    assert envelope_of(refused.value).error == "invalid"
+    assert {summary.id for summary in await context.storage.list_product_systems()} == stored
 
 
 async def test_a_read_is_recorded_with_what_it_held(
@@ -171,10 +185,9 @@ async def test_a_calculation_a_person_started_is_recorded_under_view(
     arguments = {"product_system_id": str(fixture_system_stored.id), "method_id": GWP_ID}
     before = await _ids(context)
     await recorded(
-        context,
         tool,
         arguments,
-        InProgress(agent=VIEW, client=VIEW),
+        InProgress(context=context, agent=VIEW, client=VIEW, origin="view"),
         True,
         lambda: tool.run(arguments),
     )
@@ -195,10 +208,9 @@ async def test_a_page_read_is_recorded_nowhere(
     arguments = {"product_system_id": str(fixture_system_stored.id)}
     before = await _ids(context)
     await recorded(
-        context,
         tool,
         arguments,
-        InProgress(agent=VIEW, client=VIEW),
+        InProgress(context=context, agent=VIEW, client=VIEW, origin="view"),
         False,
         lambda: tool.run(arguments),
     )
@@ -214,10 +226,9 @@ async def test_a_calculation_the_tool_refuses_is_recorded_with_its_envelope(
     before = await _ids(context)
     with pytest.raises(ToolError) as refused:
         await recorded(
-            context,
             tool,
             arguments,
-            InProgress(agent=VIEW, client=VIEW),
+            InProgress(context=context, agent=VIEW, client=VIEW, origin="view"),
             True,
             lambda: tool.run(arguments),
         )
@@ -234,10 +245,9 @@ async def test_a_record_that_fails_raises_although_the_tool_ran(
     unrecorded = dataclasses.replace(context, activity=_DiskFull())
     with pytest.raises(OSError, match="disk full"):
         await recorded(
-            unrecorded,
             tool,
             arguments,
-            InProgress(agent=VIEW, client=VIEW),
+            InProgress(context=unrecorded, agent=VIEW, client=VIEW, origin="view"),
             True,
             lambda: tool.run(arguments),
         )
@@ -255,7 +265,8 @@ async def test_the_call_runs_as_the_call_in_progress(
         seen.append(context.acting())
         return await tool.run(arguments)
 
-    await recorded(context, tool, arguments, InProgress(agent=VIEW, client=VIEW), False, run)
+    progress = InProgress(context=context, agent=VIEW, client=VIEW, origin="view")
+    await recorded(tool, arguments, progress, False, run)
     assert seen == [Actor(kind="agent", id="view", name="view")]
     assert current() is None
 
@@ -273,10 +284,9 @@ async def test_a_tool_with_no_annotations_runs_unrecorded_from_the_page(
     assert tool is not None
     before = await _ids(context)
     result = await recorded(
-        context,
         tool,
         {},
-        InProgress(agent=VIEW, client=VIEW),
+        InProgress(context=context, agent=VIEW, client=VIEW, origin="view"),
         False,
         lambda: tool.run({}),
     )

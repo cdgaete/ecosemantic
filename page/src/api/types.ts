@@ -84,7 +84,8 @@ export interface ProductSystem {
   hash: string | null
 }
 export type ActorKind = 'agent' | 'person' | 'service'
-export interface Actor { kind: ActorKind; id: string | null; name: string | null }
+export interface Person { id: string; name: string | null }
+export interface Actor { kind: ActorKind; id: string | null; name: string | null; on_behalf_of?: Person }
 export type Source = 'mcp' | 'openlca' | 'import' | 'handover' | 'tables'
 export type Entity = 'product_system' | 'process' | 'exchange' | 'parameter' | 'case' | 'scenario'
 export type ChangeOp = 'add' | 'update' | 'delete'
@@ -118,6 +119,7 @@ export interface Call {
   id: string
   agent: string
   client: string
+  person?: Person
   origin: Origin
   tool: string
   effect: Effect
@@ -163,7 +165,7 @@ export interface SystemRow { system: SystemCard; processes: number; last: LogEnt
 export interface Answer<T> { value: T; hint: string | null; view_url: string | null }
 export interface Listing<T> { items: T[]; has_more: boolean; next_cursor: string | null; hint: string | null; view_url: string | null }
 export interface MethodListing extends Listing<Method> { weighting_sets: Record<string, (string | null)[]> }
-export interface InventoryListing extends Listing<InventoryRow> { database: Database; credit_loops: string[][]; linked_credit_loops: LinkedLoop[]; treatments_run_backwards: string[]; floor: number; dropped: number }
+export interface InventoryListing extends Listing<InventoryRow> { database: Database; credit_loops: string[][]; linked_credit_loops: LinkedLoop[]; treatments_run_backwards: string[]; floor: number; dropped: number; variant: string | null }
 export interface Port { exchange_id: string; y: number }
 export interface CardGeometry { width: number; header_height: number; section_padding: number; section_label: number; row_height: number }
 export interface Placement {
@@ -181,11 +183,14 @@ export interface Placement {
   activity: number | null
   scaled: Record<string, number> | null
 }
+export interface Region { x: number; y: number; width: number; height: number }
+export interface StageRegions { stage: string; codes: string[]; regions: Region[] }
+export interface SharedSupplier { code: string; processes: number; stages: number }
 export interface Label { x: number; y: number; width: number; height: number; per_unit: string; scaled: string | null; formula: string | null }
 export interface Route { provider: string; consumer: string; exchange_id: string; points: [number, number][]; label: Label }
 export type TroubleKind = 'cards_overlap' | 'edge_through_card' | 'edges_overlap' | 'edge_backwards' | 'edges_cross' | 'label_overlap'
 export interface Trouble { kind: TroubleKind; message: string; codes: string[] }
-export interface Arrangement { map: string; cards: Placement[]; edges: Route[]; troubles: Trouble[]; score: number; bounds: Record<string, number>; scaling: string | null; card: CardGeometry }
+export interface Arrangement { map: string; cards: Placement[]; edges: Route[]; troubles: Trouble[]; score: number; bounds: Record<string, number>; scaling: string | null; stages: StageRegions[]; shared_suppliers: SharedSupplier[]; card: CardGeometry }
 export interface SystemRead extends Answer<ProductSystem> { open_requests: number }
 export interface Method {
   id: string
@@ -337,7 +342,31 @@ export interface TreeNode {
   level: number
   children: TreeNode[]
 }
-export type Decomposition = 'process' | 'path' | 'flow'
+export type Decomposition = 'process' | 'path' | 'flow' | 'stage'
+export type StageInputKind = 'process' | 'remainder'
+export interface StageInput {
+  kind: StageInputKind
+  ref: BackgroundRef | LinkedProcessRef | null
+  name: string
+  location: string | null
+  score: number
+  fraction: number | null
+}
+export interface StageProcess {
+  ref: ForegroundRef
+  name: string
+  location: string | null
+  score: number
+  fraction: number | null
+  direct: number
+  inputs: StageInput[]
+}
+export interface StagePart {
+  stage: string | null
+  score: number
+  fraction: number | null
+  processes: StageProcess[]
+}
 export interface Cut {
   cutoff: number
   below: number
@@ -359,7 +388,9 @@ export interface ContributionResult {
   root: TreeNode | null
   truncated: boolean | null
   flows: FlowHotspot[] | null
+  stages: StagePart[] | null
   cut: Cut | null
+  variant: string | null
 }
 export type FlowType = 'emission' | 'natural resource' | 'inventory indicator' | 'economic'
 export type CompartmentName = 'air' | 'water' | 'soil' | 'immaterial' | 'natural resource' | 'economic' | 'inventory indicator'
@@ -477,11 +508,12 @@ export interface ContributionArguments {
   by: Decomposition
   method_id?: string
   impact_method?: string
+  variant?: string
   demand?: DemandItem[]
   top_n?: number
   max_level?: number
   max_nodes?: number
   cutoff?: number
 }
-export interface InventoryArguments { demand?: DemandItem[]; side?: Side; order?: InventoryOrder; compartment?: string; query?: string; limit?: number; cursor?: string }
+export interface InventoryArguments { demand?: DemandItem[]; side?: Side; order?: InventoryOrder; compartment?: string; query?: string; limit?: number; cursor?: string; variant?: string }
 export interface StartRunArguments { method_id?: string; impact_method?: string; demand?: DemandItem[]; monte_carlo?: Partial<MonteCarloConfig> }

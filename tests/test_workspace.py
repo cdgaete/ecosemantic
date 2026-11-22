@@ -338,6 +338,19 @@ def _settled(ws: Workspace, run_id: str) -> str:
     raise AssertionError(f"run {run_id} never settled")
 
 
+def test_the_python_api_reads_a_case_s_contributions(ws: Workspace) -> None:
+    ps, _ = _widget(ws)
+    base = ps.calculate_impact(method_id=GWP_ID).value.scores[0].value
+    scored = ps.calculate_impact(method_id=GWP_ID, variants=["light"]).value
+    out = ps.contribution_analysis(method_id=GWP_ID, variant="light").value
+    assert out.variant == "light"
+    assert out.total.value == pytest.approx(scored.variants[0].scores[0].value)
+    # the case draws 0.25 kg of a frame of 2.2 kg steel a kilogram, and the widget emits 0.1
+    assert out.total.value == pytest.approx(0.25 * 2.2 * 2.78 + 0.1)
+    assert base == pytest.approx(0.25 * 2.4 * 1.1 * 2.78 + 0.1)
+    assert out.total.value != pytest.approx(base)
+
+
 def test_every_method_answers_on_the_fixture_database(
     ws: Workspace, bundle_dir: Path, tmp_path: Path
 ) -> None:

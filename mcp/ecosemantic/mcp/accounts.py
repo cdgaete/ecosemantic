@@ -24,7 +24,7 @@ _TRAY = (
     "On the computer where EcoSemantic runs, click the EcoSemantic icon beside the clock in the "
     "taskbar (it may sit under the ^ arrow) and choose Database accounts…"
 )
-_ARRIVAL = {"bridge": "through the bridge", "network": "across the network"}
+ARRIVAL = {"bridge": "through the bridge", "network": "across the network"}
 
 
 def _setup(source: DatabaseSource) -> str:
@@ -79,7 +79,7 @@ def account_advice(
     any source."""
     why = _WHY
     if reach is not None and reach != "here":
-        why = f"This page reaches EcoSemantic {_ARRIVAL[reach]}. {_WHY}"
+        why = f"This page reaches EcoSemantic {ARRIVAL[reach]}. {_WHY}"
     return Advice(why=why, steps=_steps(entry, needed))
 
 

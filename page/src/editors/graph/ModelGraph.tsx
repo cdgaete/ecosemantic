@@ -1,8 +1,8 @@
-import { Background, MiniMap, ReactFlow, ReactFlowProvider, applyNodeChanges, useNodesInitialized, useReactFlow, useStore, type Edge, type NodeChange, type NodeTypes, type EdgeTypes } from '@xyflow/react'
+import { Background, MiniMap, MiniMapNode, ReactFlow, ReactFlowProvider, applyNodeChanges, useNodesInitialized, useReactFlow, useStore, type Edge, type MiniMapNodeProps, type NodeChange, type NodeTypes, type EdgeTypes } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useLayout, usePlaceCards, useReleaseCards, useSystemAs } from '@/api/queries'
-import type { LogEntry, ProductSystem } from '@/api/types'
+import type { ContributionResult, LogEntry, ProductSystem } from '@/api/types'
 import { useUi } from '@/store/ui'
 import { useClearance, type Clearance } from '@/window/clearance'
 import { InSlot } from '@/window/slots'
@@ -10,21 +10,24 @@ import { ToolsGrip } from '@/window/ToolsGrip'
 import { CANVAS_EVENT, type CanvasCommand } from '@/window/shortcuts'
 import { useCanvasVariant } from '@/window/useCanvasState'
 import { useMinWidth } from '@/window/useMinWidth'
-import { buildGraph, changedCards, changedSuppliers, droppedCards, edgeText, hotFrom, type GraphNode, type Outlines } from './build'
+import { buildGraph, changedCards, changedSuppliers, droppedCards, edgeText, hotFrom, stageNodes, tetherEdges, STAGE_PREFIX, type GraphNode, type Outlines, type OwnShown, type Supplies } from './build'
 import { CanvasToolbar } from './CanvasToolbar'
 import { FlowEdge, type FlowEdgeData } from './FlowEdge'
 import { atRest, clearCentre, framing, READABLE_ZOOM, viewportFor, type Bounds, type Viewport, type ZoomLimits } from './layout'
 import { LinkedNode } from './LinkedNode'
 import { ProcessNode } from './ProcessNode'
+import { StageBox, TetherEdge } from './StageBox'
 import { ViewTools } from './ViewTools'
 
-const nodeTypes: NodeTypes = { process: ProcessNode, linked: LinkedNode }
-const edgeTypes: EdgeTypes = { flow: FlowEdge }
+const nodeTypes: NodeTypes = { process: ProcessNode, linked: LinkedNode, stage: StageBox }
+const edgeTypes: EdgeTypes = { flow: FlowEdge, tether: TetherEdge }
 
 interface GraphProps {
   system: ProductSystem
   latest: LogEntry | null
   outlines?: Outlines
+  owns?: Map<string, OwnShown>
+  split?: ContributionResult
   calculate?: ReactNode
 }
 
@@ -33,7 +36,11 @@ const QUIET_MS = 10_000
 const ZOOM = { min: 0.2, max: 1 }
 const READABLE = { min: READABLE_ZOOM, max: ZOOM.max }
 
-function Graph({ system, latest, outlines, calculate }: GraphProps) {
+function minimapCard({ id, ...rest }: MiniMapNodeProps) {
+  return id.startsWith(STAGE_PREFIX) ? null : <MiniMapNode id={id} {...rest} />
+}
+
+function Graph({ system, latest, outlines, owns, split, calculate }: GraphProps) {
   const flow = useReactFlow<GraphNode>()
   const theme = useUi((s) => s.theme)
   const chooseProcess = useUi((s) => s.chooseProcess)
@@ -65,23 +72,30 @@ function Graph({ system, latest, outlines, calculate }: GraphProps) {
   const scaledAvailable = scaling === null
   const scaledShown = scaledView && scaledAvailable
   const [nodes, setNodes] = useState<GraphNode[]>([])
+  const boxes = useMemo(() => (arranged === null ? [] : stageNodes(arranged.stages, split)), [arranged, split])
+  const supplies = useMemo(
+    () => new Map<string, Supplies>((arranged?.shared_suppliers ?? []).map((one) => [one.code, { processes: one.processes, stages: one.stages }])),
+    [arranged],
+  )
   useEffect(() => {
     if (arranged === null) return
-    setNodes(
-      built.nodes.flatMap((node): GraphNode[] => {
-        const spot = placed.get(node.id)
-        return spot === undefined ? [] : [{ ...node, position: { x: spot.x, y: spot.y }, data: { ...node.data, placement: { ...spot, scaled: scaledShown ? spot.scaled : null }, card: arranged.card } } as GraphNode]
-      }),
-    )
-  }, [built, arranged, placed, scaledShown])
+    const cards = built.nodes.flatMap((node): GraphNode[] => {
+      const spot = placed.get(node.id)
+      if (spot === undefined) return []
+      const data = { ...node.data, placement: { ...spot, scaled: scaledShown ? spot.scaled : null }, card: arranged.card }
+      return [{ ...node, position: { x: spot.x, y: spot.y }, data: node.type === 'process' ? { ...data, own: owns?.get(node.id) ?? null, supplies: supplies.get(node.id) ?? null } : data } as GraphNode]
+    })
+    setNodes([...boxes, ...cards])
+  }, [built, boxes, arranged, placed, scaledShown, owns, supplies])
   const edges = useMemo((): Edge[] => {
     const positions = new Map(nodes.map((node) => [node.id, node.position]))
-    return built.edges.map((edge) => {
+    const flows = built.edges.map((edge) => {
       const route = routes.get(edge.id)
       const label = route === undefined ? null : edgeText(route.label, scaledShown, formulaValues)
       return { ...edge, data: { ...(edge.data as FlowEdgeData), points: route?.points ?? null, label, rest: atRest(edge.source, edge.target, placed, positions) } }
     })
-  }, [built.edges, routes, placed, nodes, scaledShown, formulaValues])
+    return [...(arranged === null ? [] : tetherEdges(arranged.stages)), ...flows]
+  }, [built.edges, routes, placed, nodes, scaledShown, formulaValues, arranged])
   const onNodesChange = (changes: NodeChange<GraphNode>[]) => {
     setNodes((current) => {
       const next = applyNodeChanges(changes, current)
@@ -106,10 +120,10 @@ function Graph({ system, latest, outlines, calculate }: GraphProps) {
   )
   const fitAll = useCallback(
     (animate: boolean, zoom: ZoomLimits) => {
-      const all = flow.getNodes()
-      if (all.length === 0) return
-      const target = flow.getNodesBounds(all)
-      const side = reference !== null && all.some((node) => node.id === reference) ? flow.getNodesBounds([reference]) : null
+      const cards = flow.getNodes().filter((node) => node.type !== 'stage')
+      if (cards.length === 0) return
+      const target = flow.getNodesBounds(cards)
+      const side = reference !== null && cards.some((node) => node.id === reference) ? flow.getNodesBounds([reference]) : null
       void flow.setViewport(fitOf(target, side ?? target, zoom), animate ? MOVE : {})
     },
     [flow, reference, fitOf],
@@ -251,6 +265,7 @@ function Graph({ system, latest, outlines, calculate }: GraphProps) {
               maskStrokeColor="rgb(var(--accent))"
               nodeColor="rgb(var(--muted-foreground) / 0.35)"
               nodeStrokeColor="rgb(var(--node-border))"
+              nodeComponent={minimapCard}
               className="overflow-hidden rounded-md border shadow-sm"
               style={{ position: 'static', margin: 0 }}
             />
