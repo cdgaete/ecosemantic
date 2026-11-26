@@ -36,7 +36,7 @@ function FlowEdgeComponent({ id, sourceX, sourceY, targetX, targetY, sourcePosit
           <div
             data-testid="edge-label"
             style={{ position: 'absolute', transform: `translate(${label.x}px, ${label.y}px)`, width: label.width, height: label.height }}
-            className="nodrag nopan pointer-events-none whitespace-nowrap text-right text-xs leading-none text-muted-foreground"
+            className="nodrag nopan pointer-events-none whitespace-nowrap bg-background text-right text-xs leading-none text-muted-foreground"
           >
             {label.text}
           </div>

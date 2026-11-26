@@ -4,11 +4,21 @@ import uuid
 
 from ecosemantic.geometry import Placement
 from ecosemantic.routes import Label, Route
-from ecosemantic.troubles import score, troubles
+from ecosemantic.troubles import WEIGHTS, score, troubles
 
 
 def card(code: str, x: float, y: float) -> Placement:
-    return Placement(code=code, x=x, y=y, width=300.0, height=100.0, depth=0, output=50.0)
+    return Placement(
+        code=code,
+        x=x,
+        y=y,
+        width=300.0,
+        height=100.0,
+        depth=0,
+        shown_inputs=0,
+        shown_outputs=0,
+        output=50.0,
+    )
 
 
 def far() -> Label:
@@ -167,3 +177,22 @@ def test_two_arrows_into_one_fold_row_have_coinciding_labels_named() -> None:
         arrow("b", "c", [(300, 250), (350, 250), (350, 50), (500, 50)], boxed(430, 32)),
     ]
     assert kinds(cards, routes).count("label_overlap") == 1
+
+
+def test_a_trouble_names_the_exchanges_of_its_arrows() -> None:
+    cards = [card("a", 0, 0), card("b", 900, 0), card("c", 0, 500), card("d", 900, 500)]
+    shared = arrow("c", "d", [(300, 550), (900, 550)])
+    first = arrow("a", "b", [(300, 50), (400, 50), (400, 550), (900, 550)])
+    second = arrow("a", "b", [(300, 80), (500, 80), (500, 550), (900, 550)])
+    routes = [first, second, shared]
+    found = troubles(cards, routes)
+    overlaps = [t for t in found if t.kind == "edges_overlap"]
+    assert [t.codes for t in overlaps] == [["a", "b", "c", "d"]] * 2
+    assert [t.exchange_ids for t in overlaps] == [
+        [first.exchange_id, shared.exchange_id],
+        [second.exchange_id, shared.exchange_id],
+    ]
+    assert score(found) == 2 * WEIGHTS["edges_overlap"]
+    apart = troubles([card("a", 0, 0), card("b", 10, 10)], [])
+    assert [t.kind for t in apart] == ["cards_overlap"]
+    assert apart[0].exchange_ids == []

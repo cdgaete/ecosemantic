@@ -22,10 +22,12 @@ from ecosemantic.errors import (
     EcoSemanticError,
     ErrorEnvelope,
     Invalid,
+    MapTooLarge,
     NotFound,
     OtherBuild,
     Remedies,
     StaleScenario,
+    UnreadableLayout,
     error_payload,
     said,
 )
@@ -123,6 +125,10 @@ def listing(page: Page[T], hint: str | None = None) -> Listing[T]:
 
 REMEDIES: Remedies = {
     StaleScenario: "run rebase_scenario first",
+    MapTooLarge: 'detail="drawing" answers the same drawing without its map',
+    UnreadableLayout: (
+        "arrange_graph with release_all lets every card go and writes the layout again"
+    ),
     OtherBuild: (
         "install the build the system names, or run rebase_database to move it onto the "
         "installed build"

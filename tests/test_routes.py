@@ -8,6 +8,7 @@ from ecosemantic.errors import Invalid
 from ecosemantic.geometry import Link, LinkText, Placement, Port
 from ecosemantic.routes import LABEL_GAP, LABEL_HEIGHT, LABEL_LIFT, Route
 from ecosemantic.routes import route as routed
+from ecosemantic.troubles import passes_through
 
 
 def route(placements: list[Placement], links: list[Link]) -> list[Route]:
@@ -24,6 +25,8 @@ def card(code: str, x: float, y: float, height: float = 120.0, ports: int = 1) -
         width=300.0,
         height=height,
         depth=0,
+        shown_inputs=ports,
+        shown_outputs=0,
         inputs=[
             Port(exchange_id=uuid.uuid5(uuid.NAMESPACE_OID, f"{code}{n}"), y=70.0 + 22 * n)
             for n in range(ports)
@@ -218,3 +221,68 @@ def test_a_label_carries_its_formula_text_and_is_measured_over_the_longest_text(
     )
     assert found.label.formula == "ƒ kWh"
     assert found.label.width == 7.0 * len("ƒ kWh") + 8.0
+
+
+def boxed(route: Route) -> tuple[float, float, float, float]:
+    label = route.label
+    return label.x, label.y, label.x + label.width, label.y + label.height
+
+
+def box(x: float, y: float, width: float) -> Placement:
+    return Placement(
+        code="label",
+        x=x,
+        y=y,
+        width=width,
+        height=LABEL_HEIGHT,
+        depth=0,
+        shown_inputs=0,
+        shown_outputs=0,
+        output=0.0,
+    )
+
+
+def covers(route: Route, one: Placement) -> bool:
+    """Whether a stroke of `route` runs through this box."""
+    return any(
+        passes_through(segment, one)
+        for segment in zip(route.points, route.points[1:], strict=False)
+    )
+
+
+def two_tracks_into_one_card() -> list[Route]:
+    """Two providers of one column, 50 px before the card they both feed: the upper one enters two
+    rows above the lower, at the lower one's own output height."""
+    o, a, c = card("o", 0, 32), card("a", 0, 192), card("c", 350, 40, ports=2)
+    return route(
+        [o, a, c],
+        [
+            Link(provider="o", consumer="c", exchange_id=port("c", 0)),
+            Link(provider="a", consumer="c", exchange_id=port("c", 1)),
+        ],
+    )
+
+
+def labelled(route: Route) -> Placement:
+    return box(route.label.x, route.label.y, route.label.width)
+
+
+def test_a_label_moves_below_its_entry_when_another_provider_s_stroke_covers_the_place_above() -> (
+    None
+):
+    upper, lower = two_tracks_into_one_card()
+    entry = lower.points[-1][1]
+    before = box(lower.label.x, entry - LABEL_LIFT - LABEL_HEIGHT, lower.label.width)
+    assert covers(upper, before)
+    assert not covers(upper, labelled(lower))
+    assert lower.label.y == entry + LABEL_LIFT
+    assert lower.label.x + lower.label.width == 350.0 - LABEL_GAP
+    assert boxed(upper)[1] + LABEL_HEIGHT == 110.0 - LABEL_LIFT
+
+
+def test_a_label_the_clear_place_above_holds_keeps_above_its_entry() -> None:
+    upper, lower = two_tracks_into_one_card()
+    o, a, c = card("o", 0, 32), card("a", 0, 192), card("c", 350, 40, ports=2)
+    for arrow, other in ((upper, lower), (lower, upper)):
+        assert not covers(other, labelled(arrow))
+        assert not any(covers(arrow, card_box) for card_box in (o, a, c))

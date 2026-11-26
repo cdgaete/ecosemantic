@@ -36,3 +36,10 @@ async def test_the_server_keeps_the_client_that_introduced_itself(
     async with Client(build_server(held), client_info=introducing, mode="legacy"):
         pass
     assert held.client == {"name": "Claude Desktop", "version": "1.2.3"}
+
+
+def test_the_instructions_except_arrange_graph_from_the_log_entry_rule() -> None:
+    assert (
+        "Every write but arrange_graph appends one entry to the product system's log and returns "
+        "it; arrange_graph changes only where cards are drawn." in INSTRUCTIONS
+    )

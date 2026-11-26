@@ -52,6 +52,7 @@ it('writes the label text in its server box while the arrow is at rest, and not 
   expect(label.style.height).toBe('16px')
   expect(label.className).toContain('text-right')
   expect(label.className).toContain('text-xs')
+  expect(label.className).toContain('bg-background')
   view.unmount()
   const moving = labelled(false)
   await waitFor(() => expect(moving.container.querySelector('.react-flow__edge')).not.toBeNull())

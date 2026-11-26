@@ -45,6 +45,7 @@ from ecosemantic.ports.types import (
     RunPatch,
     RunStatus,
     SourceName,
+    Spot,
     SubCompartment,
     System,
     TreeNode,
@@ -595,3 +596,9 @@ def test_a_method_is_the_one_its_id_names_and_an_id_none_carries_is_invalid() ->
     with pytest.raises(Invalid) as caught:
         method_by_id([water, gwp], "m_ffffffffff")
     assert "m_ffffffffff" in str(caught.value)
+
+
+def test_a_spot_refuses_a_number_that_is_not_finite() -> None:
+    for x, y in ((float("inf"), 0.0), (0.0, float("nan"))):
+        with pytest.raises(ValidationError):
+            Spot(x=x, y=y)

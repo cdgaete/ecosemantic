@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { hashKey, keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
 import type { ContributionArguments, Credential, CredentialKind, ImpactArguments, InstallDraft, InventoryArguments, RequestDraft, StartRunArguments, VocabularyKind } from './types'
 
@@ -13,7 +13,7 @@ export const keys = {
   validation: (id: string) => ['validation', id] as const,
   anchors: (id: string) => ['anchors', id] as const,
   layouts: (id: string) => ['layout', id] as const,
-  layout: (id: string, variant: string | null) => ['layout', id, variant] as const,
+  layout: (id: string, variant: string | null, expanded: string[] = []) => ['layout', id, variant, expanded] as const,
   agents: ['agents'] as const,
   calls: (id: string, after: string | null) => ['calls', id, after] as const,
   trail: (id: string, seq: number) => ['trail', id, seq] as const,
@@ -142,26 +142,39 @@ export const useAccountEntry = () =>
   useQuery({ queryKey: keys.accountEntry, queryFn: api.accountEntry, ...forever, refetchOnWindowFocus: 'always' })
 export const useServer = () => useQuery({ queryKey: keys.server, queryFn: api.server, ...forever })
 
-export const useLayout = (id: string, variant: string | null, enabled = true) =>
-  useQuery({ queryKey: keys.layout(id, variant), queryFn: ({ signal }) => api.layout(id, variant, signal), enabled, ...forever })
+function sameDrawing(previous: { queryKey: readonly unknown[] } | undefined, id: string, variant: string | null): boolean {
+  const [kind, held, heldVariant] = previous?.queryKey ?? []
+  return kind === 'layout' && held === id && heldVariant === variant
+}
+
+export const useLayout = (id: string, variant: string | null, expanded: string[], enabled = true) =>
+  useQuery({
+    queryKey: keys.layout(id, variant, expanded),
+    queryFn: ({ signal }) => api.layout(id, variant, expanded, signal),
+    placeholderData: (previous, previousQuery) => (sameDrawing(previousQuery, id, variant) ? previous : undefined),
+    enabled,
+    ...forever,
+  })
 
 export const useMonteCarloDefaults = () => useQuery({ queryKey: keys.monteCarlo, queryFn: api.monteCarlo, ...forever })
 
-export function usePlaceCards(id: string, variant: string | null) {
+export function usePlaceCards(id: string, variant: string | null, expanded: string[]) {
   const client = useQueryClient()
+  const written = keys.layout(id, variant, expanded)
   return useMutation({
-    mutationFn: (placements: { code: string; x: number; y: number }[]) => api.placeCards(id, placements, variant),
+    mutationFn: (placements: { code: string; x: number; y: number }[]) => api.placeCards(id, placements, variant, expanded),
     onSuccess: (answer) => {
-      client.setQueryData(keys.layout(id, variant), answer)
-      void client.invalidateQueries({ queryKey: keys.layouts(id), predicate: (q) => q.queryKey[2] !== variant })
+      client.setQueryData(written, answer)
+      void client.invalidateQueries({ queryKey: keys.layouts(id), predicate: (query) => hashKey(query.queryKey) !== hashKey(written) })
     },
+    onError: () => void client.invalidateQueries({ queryKey: written }),
   })
 }
 
-export function useReleaseCards(id: string, variant: string | null) {
+export function useReleaseCards(id: string, variant: string | null, expanded: string[]) {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: () => api.releaseCards(id, variant),
+    mutationFn: () => api.releaseCards(id, variant, expanded),
     onSuccess: () => void client.invalidateQueries({ queryKey: keys.layouts(id) }),
   })
 }

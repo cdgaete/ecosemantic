@@ -22,7 +22,9 @@ async def _validates_calculates_draws_and_exports(
         impact = await client.call_tool(
             "calculate_impact", {"product_system_id": str(system.id), "method_id": GWP_ID}
         )
-        layout = await client.call_tool("graph_layout", {"product_system_id": str(system.id)})
+        layout = await client.call_tool(
+            "graph_layout", {"product_system_id": str(system.id), "detail": "full"}
+        )
         await client.call_tool(
             "export_product_system",
             {"product_system_id": str(system.id), "path": str(tmp_path / "out.zip")},

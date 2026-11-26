@@ -12,6 +12,8 @@ import { useUi } from '@/store/ui'
 import { places } from '@/editors/explorer/sections'
 import { CanvasBadge } from './Badges'
 import { Icon } from './Icon'
+import { NARROW_BELOW } from './inspector'
+import { useMinWidth } from './useMinWidth'
 
 const NO_STAGE = 'no stage'
 
@@ -73,7 +75,7 @@ function Node({ icon, label, to, count, depth, twisty, note, current }: { icon: 
 function SystemNode({ card, depth, shared, current }: { card: SystemCard; depth: number; shared: Set<string>; current: boolean }) {
   const [open, setOpen] = useState(false)
   const read = useSystem(card.id)
-  const drawn = useLayout(card.id, null, open)
+  const drawn = useLayout(card.id, null, [], open)
   const runs = useRuns(card.id, open)
   const calculations = useCalculations(card.id, open)
   const running = (runs.data?.value ?? []).some((r) => r.open)
@@ -81,6 +83,7 @@ function SystemNode({ card, depth, shared, current }: { card: SystemCard; depth:
   const openRequests = read.data?.open_requests ?? 0
   const arrangement = drawn.data?.value
   const groups = system && arrangement ? stageGroups(system, arrangement) : []
+  const narrow = !useMinWidth(NARROW_BELOW)
   const waiting = drawn.error ? drawn.error.message : arrangement ? null : 'Loading…'
   return (
     <>
@@ -89,7 +92,7 @@ function SystemNode({ card, depth, shared, current }: { card: SystemCard; depth:
         label={card.name}
         note={distinguishingId(card, shared) ?? undefined}
         current={current}
-        to={paths.system(card.id)}
+        to={paths.systemEntry(card.id, narrow)}
         depth={depth}
         twisty={<Twisty open={open} onClick={() => setOpen((o) => !o)} />}
       />

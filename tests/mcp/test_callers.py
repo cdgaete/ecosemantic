@@ -310,6 +310,12 @@ async def test_neither_caller_reaches_the_other_s_system(context: ServerContext)
                     },
                 ),
                 ("delete_product_system", {"product_system_id": ben_id}),
+                ("graph_layout", {"product_system_id": ben_id}),
+                ("graph_layout", {"product_system_id": ben_id, "detail": "compact"}),
+                ("graph_layout", {"product_system_id": ben_id, "detail": "amounts"}),
+                ("graph_layout", {"product_system_id": ben_id, "detail": "drawing"}),
+                ("graph_layout", {"product_system_id": ben_id, "detail": "full"}),
+                ("arrange_graph", {"product_system_id": ben_id, "placements": []}),
             )
             for tool, arguments in refused:
                 with pytest.raises(ToolError) as caught:

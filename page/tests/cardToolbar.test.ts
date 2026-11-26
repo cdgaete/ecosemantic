@@ -55,6 +55,42 @@ describe("the card toolbar's placement", () => {
   })
 })
 
+describe("the card toolbar's pointer", () => {
+  const wide = { width: 300, height: 34 }
+
+  it('points at the centre of a card the toolbar is centred on', () => {
+    const placed = toolbarFor({ card: CARD, natural: wide, height: wide.height, clear: CLEAR })
+    expect(placed.left).toBe(362)
+    expect(placed.pointer).toBe(150)
+  })
+
+  it('points at the card from a toolbar shifted off the left edge', () => {
+    const placed = toolbarFor({ card: { ...CARD, x: 12, width: 100 }, natural: wide, height: wide.height, clear: CLEAR })
+    expect(placed.left).toBe(12)
+    expect(placed.pointer).toBe(50)
+  })
+
+  it('keeps the pointer inside the menu where the inspector pushes the toolbar left', () => {
+    const placed = toolbarFor({ card: { ...CARD, x: 250 }, natural: wide, height: wide.height, clear: { ...CLEAR, width: 300 } })
+    expect(placed.left).toBe(12)
+    expect(placed.pointer).toBe(282)
+  })
+
+  it('points at the card from a toolbar placed below it', () => {
+    const card = { ...CARD, y: CLEAR.y + 20 }
+    const placed = toolbarFor({ card, natural: wide, height: wide.height, clear: CLEAR })
+    expect(placed.side).toBe('bottom')
+    expect(placed.pointer).toBe(150)
+  })
+
+  it('keeps the pointer inside a menu narrower than its card', () => {
+    const placed = toolbarFor({ card: { ...CARD, x: 100 }, natural: NATURAL, height: 102, clear: { ...CLEAR, width: 120 } })
+    expect(placed.width).toBe(120)
+    expect(placed.left).toBe(12)
+    expect(placed.pointer).toBe(102)
+  })
+})
+
 describe('the clear area', () => {
   it('is the canvas less the clearance on each side', () => {
     expect(clearArea({ width: 1024, height: 768 }, { top: 122, right: 384, bottom: 132, left: 68 })).toEqual({ x: 68, y: 122, width: 572, height: 514 })

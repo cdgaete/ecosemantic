@@ -1,6 +1,7 @@
 import { useLocation } from 'react-router-dom'
 import { AppLink } from '@/lib/router'
 import { cn } from '@/lib/utils'
+import { tabState } from './supplier'
 
 export interface PageTab {
   key: string
@@ -18,7 +19,7 @@ export function PageTabs({ pages, active, at = 'bottom' }: { pages: PageTab[]; a
           to={page.path}
           aria-current={page.key === active ? 'page' : undefined}
           className={cn('rounded-md px-2.5 py-1 text-xs whitespace-nowrap text-muted-foreground transition-colors duration-150 hover:bg-foreground/8 hover:text-foreground', page.key === active && 'bg-background text-foreground shadow-sm')}
-          state={{ from: location.pathname }}
+          state={{ ...tabState(location.state), from: location.pathname }}
         >
           {page.label}
         </AppLink>

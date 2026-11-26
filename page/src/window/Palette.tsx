@@ -1,4 +1,5 @@
 import { Command } from 'cmdk'
+import { useLocation } from 'react-router-dom'
 import { useDatabases, useSystem, useSystems } from '@/api/queries'
 import { places } from '@/editors/explorer/sections'
 import { beginsAWord } from '@/lib/matching'
@@ -6,9 +7,11 @@ import { distinguishingId, sharedNames } from '@/lib/names'
 import { paths } from '@/lib/paths'
 import { useUi } from '@/store/ui'
 import { CanvasBadge } from './Badges'
+import { NARROW_BELOW } from './inspector'
 import type { Menu } from './menus'
 import { leaves } from './palette'
 import { SHORTCUTS } from './shortcuts'
+import { useMinWidth } from './useMinWidth'
 
 const GROUP = '[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-muted-foreground'
 const ITEM = 'flex cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-1.5 data-[selected=true]:bg-foreground/8'
@@ -35,6 +38,8 @@ export function Palette({ menus, go }: { menus: Menu[]; go: (path: string) => vo
     setOpen(false)
     act()
   }
+  const here = useLocation().pathname
+  const narrow = !useMinWidth(NARROW_BELOW)
   return (
     <Command.Dialog open={open} onOpenChange={setOpen} label="Command palette" loop filter={MATCHES_WORDS} overlayClassName="fixed inset-0 z-40 bg-black/40" contentClassName="fixed top-[18%] left-1/2 z-50 w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-2xl">
       <Command.Input placeholder="Go to a process, a database, a page or a command…" className="w-full border-b bg-transparent px-3 py-2.5 text-sm outline-none placeholder:text-muted-foreground" />
@@ -67,7 +72,7 @@ export function Palette({ menus, go }: { menus: Menu[]; go: (path: string) => vo
                 keywords={id === null ? [card.name, card.database] : [card.name, card.database, id]}
                 aria-current={current ? 'true' : undefined}
                 className={ITEM}
-                onSelect={() => run(() => go(paths.system(card.id)))}
+                onSelect={() => run(() => go(paths.systemEntry(card.id, narrow)))}
               >
                 <span className="min-w-0 break-words">{card.name}</span>
                 <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
@@ -108,7 +113,7 @@ export function Palette({ menus, go }: { menus: Menu[]; go: (path: string) => vo
         </Command.Group>
         <Command.Group heading="Shortcuts" className={GROUP}>
           {SHORTCUTS.map((shortcut) => (
-            <Command.Item key={shortcut.id} value={`shortcut ${shortcut.id}`} keywords={[shortcut.label, shortcut.keys]} className={ITEM} onSelect={() => run(shortcut.run)}>
+            <Command.Item key={shortcut.id} value={`shortcut ${shortcut.id}`} keywords={[shortcut.label, shortcut.keys]} className={ITEM} onSelect={() => run(() => shortcut.run(here))}>
               {shortcut.label}
               <kbd className="font-sans text-xs text-muted-foreground">{shortcut.keys}</kbd>
             </Command.Item>

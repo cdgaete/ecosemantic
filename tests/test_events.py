@@ -147,7 +147,7 @@ async def test_placing_a_card_publishes_one_layout_event_and_a_read_publishes_no
     queue = bus.subscribe(product_system.id)
     code = product_system.processes[0].code
     arrangement = Layout(held={code: Spot(x=10.0, y=20.0)})
-    await storage.put_layout(product_system.id, arrangement)
+    await storage.put_layout(product_system.id, arrangement, expected=None)
     assert await store.get_layout(product_system.id) == arrangement
     assert queue.get_nowait() == Event(kind="layout", product_system_id=product_system.id)
     assert queue.empty()

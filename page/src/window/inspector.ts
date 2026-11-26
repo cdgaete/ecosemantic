@@ -1,17 +1,11 @@
 import { matchPath } from 'react-router-dom'
 import { isActivityPath } from '@/lib/paths'
 import { useUi, type InspectorMode } from '@/store/ui'
+import { sheetOf, systemOf } from './sheets'
+import { widthWithin } from './resize'
 import { useMinWidth } from './useMinWidth'
 
 export const NARROW_BELOW = 768
-export const NARROWEST = 320
-export const WIDEST_SHARE = 0.8
-export const KEY_STEP = 24
-
-/** The width a dragged inspector takes: whole pixels, no narrower than 320 px and no wider than four fifths of the window. */
-export function widthWithin(width: number, viewport: number): number {
-  return Math.round(Math.max(NARROWEST, Math.min(width, viewport * WIDEST_SHARE)))
-}
 
 function narrowAt(): boolean {
   return !window.matchMedia(`(min-width: ${NARROW_BELOW}px)`).matches
@@ -39,6 +33,17 @@ export function closeInspector(): void {
   else state.setInspector('closed')
 }
 
+/**
+ * Dismisses the inspector a blank canvas click or Escape leaves, where the window draws one: the address is under a
+ * system and no sheet holds it. Anywhere else the mode stays as the person left it.
+ */
+export function dismissInspector(pathname: string): void {
+  if (systemOf(pathname) === null || sheetOf(pathname) !== null) return
+  const state = useUi.getState()
+  if (!inspectorShown(state, narrowAt())) return
+  closeInspector()
+}
+
 export function sheetShown(state: { sheetOpen: boolean }): boolean {
   return narrowAt() && state.sheetOpen
 }
@@ -64,6 +69,12 @@ export function resizeInspector(width: number | null): void {
 export function toggleWidened(): void {
   const state = useUi.getState()
   state.setInspector(state.inspector === 'widened' ? 'open' : 'widened')
+}
+
+/** Draws the narrow sheet at its shorter height so the graph above it is larger, and returns it to the ordinary one. */
+export function toggleSheetHeight(): void {
+  const state = useUi.getState()
+  state.setSheetShort(!state.sheetShort)
 }
 
 export function opensInspector(pathname: string): boolean {

@@ -26,10 +26,13 @@ from ecosemantic.model.entities import (
     method_id,
 )
 from ecosemantic.model.refs import DemandItem, ElementaryFlowRef
+from ecosemantic.package.sidecar import LAYOUT_FILE, SIDECAR_DIR
 from ecosemantic.ports.types import InventoryRow, Layout, MonteCarloConfig, Spot, System
 from ecosemantic.view.api import call_tool
 from ecosemantic.view.app import build_view
+from tests.conftest import fixture_system
 from tests.fixture_data import CODES, FIXTURE_BIO, FIXTURE_DB, FLOW_IDS, GWP
+from tests.layout_fixtures import staged_nine
 
 GWP_ID = method_id(" > ".join(GWP))
 NOWHERE = Path("/nonexistent-static")
@@ -355,6 +358,7 @@ async def test_the_layout_answers_the_arrangement_and_keeps_what_is_posted(
         first = client.get(f"/api/product-systems/{system_id}/layout").json()["value"]
         # the arrangement graph_layout answers an agent
         assert set(first) == {
+            "kind",
             "map",
             "cards",
             "edges",
@@ -380,18 +384,85 @@ async def test_the_layout_answers_the_arrangement_and_keeps_what_is_posted(
         assert not any(p["held"] for p in released["cards"])
 
 
+async def test_the_layout_route_answers_the_rows_the_page_shows_in_full(
+    context: ServerContext, full_server: FastMCP
+) -> None:
+    system = staged_nine()
+    await context.storage.put_product_system(system, context.actor, "created")
+    base = f"/api/product-systems/{system.id}/layout"
+    try:
+        with TestClient(build_view(context, full_server, static=NOWHERE)) as client:
+            plain = client.get(base).json()["value"]
+            expanded = client.get(base, params={"expanded": ["concentrator"]}).json()["value"]
+            posted = client.post(
+                base, json={"placements": [], "expanded": ["concentrator"]}
+            ).json()["value"]
+        folded = next(c for c in plain["cards"] if c["code"] == "concentrator")
+        drawn = next(c for c in expanded["cards"] if c["code"] == "concentrator")
+        assert drawn["shown_inputs"] > folded["shown_inputs"]
+        assert drawn["folded_inputs"] == folded["folded_inputs"] > 0
+        assert posted["cards"] == expanded["cards"]
+        assert (await context.storage.get_layout(system.id)).held == {}
+        assert not (context.systems_dir / str(system.id) / SIDECAR_DIR / LAYOUT_FILE).exists()
+    finally:
+        await context.storage.delete_product_system(system.id, context.actor)
+
+
+async def test_a_drag_records_a_person(
+    context: ServerContext, full_server: FastMCP, fixture_system_stored: ProductSystem
+) -> None:
+    system_id = fixture_system_stored.id
+    code = fixture_system_stored.processes[0].code
+    try:
+        with TestClient(build_view(context, full_server, static=NOWHERE)) as client:
+            posted = client.post(
+                f"/api/product-systems/{system_id}/layout",
+                json={"placements": [{"code": code, "x": 11.0, "y": 22.0}]},
+            )
+        assert posted.status_code == 200
+        held = (await context.storage.get_layout(system_id)).held
+        assert held[code].placed_by == "person"
+    finally:
+        await context.storage.put_layout(system_id, Layout(), expected=None)
+
+
 async def test_releasing_the_layout_clears_a_held_code_no_card_draws(
     context: ServerContext, full_server: FastMCP, fixture_system_stored: ProductSystem
 ) -> None:
     system_id = fixture_system_stored.id
-    await context.storage.put_layout(system_id, Layout(held={"gone": Spot(x=1.0, y=2.0)}))
+    await context.storage.put_layout(
+        system_id, Layout(held={"gone": Spot(x=1.0, y=2.0)}), expected=None
+    )
     try:
         with TestClient(build_view(context, full_server, static=NOWHERE)) as client:
             released = client.delete(f"/api/product-systems/{system_id}/layout")
         assert released.status_code == 200
         assert (await context.storage.get_layout(system_id)).held == {}
     finally:
-        await context.storage.put_layout(system_id, Layout())
+        await context.storage.put_layout(system_id, Layout(), expected=None)
+
+
+async def test_the_page_resets_an_unreadable_layout(
+    context: ServerContext, full_server: FastMCP
+) -> None:
+    whole = fixture_system().product_system
+    assert whole is not None
+    system = whole.model_copy(deep=True, update={"id": uuid.uuid4()})
+    await context.storage.put_product_system(system, context.actor, "created")
+    code = system.processes[0].code
+    layout_file = context.systems_dir / str(system.id) / SIDECAR_DIR / LAYOUT_FILE
+    layout_file.write_text(json.dumps({"held": {code: {"x": None, "y": 0}}}), encoding="utf-8")
+    base = f"/api/product-systems/{system.id}/layout"
+    try:
+        with TestClient(build_view(context, full_server, static=NOWHERE)) as client:
+            unreadable = client.get(base)
+            released = client.delete(base)
+            again = client.get(base)
+        assert unreadable.status_code == 503
+        assert released.status_code == 200 and again.status_code == 200
+        assert str(context.systems_dir) not in unreadable.text + released.text + again.text
+    finally:
+        await context.storage.delete_product_system(system.id, context.actor)
 
 
 async def test_releasing_the_layout_is_one_arrange_graph_call_releasing_all_under_the_variant(
@@ -434,6 +505,8 @@ async def test_releasing_the_layout_is_one_arrange_graph_call_releasing_all_unde
                 "placements": [],
                 "release_all": True,
                 "variant": "heavy frame",
+                "expanded": None,
+                "detail": "drawing",
             },
         )
     ]

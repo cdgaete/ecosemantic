@@ -123,7 +123,7 @@ describe('version editor', () => {
     fireEvent.click(await screen.findByRole('link', { name: 'Open the live product system' }))
     await waitFor(() => expect(screen.queryByText(`Read-only: the product system as it was at entry #${olderEntry.seq}.`)).not.toBeInTheDocument())
     const bar = await screen.findByRole('toolbar', { name: 'Canvas' })
-    expect(within(bar).getByRole('button', { name: 'Calculate an impact result' })).toBeInTheDocument()
+    expect(within(bar).getByRole('button', { name: 'New calculation…' })).toBeInTheDocument()
   })
 
   it('an older entry is drawn as it was whatever state is chosen', async () => {

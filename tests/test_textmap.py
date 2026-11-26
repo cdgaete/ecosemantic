@@ -4,11 +4,17 @@ import uuid
 
 import pytest
 
-from ecosemantic.errors import Invalid
-from ecosemantic.geometry import Placement, Port, card_size, ports, shown_inputs
+from ecosemantic.errors import Invalid, MapTooLarge
+from ecosemantic.geometry import Placement, Port, card_size, folds, ports, rows
 from ecosemantic.layout import arrange, stage_regions
 from ecosemantic.model.entities import Exchange, Process, ProductSystem
-from ecosemantic.model.refs import BackgroundRef, Database, ForegroundRef, SystemRef
+from ecosemantic.model.refs import (
+    BackgroundRef,
+    Database,
+    ElementaryFlowRef,
+    ForegroundRef,
+    SystemRef,
+)
 from ecosemantic.routes import Label, Route
 from ecosemantic.textmap import LEGEND, as_text
 from tests.test_layout import emitted, water_chain
@@ -53,7 +59,17 @@ def system() -> ProductSystem:
 
 def placements(y_b: float = 0.0) -> list[Placement]:
     return [
-        Placement(code="a", x=0, y=0, width=300, height=132, depth=1, output=97.0),
+        Placement(
+            code="a",
+            x=0,
+            y=0,
+            width=300,
+            height=132,
+            depth=1,
+            shown_inputs=0,
+            shown_outputs=0,
+            output=97.0,
+        ),
         Placement(
             code="b",
             x=420,
@@ -61,6 +77,8 @@ def placements(y_b: float = 0.0) -> list[Placement]:
             width=300,
             height=154,
             depth=0,
+            shown_inputs=1,
+            shown_outputs=1,
             inputs=[Port(exchange_id=FEED, y=75.0)],
             outputs=[METAL],
             output=119.0,
@@ -134,7 +152,17 @@ def test_a_production_row_is_named_on_the_line_of_its_output_dot() -> None:
 def test_a_linked_systems_card_shows_its_dot_and_feeds_its_row() -> None:
     linked = f"system:{uuid.uuid4()}"
     cards = [
-        Placement(code=linked, x=0, y=0, width=300, height=132, depth=1, output=66.0),
+        Placement(
+            code=linked,
+            x=0,
+            y=0,
+            width=300,
+            height=132,
+            depth=1,
+            shown_inputs=0,
+            shown_outputs=0,
+            output=66.0,
+        ),
         placements()[1],
     ]
     route = Route(
@@ -209,7 +237,16 @@ def linking() -> tuple[ProductSystem, str]:
 def test_a_linked_card_in_the_scaled_view_is_titled_with_its_scaled_output() -> None:
     linked, code = linking()
     card = Placement(
-        code=code, x=0, y=0, width=300, height=132, depth=1, output=66.0, scaled={METAL: 2.0}
+        code=code,
+        x=0,
+        y=0,
+        width=300,
+        height=132,
+        depth=1,
+        shown_inputs=0,
+        shown_outputs=0,
+        output=66.0,
+        scaled={METAL: 2.0},
     )
     lines = as_text(linked, [card, scaled_cards()[1]], []).splitlines()[1:]
     assert lines[0].split("┐")[0].endswith("… · 2 kg ")
@@ -218,7 +255,18 @@ def test_a_linked_card_in_the_scaled_view_is_titled_with_its_scaled_output() -> 
 
 def test_a_linked_card_without_its_one_scaled_output_is_refused() -> None:
     linked, code = linking()
-    card = Placement(code=code, x=0, y=0, width=300, height=132, depth=1, output=66.0, scaled={})
+    card = Placement(
+        code=code,
+        x=0,
+        y=0,
+        width=300,
+        height=132,
+        depth=1,
+        shown_inputs=0,
+        shown_outputs=0,
+        output=66.0,
+        scaled={},
+    )
     with pytest.raises(Invalid, match="carries 0 scaled amounts"):
         as_text(linked, [card, scaled_cards()[1]], [])
 
@@ -229,8 +277,10 @@ def test_an_unscaled_card_shows_the_name_alone() -> None:
     assert "·" not in text
 
 
-def _wide_card(count: int) -> tuple[ProductSystem, list[Placement]]:
-    """One card with `count` inputs, placed as the layout places it."""
+def _wide_card(
+    count: int, outputs: int = 1, *, expanded: bool = False
+) -> tuple[ProductSystem, list[Placement]]:
+    """One card with `count` inputs and `outputs` output rows, placed as the layout places it."""
     inputs = [
         Exchange(
             id=uuid.uuid4(),
@@ -243,6 +293,17 @@ def _wide_card(count: int) -> tuple[ProductSystem, list[Placement]]:
         for n in range(count)
     ]
     production = Exchange(id=uuid.uuid4(), type="production", name="p", amount=1.0, unit="kg")
+    emissions = [
+        Exchange(
+            id=uuid.uuid4(),
+            type="elementary",
+            name=f"e{n}",
+            amount=1.0,
+            unit="kg",
+            input=ElementaryFlowRef(database="d", id=f"f{n}"),
+        )
+        for n in range(outputs - 1)
+    ]
     process = Process(
         id=uuid.uuid4(),
         code="p",
@@ -250,11 +311,13 @@ def _wide_card(count: int) -> tuple[ProductSystem, list[Placement]]:
         unit="kg",
         location="GLO",
         reference_product="p",
-        exchanges=[production, *inputs],
+        exchanges=[production, *emissions, *inputs],
     )
     system = ProductSystem(id=uuid.uuid4(), name="s", database=DATABASE, processes=[process])
-    width, height = card_size(process, {})
-    found, output = ports(process, {})
+    sides = {e.input.id: "output" for e in emissions}
+    width, height = card_size(process, sides, expanded=expanded)
+    found, output = ports(process, sides, expanded=expanded)
+    input_rows, output_rows = folds(process, sides, expanded=expanded)
     card = Placement(
         code="p",
         x=0,
@@ -262,8 +325,12 @@ def _wide_card(count: int) -> tuple[ProductSystem, list[Placement]]:
         width=width,
         height=height,
         depth=0,
-        shown_inputs=shown_inputs(process, {}),
+        shown_inputs=input_rows.shown,
+        shown_outputs=output_rows.shown,
+        folded_inputs=input_rows.folded,
+        folded_outputs=output_rows.folded,
         inputs=found,
+        outputs=[e.id for e in rows(process, sides)[1]],
         output=output,
     )
     return system, [card]
@@ -278,6 +345,24 @@ def test_a_card_with_ten_inputs_draws_six_rows_and_a_fold_row() -> None:
     fold = next(n for n, line in enumerate(lines) if "4 more inputs" in line)
     last = next(n for n, line in enumerate(lines) if "i5" in line)
     assert fold > last
+
+
+def test_a_card_with_ten_outputs_draws_six_rows_and_a_fold_row() -> None:
+    system_, cards = _wide_card(1, outputs=10)
+    lines = as_text(system_, cards, []).splitlines()
+    assert any("p" in line for line in lines)
+    assert any("4 more outputs" in line for line in lines)
+    assert all(any(f"e{n}" in line for line in lines) for n in range(5))
+    assert not any(f"e{n}" in line for line in lines for n in range(5, 9))
+
+
+def test_an_expanded_card_draws_every_row_of_both_sides_and_names_no_fold() -> None:
+    system_, cards = _wide_card(10, outputs=10, expanded=True)
+    lines = as_text(system_, cards, []).splitlines()
+    assert "more inputs" not in "\n".join(lines)
+    assert "more outputs" not in "\n".join(lines)
+    assert all(any(f"i{n}" in line for line in lines) for n in range(10))
+    assert all(any(f"e{n}" in line for line in lines) for n in range(9))
 
 
 def test_a_card_with_six_inputs_draws_no_fold_row() -> None:
@@ -297,3 +382,36 @@ def test_the_map_marks_each_stage_s_region() -> None:
     plain = as_text(system(), placements(), [])
     assert as_text(system(), placements(), [], ()) == plain
     assert as_text(system(), placements(), [], stage_regions(system(), placements())) == plain
+
+
+def _cells(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, int]]:
+    """The grid sizes the allocation is asked for while the spy is installed."""
+    from ecosemantic.textmap import _grid
+
+    asked: list[tuple[int, int]] = []
+
+    def spy(width: int, height: int) -> list[list[str]]:
+        asked.append((width, height))
+        return _grid(width, height)
+
+    monkeypatch.setattr("ecosemantic.textmap._grid", spy)
+    return asked
+
+
+def test_a_map_at_the_cell_limit_draws(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("ecosemantic.textmap.MAX_MAP_CELLS", 1095)
+    asked = _cells(monkeypatch)
+    as_text(system(), placements(), [])
+    assert asked == [(73, 15)]
+
+
+def test_a_map_over_the_cell_limit_is_refused_before_any_grid_is_allocated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("ecosemantic.textmap.MAX_MAP_CELLS", 1094)
+    asked = _cells(monkeypatch)
+    with pytest.raises(MapTooLarge) as caught:
+        as_text(system(), placements(), [])
+    assert isinstance(caught.value, Invalid)
+    assert "1094" in str(caught.value) and "\n" not in str(caught.value)
+    assert asked == []

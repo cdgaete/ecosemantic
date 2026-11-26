@@ -1,9 +1,11 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { useLocation } from 'react-router-dom'
-import { renderInSlots } from './render'
+import { renderAt, renderInSlots } from './render'
 import { layoutAnswer } from './placements'
+import { resizePage } from './setup'
 import { api } from '@/api/client'
 import type { Answer, Call, ImpactArguments, ImpactResult, Method, ProductSystem, Score, Value, VariantScores } from '@/api/types'
+import { ResultBand } from '@/editors/results/ResultBand'
 import { GraphPage } from '@/editors/system/GraphPage'
 import { formatAmount, shortHash } from '@/lib/format'
 import { useUi } from '@/store/ui'
@@ -89,11 +91,24 @@ async function open(calls: Call[] = [recorded]) {
 }
 
 const band = () => within(screen.getByRole('group', { name: 'Result band' }))
+
+function loneBand(width: number, calls: Call[]) {
+  resizePage(width)
+  vi.mocked(api.calculations).mockResolvedValue({ value: calls } as Value<Call[]>)
+  return renderAt(
+    `/systems/${doc.id}`,
+    <>
+      <ResultBand systemId={doc.id} />
+      <Place />
+    </>,
+  )
+}
 const status = () => band().getByRole('status')
 const label = (name: string, score: number, unit: string) => `${name} ${formatAmount(score)} ${unit}`
+const runAgain = 'Run again: gwp > climate change > GWP100 · base values'
 
 beforeEach(() => {
-  useUi.setState({ canvasSystemId: doc.id, canvasVariant: null, chosenEntry: null, resultCategories: {} })
+  useUi.setState({ canvasSystemId: doc.id, canvasVariant: null, chosenEntry: null, resultCategories: {}, startedImpact: null })
   vi.mocked(api.impact).mockClear()
   vi.mocked(api.contributions).mockClear()
 })
@@ -101,9 +116,56 @@ beforeEach(() => {
 it('without a calculation the band offers calculate', async () => {
   await open([])
   await waitFor(() => expect(screen.getByRole('group', { name: 'Result band' })).toBeInTheDocument())
-  expect(band().getByRole('button', { name: 'Calculate an impact result' })).toBeInTheDocument()
+  expect(band().getByRole('button', { name: 'New calculation…' })).toBeInTheDocument()
+  expect(band().queryByRole('button', { name: 'Open result' })).not.toBeInTheDocument()
+  expect(band().queryByRole('button', { name: runAgain })).not.toBeInTheDocument()
   expect(band().queryByRole('group', { name: 'Case shown' })).not.toBeInTheDocument()
 })
+
+it('offers only a new calculation below 768 px while no call succeeded', async () => {
+  loneBand(700, [])
+  await waitFor(() => expect(band().getByRole('button', { name: 'New calculation…' })).toBeInTheDocument())
+  expect(band().getByRole('button', { name: 'New calculation…' })).toHaveTextContent('New calculation…')
+  expect(band().queryByRole('button', { name: 'More calculation actions' })).not.toBeInTheDocument()
+  expect(band().queryByRole('button', { name: 'Open result' })).not.toBeInTheDocument()
+})
+
+it('opens the result of the band without starting a run', async () => {
+  await open()
+  await screen.findByRole('group', { name: 'Case shown' })
+  fireEvent.click(band().getByRole('button', { name: 'Open result' }))
+  expect(place()).toBe(`/systems/${doc.id}/results/impact?call=${recorded.id}`)
+  expect(useUi.getState().startedImpact).toBeNull()
+})
+
+it('repeats the latest call on the current model, naming what it repeats', async () => {
+  await open()
+  fireEvent.click(await band().findByRole('button', { name: runAgain }))
+  expect(place()).toBe(`/systems/${doc.id}/results/impact?call=${recorded.id}`)
+  expect(useUi.getState().startedImpact).toBe(doc.id)
+})
+
+it('names the three calculations in words from 1280 px', async () => {
+  resizePage(1440)
+  await open()
+  await screen.findByRole('group', { name: 'Case shown' })
+  expect(band().getByRole('button', { name: 'Open result' })).toHaveTextContent('Open result')
+  expect(band().getByRole('button', { name: runAgain })).toHaveTextContent('Run again')
+  expect(band().getByRole('button', { name: 'New calculation…' })).toHaveTextContent('New calculation…')
+})
+
+it('keeps the primary action in words and the rest in a labelled menu below 768 px', async () => {
+  loneBand(700, [recorded])
+  await screen.findByRole('group', { name: 'Case shown' })
+  expect(band().getByRole('button', { name: 'Open result' })).toHaveTextContent('Open result')
+  fireEvent.keyDown(band().getByRole('button', { name: 'More calculation actions' }), { key: 'Enter' })
+  expect(await screen.findByRole('menuitem', { name: 'New calculation…' })).toBeInTheDocument()
+  fireEvent.click(await screen.findByRole('menuitem', { name: runAgain }))
+  expect(useUi.getState().startedImpact).toBe(doc.id)
+  expect(place()).toBe(`/systems/${doc.id}/results/impact?call=${recorded.id}`)
+})
+
+afterEach(() => resizePage(1024))
 
 it('the band names the calculation and each case it scored', async () => {
   await open([{ ...recorded, arguments: { ...recorded.arguments, variants: ['heavy'] } }])

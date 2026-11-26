@@ -5,7 +5,6 @@ import { BuildLine } from '@/activity/BuildLine'
 import { Timeline } from '@/activity/Timeline'
 import { withoutToken } from '@/api/client'
 import { useProcessStream } from '@/api/processStream'
-import { ResultBand } from '@/editors/results/ResultBand'
 import { cn } from '@/lib/utils'
 import { useUi } from '@/store/ui'
 import { Canvas } from './Canvas'
@@ -19,7 +18,8 @@ import { NameIsland } from './NameIsland'
 import { closeNavigation } from './navigation'
 import { NavigationSheet } from './NavigationSheet'
 import { Palette } from './Palette'
-import { dockedOf, originAfter, sheetOf, systemOf, useSheet, type Place } from './sheets'
+import { ResultDrawer } from './ResultDrawer'
+import { dockedOf, originAfter, sheetOf, systemOf, useLeaveSheet, useSheet, type Place } from './sheets'
 import { useToolsPlace } from './tools'
 import { ToolsIsland } from './ToolsIsland'
 import { LEAVE_EVENT, useShortcuts } from './shortcuts'
@@ -49,6 +49,7 @@ export function Window() {
   const inspectorMode = useUi((s) => s.inspector)
   const setOrigin = useUi((s) => s.setOrigin)
   const sheet = useSheet()
+  const leaveSheet = useLeaveSheet()
   const sheetTo = sheet?.to ?? null
   const docked = sheet?.docked === true && named !== null
   const overlay = sheet !== null && !docked
@@ -70,11 +71,9 @@ export function Window() {
     if (here.kind !== null && origin !== undefined) setOrigin(here.kind, origin)
   }, [location.pathname, location.search, setOrigin])
   useEffect(() => {
-    if (sheetTo === null) return
-    const leave = () => go(sheetTo)
-    window.addEventListener(LEAVE_EVENT, leave)
-    return () => window.removeEventListener(LEAVE_EVENT, leave)
-  }, [sheetTo, go])
+    window.addEventListener(LEAVE_EVENT, leaveSheet)
+    return () => window.removeEventListener(LEAVE_EVENT, leaveSheet)
+  }, [leaveSheet])
   useEffect(() => {
     if (docked && narrow) setSheetOpen(false)
   }, [docked, narrow, setSheetOpen])
@@ -102,13 +101,12 @@ export function Window() {
             <Canvas systemId={drawn} />
           </div>
         )}
-        {overlay ? <div aria-hidden data-scrim title={sheet.label} className="absolute inset-0 bg-black/30" onClick={() => go(sheet.to)} /> : null}
+        {overlay ? <div aria-hidden data-scrim title={sheet.label} className="absolute inset-0 bg-black/30" onClick={leaveSheet} /> : null}
         <div
           ref={grid}
           className={cn(
             'pointer-events-none absolute inset-0 grid gap-3 p-3 [&>*]:pointer-events-auto [&>*]:min-w-0',
             narrow ? 'grid-cols-[auto_minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto]' : 'grid-cols-[auto_minmax(0,1fr)_auto] grid-rows-[auto_minmax(0,1fr)_auto]',
-            docked && !narrow && 'grid-rows-[auto_minmax(0,2fr)_minmax(0,3fr)]',
           )}
         >
           <Dock menus={wide ? null : <MenuButton menus={menus} go={go} />} view={narrow || paged ? null : <Slot name="view" />} />
@@ -125,7 +123,7 @@ export function Window() {
               {paged ? null : <ToolsIsland />}
               {sheet === null ? null : (
                 <div className="col-start-2 row-start-1 justify-self-end rounded-xl border bg-chrome/95 p-1 shadow-lg">
-                  <IconButton label={CLOSE[sheet.kind]} shortcut="dismiss" side="left" onClick={() => go(sheet.to)}>
+                  <IconButton label={CLOSE[sheet.kind]} shortcut="dismiss" side="left" onClick={leaveSheet}>
                     <X />
                   </IconButton>
                 </div>
@@ -145,24 +143,8 @@ export function Window() {
                 <Outlet />
               </div>
             </section>
-          ) : docked ? (
-            <section
-              aria-label="Result"
-              data-clear={narrow ? undefined : 'bottom'}
-              className={cn(
-                'flex min-h-0 flex-col overflow-hidden rounded-xl border bg-background shadow-lg',
-                narrow ? 'col-span-2 col-start-1 row-span-2 row-start-2' : 'col-span-2 col-start-2 row-start-3',
-              )}
-            >
-              {narrow ? (
-                <div className="flex flex-wrap items-center gap-1 border-b p-1">
-                  <ResultBand systemId={named} />
-                </div>
-              ) : null}
-              <div className="@container min-h-0 flex-1 overflow-auto">
-                <Outlet />
-              </div>
-            </section>
+          ) : docked && named !== null ? (
+            <ResultDrawer systemId={named} />
           ) : (
             <>
               {narrow && toolsOpen ? (
@@ -172,7 +154,7 @@ export function Window() {
                 </div>
               ) : null}
               <Inspector />
-              {narrow ? null : <Timeline systemId={named} />}
+              {narrow || inspectorMode === 'widened' ? null : <Timeline systemId={named} />}
             </>
           )}
           {narrow || paged ? null : (

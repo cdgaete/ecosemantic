@@ -67,6 +67,14 @@ it('names the target from the demand the answer scored', async () => {
   vi.mocked(api.impact).mockResolvedValue(impact)
 })
 
+it('reads a value whose query is still in flight as loading rather than as missing', async () => {
+  vi.mocked(api.system).mockImplementationOnce(() => new Promise<SystemRead>(() => undefined))
+  renderAt(`/systems/${system.value.id}/results/general?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}`, <Screens />)
+  const label = await screen.findByText('Product system')
+  expect(label.nextElementSibling).toHaveTextContent('Loading…')
+  expect(screen.queryByText('Not provided')).toBeNull()
+})
+
 it('says what was scored and which variants it was compared with', async () => {
   renderAt(`/systems/${system.value.id}/results/general?impact_method=${encodeURIComponent(firstMethodOf(impact.value).impact_method)}&variants=small&variants=heavy`, <App router={false} />)
   const scored = (await screen.findByText('Scored on')).closest('div')!

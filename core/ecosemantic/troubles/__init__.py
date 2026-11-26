@@ -3,6 +3,7 @@ named once, and a score that weighs them."""
 
 from __future__ import annotations
 
+import uuid
 from typing import Literal
 
 from pydantic import BaseModel
@@ -30,11 +31,13 @@ Segment = tuple[Point, Point]
 
 
 class Trouble(BaseModel):
-    """One thing wrong with the drawing, with the cards it concerns."""
+    """One thing wrong with the drawing, with the cards it concerns and the exchanges of the
+    arrows it concerns, in the order `codes` names them."""
 
     kind: TroubleKind
     message: str
     codes: list[str]
+    exchange_ids: list[uuid.UUID]
 
 
 def _segments(route: Route) -> list[Segment]:
@@ -64,6 +67,8 @@ def _box(label: Label) -> Placement:
         width=label.width,
         height=label.height,
         depth=0,
+        shown_inputs=0,
+        shown_outputs=0,
         output=0.0,
     )
 
@@ -108,6 +113,7 @@ def troubles(placements: list[Placement], routes: list[Route]) -> list[Trouble]:
                         kind="cards_overlap",
                         message=f"{a.code} and {b.code} overlap",
                         codes=[a.code, b.code],
+                        exchange_ids=[],
                     )
                 )
     spots = {p.code: p for p in placements}
@@ -119,6 +125,7 @@ def troubles(placements: list[Placement], routes: list[Route]) -> list[Trouble]:
                         kind="edge_through_card",
                         message=f"the arrow {_name(r)} runs through {c.code}",
                         codes=[r.provider, r.consumer, c.code],
+                        exchange_ids=[r.exchange_id],
                     )
                 )
         if r.provider != r.consumer and spots[r.consumer].x <= spots[r.provider].x:
@@ -127,6 +134,7 @@ def troubles(placements: list[Placement], routes: list[Route]) -> list[Trouble]:
                     kind="edge_backwards",
                     message=f"the arrow {_name(r)} points backwards",
                     codes=[r.provider, r.consumer],
+                    exchange_ids=[r.exchange_id],
                 )
             )
     for i, a in enumerate(routes):
@@ -140,6 +148,7 @@ def troubles(placements: list[Placement], routes: list[Route]) -> list[Trouble]:
                         kind="edges_overlap",
                         message=f"the arrows {_name(a)} and {_name(b)} run on one line",
                         codes=[a.provider, a.consumer, b.provider, b.consumer],
+                        exchange_ids=[a.exchange_id, b.exchange_id],
                     )
                 )
             for _ in [p for p in pairs if _cross(*p)]:
@@ -148,6 +157,7 @@ def troubles(placements: list[Placement], routes: list[Route]) -> list[Trouble]:
                         kind="edges_cross",
                         message=f"the arrows {_name(a)} and {_name(b)} cross",
                         codes=[a.provider, a.consumer, b.provider, b.consumer],
+                        exchange_ids=[a.exchange_id, b.exchange_id],
                     )
                 )
     boxes = [_box(r.label) for r in routes]
@@ -159,6 +169,7 @@ def troubles(placements: list[Placement], routes: list[Route]) -> list[Trouble]:
                         kind="label_overlap",
                         message=f"the label of the arrow {_name(r)} covers {c.code}",
                         codes=[r.provider, r.consumer, c.code],
+                        exchange_ids=[r.exchange_id],
                     )
                 )
         for j, other in enumerate(routes):
@@ -168,6 +179,7 @@ def troubles(placements: list[Placement], routes: list[Route]) -> list[Trouble]:
                         kind="label_overlap",
                         message=f"the labels of {_name(r)} and {_name(other)} overlap",
                         codes=[r.provider, r.consumer, other.provider, other.consumer],
+                        exchange_ids=[r.exchange_id, other.exchange_id],
                     )
                 )
             if j != i and other.provider != r.provider:
@@ -177,6 +189,7 @@ def troubles(placements: list[Placement], routes: list[Route]) -> list[Trouble]:
                             kind="label_overlap",
                             message=f"the arrow {_name(other)} crosses the label of {_name(r)}",
                             codes=[r.provider, r.consumer, other.provider, other.consumer],
+                            exchange_ids=[r.exchange_id, other.exchange_id],
                         )
                     )
     return found

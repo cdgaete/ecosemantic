@@ -30,7 +30,7 @@ class FakeStorage:
     async def get_layout(self, product_system_id: uuid.UUID):
         raise NotImplementedError
 
-    async def put_layout(self, product_system_id: uuid.UUID, layout):
+    async def put_layout(self, product_system_id: uuid.UUID, layout, *, expected):
         raise NotImplementedError
 
     async def post_request(self, product_system_id: uuid.UUID, draft):

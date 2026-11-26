@@ -25,9 +25,11 @@ export interface CanvasToolbarProps {
   focus: () => void
   reorganise: () => void
   reset: () => void
+  rowsShown: 'all' | 'some' | 'none'
+  setAllRows: (on: boolean) => void
 }
 
-export function CanvasToolbar({ system, calculate, grip, notes, following, fit, follow, scaling, minimap, setMinimapOpen, focus, reorganise, reset }: CanvasToolbarProps) {
+export function CanvasToolbar({ system, calculate, grip, notes, following, fit, follow, scaling, minimap, setMinimapOpen, focus, reorganise, reset, rowsShown, setAllRows }: CanvasToolbarProps) {
   const state = useCanvasVariant(system)
   const live = useCanvasState(system.id).live
   const chooseCase = useChooseCase(system.id)
@@ -43,89 +45,99 @@ export function CanvasToolbar({ system, calculate, grip, notes, following, fit, 
       <div
         role="toolbar"
         aria-label="Canvas"
-        className="flex max-w-full flex-wrap items-center justify-center gap-1 rounded-xl border bg-chrome/95 p-1 shadow-lg backdrop-blur"
+        className="flex max-w-full items-start justify-center gap-1 rounded-xl border bg-chrome/95 p-1 shadow-lg backdrop-blur"
       >
-        {grip}
-        {calculate ? (
-          <>
-            {calculate}
+        <div data-wrap="" className="flex min-w-0 flex-wrap items-center justify-center gap-1">
+          {grip}
+          {calculate}
+          <div className="flex min-w-0 items-center gap-1">
+            {calculate ? <span className="mx-0.5 h-5 w-px bg-border" /> : null}
+            <label className="flex min-w-0 items-center gap-1 px-1 text-xs">
+              State
+              <select
+                aria-label="State"
+                className="nodrag min-w-28 max-w-48 rounded-sm border bg-background px-1"
+                value={state?.name ?? ''}
+                disabled={!live}
+                onChange={(e) => chooseCase(e.target.value === '' ? null : e.target.value)}
+              >
+                <option value="">base values</option>
+                {system.cases.map((c) => (
+                  <option key={`case:${c.name}`} value={c.name}>
+                    case {c.name}
+                  </option>
+                ))}
+                {system.scenarios.map((sc) => (
+                  <option key={`scenario:${sc.name}`} value={sc.name}>
+                    scenario {sc.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
             <span className="mx-0.5 h-5 w-px bg-border" />
-          </>
-        ) : null}
-        <label className="flex min-w-0 items-center gap-1 px-1 text-xs">
-          State
-          <select
-            aria-label="State"
-            className="nodrag min-w-28 max-w-48 rounded-sm border bg-background px-1"
-            value={state?.name ?? ''}
-            disabled={!live}
-            onChange={(e) => chooseCase(e.target.value === '' ? null : e.target.value)}
-          >
-            <option value="">base values</option>
-            {system.cases.map((c) => (
-              <option key={`case:${c.name}`} value={c.name}>
-                case {c.name}
-              </option>
-            ))}
-            {system.scenarios.map((sc) => (
-              <option key={`scenario:${sc.name}`} value={sc.name}>
-                scenario {sc.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className="mx-0.5 h-5 w-px bg-border" />
-        <IconButton label="Fit the graph" shortcut="fit" side="bottom" onClick={fit}>
-          <Maximize />
-        </IconButton>
-        {following ? null : labelled ? (
-          <Button size="sm" variant="ghost" onClick={follow}>
-            <LocateFixed className="size-3.5" /> Follow the build
-          </Button>
-        ) : (
-          <IconButton label="Follow the build" side="bottom" onClick={follow}>
-            <LocateFixed />
-          </IconButton>
-        )}
-        <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger aria-label="More canvas options" className={ICON_BUTTON}>
-                <Ellipsis />
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" sideOffset={6}>
-              More canvas options
-            </TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent side="bottom" align="end" className="w-64">
-            <DropdownMenuCheckboxItem
-              checked={scaledShown}
-              disabled={!scaledAvailable}
-              onCheckedChange={(on) => setScaledView(on === true)}
-              className="flex-wrap"
-            >
-              Scaled to 1 unit
-              {scaling === null ? null : <span className="basis-full text-xs text-muted-foreground">{scaling}</span>}
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem checked={formulaValues} onCheckedChange={(on) => setFormulaValues(on === true)}>
-              Formula values
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem checked={minimap} onCheckedChange={(on) => setMinimapOpen(on === true)}>
-              Minimap
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={focus}>
-              Focus the reference process
-              <DropdownMenuShortcut>{keysOf('focus')}</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={reorganise}>
-              Reorganise the graph
-              <DropdownMenuShortcut>{keysOf('reorganise')}</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={reset}>Reset layout</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            <IconButton label="Fit the graph" shortcut="fit" side="bottom" onClick={fit}>
+              <Maximize />
+            </IconButton>
+          </div>
+          {following ? null : labelled ? (
+            <Button size="sm" variant="ghost" onClick={follow}>
+              <LocateFixed className="size-3.5" /> Follow the build
+            </Button>
+          ) : (
+            <IconButton label="Follow the build" side="bottom" onClick={follow}>
+              <LocateFixed />
+            </IconButton>
+          )}
+        </div>
+        <div className="flex h-8 shrink-0 items-center">
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger aria-label="More canvas options" className={ICON_BUTTON}>
+                  <Ellipsis />
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={6}>
+                More canvas options
+              </TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent side="bottom" align="end" className="w-64">
+              <DropdownMenuCheckboxItem
+                checked={scaledShown}
+                disabled={!scaledAvailable}
+                onCheckedChange={(on) => setScaledView(on === true)}
+                className="flex-wrap"
+              >
+                Scaled to 1 unit
+                {scaling === null ? null : <span className="basis-full text-xs text-muted-foreground">{scaling}</span>}
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={formulaValues} onCheckedChange={(on) => setFormulaValues(on === true)}>
+                Formula values
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={minimap} onCheckedChange={(on) => setMinimapOpen(on === true)}>
+                Minimap
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={rowsShown === 'all' ? true : rowsShown === 'some' ? 'indeterminate' : false}
+                onCheckedChange={(on) => setAllRows(on !== false)}
+              >
+                All rows
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={focus}>
+                Focus the reference process
+                <DropdownMenuShortcut>{keysOf('focus')}</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={reorganise}>
+                Reorganise the graph
+                <DropdownMenuShortcut>{keysOf('reorganise')}</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={reset}>Reset layout</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
       {notes.length > 0 ? (
         <p role="status" className="max-w-full rounded-md bg-chrome/95 px-2 py-0.5 text-center text-xs shadow">

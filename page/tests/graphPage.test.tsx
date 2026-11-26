@@ -55,7 +55,7 @@ describe('graph page', () => {
     const view = renderInSlots('/', <GraphPage view={{ id: doc.id, system: doc, openRequests: 0, version: null, state: null }} />)
     await waitFor(() => expect(view.container.querySelectorAll('.react-flow__node').length).toBeGreaterThan(0))
     const bar = within(screen.getByRole('toolbar', { name: 'Canvas' }))
-    expect(within(bar.getByRole('group', { name: 'Result band' })).getByRole('button', { name: 'Calculate an impact result' })).toBeInTheDocument()
+    expect(within(bar.getByRole('group', { name: 'Result band' })).getByRole('button', { name: 'New calculation…' })).toBeInTheDocument()
     expect(bar.getByLabelText('State')).toBeInTheDocument()
     fireEvent.click(bar.getByRole('button', { name: 'Fit the graph' }))
     fireEvent.keyDown(bar.getByRole('button', { name: 'More canvas options' }), { key: 'Enter' })
@@ -70,7 +70,7 @@ describe('graph page', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: /Reorganise the graph/ }))
     fireEvent.keyDown(more, { key: 'Enter' })
     fireEvent.click(screen.getByRole('menuitem', { name: 'Reset layout' }))
-    await waitFor(() => expect(api.releaseCards).toHaveBeenCalledWith(doc.id, null))
+    await waitFor(() => expect(api.releaseCards).toHaveBeenCalledWith(doc.id, null, []))
   })
 
   it('releases the arrangement under the case the canvas shows', async () => {
@@ -80,7 +80,7 @@ describe('graph page', () => {
     const more = screen.getByRole('button', { name: 'More canvas options' })
     fireEvent.keyDown(more, { key: 'Enter' })
     fireEvent.click(screen.getByRole('menuitem', { name: 'Reset layout' }))
-    await waitFor(() => expect(api.releaseCards).toHaveBeenCalledWith(doc.id, 'heavy'))
+    await waitFor(() => expect(api.releaseCards).toHaveBeenCalledWith(doc.id, 'heavy', []))
   })
 
   it('follows the build again once the layout is reset, so the reset arrangement is fitted', async () => {
@@ -95,11 +95,29 @@ describe('graph page', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: /Follow the build/ })).not.toBeInTheDocument())
   })
 
+  it('keeps More canvas options out of the wrapping group, on the first row, with and without Follow the build', async () => {
+    const view = renderInSlots('/', <GraphPage view={{ id: doc.id, system: doc, openRequests: 0, version: null, state: null }} />)
+    await waitFor(() => expect(view.container.querySelectorAll('.react-flow__node').length).toBeGreaterThan(0))
+    const bar = screen.getByRole('toolbar', { name: 'Canvas' })
+    const more = screen.getByRole('button', { name: 'More canvas options' })
+    const group = bar.querySelector('[data-wrap]')
+    expect(group).not.toBeNull()
+    expect(group?.contains(screen.getByLabelText('State'))).toBe(true)
+    expect(group?.contains(more)).toBe(false)
+    expect(bar.lastElementChild?.contains(more)).toBe(true)
+    fireEvent.keyDown(more, { key: 'Enter' })
+    fireEvent.click(screen.getByRole('menuitem', { name: /Focus the reference process/ }))
+    const follow = await screen.findByRole('button', { name: /Follow the build/ })
+    expect(group?.contains(follow)).toBe(true)
+    expect(group?.contains(more)).toBe(false)
+    expect(bar.lastElementChild?.contains(more)).toBe(true)
+  })
+
   it('offers no calculation on the toolbar of a version that is not the latest', async () => {
     const view = renderInSlots('/', <GraphPage view={{ id: doc.id, system: doc, openRequests: 0, version: 'abc', state: null }} />)
     await waitFor(() => expect(view.container.querySelectorAll('.react-flow__node').length).toBeGreaterThan(0))
     const bar = within(screen.getByRole('toolbar', { name: 'Canvas' }))
-    expect(bar.queryByRole('button', { name: 'Calculate an impact result' })).not.toBeInTheDocument()
+    expect(bar.queryByRole('button', { name: 'New calculation…' })).not.toBeInTheDocument()
     expect(bar.getByRole('button', { name: 'Fit the graph' })).toBeInTheDocument()
   })
 

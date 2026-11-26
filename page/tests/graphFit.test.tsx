@@ -1,16 +1,19 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { Link, MemoryRouter } from 'react-router-dom'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { api } from '@/api/client'
 import type { LogEntry, ProductSystem } from '@/api/types'
 import { ModelGraph } from '@/editors/graph/ModelGraph'
 import { READABLE_ZOOM } from '@/editors/graph/layout'
+import { paths } from '@/lib/paths'
+import { useUi } from '@/store/ui'
 import { ISLAND_GAP, useClearance } from '@/window/clearance'
+import { useSheetTop } from '@/window/cover'
 import { Slot, SlotsProvider } from '@/window/slots'
 import { runCanvas } from '@/window/shortcuts'
-import { layoutAnswer } from './placements'
+import { CARD, layoutAnswer } from './placements'
 import log from './fixtures/log.json'
 import system from './fixtures/system.json'
 
@@ -64,6 +67,15 @@ vi.mock('@/api/client', async (importOriginal) => {
 const doc = system.value as ProductSystem
 const VIEW: Viewport = { x: 0, y: 0, zoom: 1 }
 
+function DetailsLinks() {
+  return (
+    <nav>
+      <Link to={paths.process(doc.id, 'widget')}>widget details</Link>
+      <Link to={paths.process(doc.id, 'frame')}>frame details</Link>
+    </nav>
+  )
+}
+
 function shifted() {
   const answer = layoutAnswer(doc)
   return { ...answer, value: { ...answer.value, cards: answer.value.cards.map((card, at) => (at === 0 ? { ...card, x: card.x + 120 } : card)) } }
@@ -75,10 +87,10 @@ function entryAt(seq: number, exchangeId: string): LogEntry {
 
 const TO_WIDGET = '73b7d6fd-7d08-53d6-bd18-093e6cd44574'
 
-function Graph({ client, product = doc, latest = null }: { client: QueryClient; product?: ProductSystem; latest?: LogEntry | null }) {
+function Graph({ client, product = doc, latest = null, at = '/' }: { client: QueryClient; product?: ProductSystem; latest?: LogEntry | null; at?: string }) {
   return (
     <QueryClientProvider client={client}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[at]}>
         <TooltipProvider>
           <SlotsProvider>
             <Slot name="tools" />
@@ -86,6 +98,7 @@ function Graph({ client, product = doc, latest = null }: { client: QueryClient; 
             <Slot name="minimap" />
             <Slot name="notice" />
             <ModelGraph system={product} latest={latest} />
+            <DetailsLinks />
           </SlotsProvider>
         </TooltipProvider>
       </MemoryRouter>
@@ -402,4 +415,176 @@ it('fits the whole drawing from the shortcut that fits the graph', async () => {
   act(() => runCanvas('fit'))
   await waitFor(() => expect(moved).toHaveBeenCalledTimes(2))
   expect(moved.mock.calls[1][0].zoom).toBeCloseTo(572 / 2260)
+})
+
+describe('the sheet the narrow inspector opens over the canvas', () => {
+  const cards = layoutAnswer(doc).value.cards
+  const widget = cards.find((card) => card.code === 'widget')!
+  const frame = cards.find((card) => card.code === 'frame')!
+  const sheetTop = 300
+  // the clear area keeps the islands' gap, and its lower edge stays that gap above the sheet
+  const left = ISLAND_GAP
+  const bottom = sheetTop - ISLAND_GAP
+
+  async function drawn(at: string): Promise<void> {
+    render(<Graph client={new QueryClient()} at={at} />)
+    await waitFor(() => expect(moved).toHaveBeenCalled())
+    panned()
+    await screen.findByRole('button', { name: 'Follow the build' })
+    moved.mockClear()
+  }
+
+  beforeEach(() => {
+    window.innerWidth = 700
+    useClearance.setState({ clearance: { top: ISLAND_GAP, right: ISLAND_GAP, bottom: ISLAND_GAP, left: ISLAND_GAP } })
+    useSheetTop.setState({ sheetTop })
+    useUi.setState({ inspector: 'open', sheetOpen: false, chosenProcess: null })
+  })
+
+  afterEach(() => {
+    window.innerWidth = 1024
+    useSheetTop.setState({ sheetTop: null })
+    useUi.setState({ sheetOpen: false })
+  })
+
+  it('pans just enough, at the zoom it holds, to hold the chosen card header above the sheet', async () => {
+    viewport.x = left
+    viewport.y = 100
+    await drawn(paths.process(doc.id, 'widget'))
+    act(() => useUi.setState({ sheetOpen: true }))
+    await waitFor(() => expect(moved).toHaveBeenCalledTimes(1))
+    expect(moved.mock.calls[0][0]).toEqual({ x: left, y: bottom - (widget.y + CARD.header_height), zoom: 1 })
+    expect(moved.mock.calls[0][1]).toMatchObject({ duration: 250 })
+  })
+
+  it('leaves a card header the sheet does not cover where it is', async () => {
+    viewport.x = left
+    viewport.y = -200
+    await drawn(paths.process(doc.id, 'widget'))
+    act(() => useUi.setState({ sheetOpen: true }))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(moved).not.toHaveBeenCalled()
+  })
+
+  it('forces no pan while the sheet covers the canvas whole', async () => {
+    useSheetTop.setState({ sheetTop: ISLAND_GAP })
+    await drawn(paths.process(doc.id, 'widget'))
+    act(() => useUi.setState({ sheetOpen: true, inspector: 'widened' }))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(moved).not.toHaveBeenCalled()
+  })
+
+  it('leaves the canvas roomy from 768 px whatever the sheet state', async () => {
+    window.innerWidth = 1024
+    await drawn(paths.process(doc.id, 'widget'))
+    act(() => useUi.setState({ sheetOpen: true }))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(moved).not.toHaveBeenCalled()
+  })
+
+  it('does not recentre while the person pans, or when the sheet is measured again after it moved', async () => {
+    viewport.x = left
+    viewport.y = 100
+    await drawn(paths.process(doc.id, 'widget'))
+    act(() => useUi.setState({ sheetOpen: true }))
+    await waitFor(() => expect(moved).toHaveBeenCalledTimes(1))
+    panned()
+    act(() => useSheetTop.setState({ sheetTop: sheetTop + 60 }))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(moved).toHaveBeenCalledTimes(1)
+  })
+
+  it('pans again to the same card when the sheet is reopened on it', async () => {
+    viewport.x = left
+    viewport.y = 100
+    await drawn(paths.process(doc.id, 'widget'))
+    act(() => useUi.setState({ sheetOpen: true }))
+    await waitFor(() => expect(moved).toHaveBeenCalledTimes(1))
+    act(() => useUi.setState({ sheetOpen: false }))
+    moved.mockClear()
+    viewport.y = 300
+    act(() => useUi.setState({ sheetOpen: true }))
+    await waitFor(() => expect(moved).toHaveBeenCalledTimes(1))
+    expect(moved.mock.calls[0][0]).toEqual({ x: left, y: bottom - (widget.y + CARD.header_height), zoom: 1 })
+  })
+
+  it('pans to the card a switch of the details names, and to none a page names no card of', async () => {
+    viewport.x = left
+    viewport.y = 300
+    await drawn(paths.process(doc.id, 'widget'))
+    act(() => useUi.setState({ sheetOpen: true }))
+    await waitFor(() => expect(moved).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole('link', { name: 'frame details' }))
+    await waitFor(() => expect(moved).toHaveBeenCalledTimes(2))
+    expect(moved.mock.calls[1][0]).toEqual({ x: left, y: bottom - (frame.y + CARD.header_height), zoom: 1 })
+  })
+
+  function titled(box: { left: number; right: number; top: number; bottom: number }): () => void {
+    const original = HTMLElement.prototype.getBoundingClientRect
+    const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (!this.hasAttribute('data-title')) return original.call(this)
+      const { left: at, right, top, bottom } = box
+      return { left: at, right, top, bottom, width: right - at, height: bottom - top, x: at, y: top, toJSON: () => ({}) } as DOMRect
+    })
+    return () => spy.mockRestore()
+  }
+
+  it('holds a wrapped compact title above the sheet with the gap, at the zoom it has', async () => {
+    viewport.x = left
+    viewport.y = 100
+    viewport.zoom = 0.375556
+    await drawn(paths.process(doc.id, 'widget'))
+    useSheetTop.setState({ sheetTop: 313.5625 })
+    // the title wraps over two lines in compact detail, ending 1.5 px under the sheet
+    const restore = titled({ left: 100, right: 400, top: 291.047, bottom: 315.083 })
+    try {
+      act(() => useUi.setState({ sheetOpen: true }))
+      await waitFor(() => expect(moved).toHaveBeenCalledTimes(1))
+      const [view] = moved.mock.calls[0]
+      expect(view.zoom).toBe(0.375556)
+      expect(view.x).toBe(left)
+      expect(view.y).toBeCloseTo(100 + (313.5625 - ISLAND_GAP - 315.083), 4)
+    } finally {
+      restore()
+    }
+  })
+
+  it('leaves a compact title the sheet does not reach where it is, whatever the header geometry says', async () => {
+    viewport.x = left
+    // the geometric header box would sit under the sheet here; the title it draws does not
+    viewport.y = 600
+    viewport.zoom = 0.375556
+    await drawn(paths.process(doc.id, 'widget'))
+    useSheetTop.setState({ sheetTop: 313.5625 })
+    const restore = titled({ left: 100, right: 400, top: 200, bottom: 224 })
+    try {
+      act(() => useUi.setState({ sheetOpen: true }))
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(moved).not.toHaveBeenCalled()
+    } finally {
+      restore()
+    }
+  })
+
+  it('falls back to the header geometry while the compact title is not measured', async () => {
+    viewport.x = left
+    viewport.y = 600
+    viewport.zoom = 0.375556
+    await drawn(paths.process(doc.id, 'widget'))
+    act(() => useUi.setState({ sheetOpen: true }))
+    await waitFor(() => expect(moved).toHaveBeenCalledTimes(1))
+    const headerBottom = viewport.y + (widget.y + CARD.header_height) * viewport.zoom
+    const [view] = moved.mock.calls[0]
+    expect(view.zoom).toBe(0.375556)
+    expect(view.y).toBeCloseTo(viewport.y + (bottom - headerBottom), 4)
+  })
+
+  it('pans to no card where the details name none', async () => {
+    viewport.x = left
+    viewport.y = 100
+    await drawn(`/systems/${doc.id}/general`)
+    act(() => useUi.setState({ sheetOpen: true }))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(moved).not.toHaveBeenCalled()
+  })
 })

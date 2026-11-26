@@ -4,8 +4,7 @@ functional unit, and the arrangement the page and the tools both read."""
 from __future__ import annotations
 
 import uuid
-from collections.abc import Mapping
-from itertools import permutations
+from collections.abc import Collection, Mapping
 
 from pydantic import BaseModel
 
@@ -21,12 +20,12 @@ from ecosemantic.geometry import (
     SharedSupplier,
     StageRegions,
     card_size,
+    folds,
     link_texts,
     linked_card,
     links,
     ports,
     rows,
-    shown_inputs,
 )
 from ecosemantic.model.entities import Process, ProductSystem
 from ecosemantic.model.stages import stage_of, stage_order
@@ -34,30 +33,71 @@ from ecosemantic.ports.types import Side
 from ecosemantic.routes import route
 from ecosemantic.troubles import score, troubles
 
-MAX_PERMUTED = 6
+EVALUATIONS = 400_000
 REGION_PAD = 24.0
+GROWTH = 1.25
+
+
+def evaluation_budget(arrows: int) -> int:
+    """How many drawings an arrangement of this many arrows may measure: fewer as the arrows grow,
+    so what is drawn follows the graph and not the machine's speed. A drawing of no arrow counts as
+    one arrow, the division it makes undefined otherwise."""
+    return max(EVALUATIONS // max(arrows, 1) ** 2, 1)
+
+
+class Evaluations(BaseModel):
+    """The drawings one arrangement may measure and how many it has measured, shared by the two
+    searches so the search spends one count wherever it runs."""
+
+    limit: int
+    used: int = 0
+
+    def take(self) -> bool:
+        """Whether one more drawing may be measured, which it then counts."""
+        if self.used >= self.limit:
+            return False
+        self.used += 1
+        return True
+
+    def spent(self) -> bool:
+        """Whether the budget is used up."""
+        return self.used >= self.limit
 
 
 class _Anatomy(BaseModel):
-    """What a card's contents fix about it, whichever place the search tries it at."""
+    """What a card's contents fix about it, whichever place the search tries it at: its size, the
+    rows it shows on each side with their anchors, and the rows the fold hides."""
 
     width: float
     height: float
     shown_inputs: int
+    shown_outputs: int
+    folded_inputs: int
+    folded_outputs: int
     inputs: list[Port]
     outputs: list[uuid.UUID]
     output: float
 
 
-def _anatomy(process: Process, sides: Mapping[str, Side]) -> _Anatomy:
-    width, height = card_size(process, sides)
-    found, output = ports(process, sides)
+def _anatomy(
+    process: Process,
+    sides: Mapping[str, Side],
+    arrows: Collection[uuid.UUID],
+    *,
+    expanded: bool,
+) -> _Anatomy:
+    width, height = card_size(process, sides, arrows, expanded=expanded)
+    found, output = ports(process, sides, arrows, expanded=expanded)
+    inputs, outputs = folds(process, sides, arrows, expanded=expanded)
     return _Anatomy(
         width=width,
         height=height,
-        shown_inputs=shown_inputs(process, sides),
+        shown_inputs=inputs.shown,
+        shown_outputs=outputs.shown,
+        folded_inputs=inputs.folded,
+        folded_outputs=outputs.folded,
         inputs=found,
-        outputs=[e.id for e in rows(process, sides)[1]],
+        outputs=[e.id for e in rows(process, sides, arrows)[1]],
         output=output,
     )
 
@@ -65,7 +105,15 @@ def _anatomy(process: Process, sides: Mapping[str, Side]) -> _Anatomy:
 def _linked_anatomy() -> _Anatomy:
     width, height, output = linked_card()
     return _Anatomy(
-        width=width, height=height, shown_inputs=0, inputs=[], outputs=[], output=output
+        width=width,
+        height=height,
+        shown_inputs=0,
+        shown_outputs=0,
+        folded_inputs=0,
+        folded_outputs=0,
+        inputs=[],
+        outputs=[],
+        output=output,
     )
 
 
@@ -214,21 +262,51 @@ def depths(system: ProductSystem, anchors: list[str]) -> dict[str, int]:
     return found
 
 
-def _columns(system: ProductSystem, distances: dict[str, int]) -> tuple[dict[str, int], int]:
+def _stage_bands(system: ProductSystem, anchors: list[str]) -> dict[str, int]:
+    """Each stage's band, counted from the right: the functional unit's stage holds band zero and
+    every next band to its left is the stage carrying the fewest arrows into the stages still
+    unplaced, ties by `stage_order`."""
+    order = stage_order(system)
+    stages = card_stages(system)
+    into: dict[tuple[str, str], int] = {}
+    for arrow in links(system):
+        provider, consumer = stages.get(arrow.provider), stages.get(arrow.consumer)
+        if provider is None or consumer is None or provider == consumer:
+            continue
+        into[provider, consumer] = into.get((provider, consumer), 0) + 1
+    bands: dict[str, int] = {}
+    remaining = set(order)
+    unit = next((stages[code] for code in anchors if stages.get(code) is not None), None)
+    if unit is not None:
+        bands[unit] = 0
+        remaining.discard(unit)
+
+    def into_rest(stage: str) -> int:
+        return sum(n for (a, b), n in into.items() if a == stage and b in remaining)
+
+    while remaining:
+        chosen = min(remaining, key=lambda stage: (into_rest(stage), order.index(stage)))
+        remaining.discard(chosen)
+        bands[chosen] = len(bands)
+    return bands
+
+
+def _columns(
+    system: ProductSystem, distances: dict[str, int], anchors: list[str]
+) -> tuple[dict[str, int], int]:
     """Each card's column and how many columns the drawing takes: the distances themselves when
-    no card carries a stage, and otherwise one band of columns per stage, from the first stage of
-    `stage_order` at the right and the cards of no stage at the left. Inside a band a card's column
-    is the rank of its distance among the band's cards, nearest first."""
+    no card carries a stage, and otherwise one band of columns per stage, from the bands
+    `_stage_bands` gives, nearest the functional unit first, and the cards of no stage in the
+    leftmost. Inside a band a card's column is the rank of its distance among the band's cards,
+    nearest first."""
     stages = card_stages(system)
     if all(stage is None for stage in stages.values()):
         return distances, max(distances.values(), default=0) + 1
-    order = stage_order(system)
-    bands = {
-        code: len(order) if stage is None else order.index(stage) for code, stage in stages.items()
-    }
+    bands = _stage_bands(system, anchors)
+    leftmost = len(bands)
     in_band: dict[int, list[str]] = {}
-    for code, band in bands.items():
-        in_band.setdefault(band, []).append(code)
+    for code, stage in stages.items():
+        in_band.setdefault(leftmost if stage is None else bands[stage], []).append(code)
     columns: dict[str, int] = {}
     total = 0
     for band in sorted(in_band):
@@ -338,26 +416,37 @@ def arrange(
     held: dict[str, tuple[float, float]],
     sides: Mapping[str, Side],
     amounts: Mapping[str, Mapping[uuid.UUID, float]] | None = None,
+    expanded: Collection[str] = (),
+    budget: Evaluations | None = None,
 ) -> list[Placement]:
     """Every card's place: columns measured from the anchors, or one band of columns per stage
-    when any card carries one, ordered by median to start, then each column of two to six free
-    cards tried in every order and kept when the drawing's score falls, or ties with a lower
-    height. Packed at real heights, and centred on the anchor when there is exactly one.
+    when any card carries one, ordered by median to start, then each column's adjacent free cards
+    swapped while a swap lowers the drawing's score, or its height at an equal score, then each
+    free card moved in its column to where one of its arrows runs straight or it sits beside a
+    neighbour while that lowers the same pair. Packed at real heights, and centred on the anchor
+    when there is exactly one.
 
-    A card in `held` keeps the position it was given and the rest pack around it. `sides` puts
-    each elementary flow of the system on its side, by the flow's native id. `amounts` are the
-    scaled exchange amounts by card, so arrow labels are measured at their scaled width; None
-    when the drawing is not scaled.
+    Both searches share `budget`'s evaluations, `evaluation_budget` of the drawing's arrows when
+    it is None, and answer the best drawing they find, the packed one on a tie. A card in `held`
+    keeps the position it was given and neither search moves it, and the rest pack around it.
+    `sides` puts each elementary flow of the system on its side, by the flow's native id.
+    `amounts` are the scaled exchange amounts by card, so arrow labels are measured at their
+    scaled width; None when the drawing is not scaled. `expanded` names the cards whose rows the
+    page shows in full; a card it does not name folds its rows past `FOLD_AFTER` on each side.
     """
     reference = anchors[0] if len(anchors) == 1 else None
     drawn = nodes(system)
-    anatomy = {p.code: _anatomy(p, sides) for p in system.processes}
+    drawn_links = links(system)
+    arrows = {link.exchange_id for link in drawn_links}
+    anatomy = {
+        p.code: _anatomy(p, sides, arrows, expanded=p.code in expanded) for p in system.processes
+    }
     for code in drawn:
         if code.startswith(LINKED):
             anatomy[code] = _linked_anatomy()
     sizes = {code: (a.width, a.height) for code, a in anatomy.items()}
     distances = depths(system, anchors)
-    column_of, total = _columns(system, distances)
+    column_of, total = _columns(system, distances, anchors)
     consumers: dict[str, list[str]] = {}
     for code, providers in drawn.items():
         for provider in providers:
@@ -365,60 +454,155 @@ def arrange(
     columns: dict[int, list[str]] = {}
     for code in drawn:
         columns.setdefault(column_of[code], []).append(code)
+    pinned = {code: at for code, at in held.items() if code in drawn}
+    spent = Evaluations(limit=evaluation_budget(len(drawn_links))) if budget is None else budget
 
-    def _place(orders: dict[int, list[str]]) -> list[Placement]:
-        placements: list[Placement] = []
+    def _pitch(column: int) -> float:
+        return float(total - 1 - column) * (CARD_WIDTH + COLUMN_GAP)
+
+    def _card(code: str, x: float, y: float, *, at_hold: bool) -> Placement:
+        card = anatomy[code]
+        return Placement(
+            code=code,
+            x=x,
+            y=y,
+            width=card.width,
+            height=card.height,
+            depth=distances[code],
+            shown_inputs=card.shown_inputs,
+            shown_outputs=card.shown_outputs,
+            folded_inputs=card.folded_inputs,
+            folded_outputs=card.folded_outputs,
+            held=at_hold,
+            inputs=card.inputs,
+            outputs=card.outputs,
+            output=card.output,
+        )
+
+    def _place(orders: Mapping[int, list[str]], shifts: Mapping[str, float]) -> list[Placement]:
+        placed: list[Placement] = []
         for column in sorted(orders):
-            order = orders[column]
-            x = float(total - 1 - column) * (CARD_WIDTH + COLUMN_GAP)
-            taken = _held_spans(held, sizes, x)
-            free = [code for code in order if code not in held]
-            tops = _stack(free, sizes, taken)
-            for code in order:
-                spot = held.get(code)
-                card = anatomy[code]
-                placements.append(
-                    Placement(
-                        code=code,
-                        x=spot[0] if spot else x,
-                        y=spot[1] if spot else tops[code],
-                        width=card.width,
-                        height=card.height,
-                        depth=distances[code],
-                        shown_inputs=card.shown_inputs,
-                        held=spot is not None,
-                        inputs=card.inputs,
-                        outputs=card.outputs,
-                        output=card.output,
-                    )
-                )
-        return _centred(placements, reference)
+            x = _pitch(column)
+            tops = _stack(orders[column], sizes, _held_spans(pinned, sizes, x))
+            for code in orders[column]:
+                placed.append(_card(code, x, tops[code] + shifts.get(code, 0.0), at_hold=False))
+        for code, (left, top) in pinned.items():
+            placed.append(_card(code, left, top, at_hold=True))
+        return _centred(placed, reference)
 
     orders: dict[int, list[str]] = {}
     previous: list[str] = []
     for column in sorted(columns):
-        orders[column] = _ordered(sorted(columns[column]), previous, consumers)
-        previous = orders[column]
-    drawn_links = links(system)
+        ordered = _ordered(sorted(columns[column]), previous, consumers)
+        orders[column] = [code for code in ordered if code not in pinned]
+        previous = ordered
     texts = link_texts(system, amounts)
 
-    def measured(candidate: dict[int, list[str]]) -> tuple[int, float, list[Placement]]:
-        placed = _place(candidate)
+    def scored(
+        candidate: Mapping[int, list[str]], shifts: Mapping[str, float]
+    ) -> tuple[int, float, list[Placement]]:
+        placed = _place(candidate, shifts)
         found = troubles(placed, route(placed, drawn_links, texts))
         return score(found), bounds(placed)["height"], placed
 
-    best = measured(orders)
-    for _ in range(2):
+    def measured(
+        candidate: Mapping[int, list[str]], shifts: Mapping[str, float]
+    ) -> tuple[int, float, list[Placement]] | None:
+        """`scored` of one drawing, counted against the budget; None once the budget is spent."""
+        if not spent.take():
+            return None
+        return scored(candidate, shifts)
+
+    best = scored(orders, {})
+    while not spent.spent():
+        swapped = False
         for column in sorted(orders):
-            free = [c for c in orders[column] if c not in held]
-            if len(free) < 2 or len(free) > MAX_PERMUTED:
-                continue
-            for order in permutations(free):
-                candidate = {
-                    **orders,
-                    column: [*order, *[c for c in orders[column] if c in held]],
-                }
-                trial = measured(candidate)
-                if trial[:2] < best[:2]:
-                    best, orders = trial, candidate
+            for at in range(len(orders[column]) - 1):
+                if spent.spent():
+                    break
+                order = list(orders[column])
+                order[at], order[at + 1] = order[at + 1], order[at]
+                trial = measured({**orders, column: order}, {})
+                if trial is not None and trial[:2] < best[:2]:
+                    best = trial
+                    orders = {**orders, column: order}
+                    swapped = True
+        if not swapped:
+            break
+
+    def _spread(placed: list[Placement], code: str | None = None, y: float = 0.0) -> float:
+        """How tall the free cards reach, with the card `code` at height `y`."""
+        at = [(y if card.code == code else card.y) for card in placed if not card.held]
+        end = [
+            (y + card.height if card.code == code else card.y + card.height)
+            for card in placed
+            if not card.held
+        ]
+        return max(end) - min(at) if at else 0.0
+
+    tallest = GROWTH * _spread(best[2])
+    leaving: dict[str, list[tuple[str, uuid.UUID]]] = {}
+    entering: dict[str, list[tuple[str, uuid.UUID]]] = {}
+    for link in drawn_links:
+        leaving.setdefault(link.provider, []).append((link.consumer, link.exchange_id))
+        entering.setdefault(link.consumer, []).append((link.provider, link.exchange_id))
+    ported = {
+        (code, port.exchange_id): port.y for code, card in anatomy.items() for port in card.inputs
+    }
+
+    def _straight(code: str, now: Mapping[str, Placement]) -> list[float]:
+        """The heights at which an arrow of this card leaves its output at the height of the row it
+        feeds, nearest this card's place first."""
+        found: list[float] = []
+        for consumer, exchange in leaving.get(code, []):
+            found.append(now[consumer].y + ported[consumer, exchange] - anatomy[code].output)
+        for provider, exchange in entering.get(code, []):
+            found.append(now[provider].y + anatomy[provider].output - ported[code, exchange])
+        here = now[code].y
+        return sorted({y for y in found if y != here}, key=lambda y: abs(y - here))
+
+    def _beside(code: str, now: Mapping[str, Placement], same: Collection[str]) -> list[float]:
+        """The heights at which this card sits directly above or below another card of its column,
+        nearest this card's place first."""
+        here = now[code].y
+        height = anatomy[code].height
+        found = [
+            y
+            for other in same
+            if other != code
+            for y in (now[other].y - height - ROW_GAP, now[other].y + now[other].height + ROW_GAP)
+        ]
+        return sorted({y for y in found if y != here}, key=lambda y: abs(y - here))
+
+    shifts: dict[str, float] = {}
+    moving = True
+    while moving and not spent.spent():
+        moving = False
+        for column in sorted(orders):
+            same = [
+                *orders[column],
+                *(code for code, (left, _) in pinned.items() if left == _pitch(column)),
+            ]
+            for code in orders[column]:
+                if code == reference or spent.spent():
+                    continue
+                now = {card.code: card for card in best[2]}
+                here = now[code]
+                for target in [*_straight(code, now), *_beside(code, now, same)]:
+                    if spent.spent():
+                        break
+                    moved = here.model_copy(update={"y": target})
+                    if any(_meets(moved, card) for card in best[2] if card.code != code):
+                        continue
+                    if _spread(best[2], code, target) > tallest:
+                        continue
+                    shift = shifts.get(code, 0.0) + target - here.y
+                    trial = measured(orders, {**shifts, code: shift})
+                    if trial is None:
+                        break
+                    if trial[:2] < best[:2]:
+                        best = trial
+                        shifts = {**shifts, code: shift}
+                        moving = True
+                        break
     return best[2]

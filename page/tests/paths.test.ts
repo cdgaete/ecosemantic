@@ -18,6 +18,13 @@ describe('paths', () => {
   })
 })
 
+describe('the entry to a product system', () => {
+  it('is its General information from 768 px and its Activity below it', () => {
+    expect(paths.systemEntry('s1', false)).toBe('/systems/s1/general')
+    expect(paths.systemEntry('s1', true)).toBe('/systems/s1')
+  })
+})
+
 describe('the whole-database search', () => {
   it('is the address of a database search of a kind', () => {
     expect(paths.search('x')).toBe('/databases/x/search/processes')

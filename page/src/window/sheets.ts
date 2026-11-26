@@ -1,6 +1,7 @@
+import { useCallback } from 'react'
 import { matchPath, useLocation } from 'react-router-dom'
 import { RESULT_PAGES } from '@/editors/results/pages'
-import { databaseOfPath, paths } from '@/lib/paths'
+import { databaseOfPath, paths, useGo } from '@/lib/paths'
 import { useUi, type SheetKind } from '@/store/ui'
 
 export interface Place {
@@ -63,7 +64,7 @@ export function returnLabel(address: string): string {
 /**
  * The sheet drawn over the page and the address it is left to: where it was opened from, else the graph of the system
  * a result is under or the canvas holds, else the product systems. Null where the address opens no sheet. A page of an
- * open result is answered at every width and docked, the graph staying under it; the explorer and a simulation are
+ * open result is answered at every width and docked, the graph staying beside it; the explorer and a simulation are
  * sheets.
  */
 export function useSheet(): SheetReturn | null {
@@ -75,4 +76,13 @@ export function useSheet(): SheetReturn | null {
   const system = kind === 'results' ? systemOf(pathname) : canvasSystemId
   const to = origin ?? (system === null ? paths.home() : paths.system(system))
   return { kind, to, label: returnLabel(to), docked: dockedOf(pathname) }
+}
+
+/** The way out of an open sheet, wherever it is left from: the address it was opened at, or the one it falls back to. */
+export function useLeaveSheet(): () => void {
+  const go = useGo()
+  const to = useSheet()?.to ?? null
+  return useCallback(() => {
+    if (to !== null) go(to)
+  }, [go, to])
 }

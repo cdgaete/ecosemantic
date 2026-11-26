@@ -9,6 +9,7 @@ from fastmcp import Client, FastMCP
 
 from ecosemantic.mcp.calculation import MAX_ITERATIONS
 from ecosemantic.mcp.guides import GUIDES
+from ecosemantic.mcp.guides import text as guide_text
 from ecosemantic.mcp.server import INSTRUCTIONS
 
 STEP = re.compile(r"```json\n(.*?)\n```", re.S)
@@ -98,3 +99,21 @@ def test_the_sensitivity_guide_states_a_parameters_distribution() -> None:
     assert distributed[0]["uncertainty"]["params"]["loc"] == distributed[0]["value"]
     assert "takes no distribution" in text
     assert "moves its distribution onto" in text
+
+
+async def test_every_surface_that_names_the_drawing_leaves_it_for_last_and_a_subagent(
+    full_server: FastMCP,
+) -> None:
+    async with Client(full_server) as client:
+        described = {tool.name: tool.description or "" for tool in await client.list_tools()}
+    surfaces = {
+        "instructions": INSTRUCTIONS,
+        "graph_layout": described["graph_layout"],
+        "arrange_graph": described["arrange_graph"],
+        **{name: guide_text(name) for name in ("building-a-model", "interpreting-a-result")},
+    }
+    for name, said in surfaces.items():
+        assert "subagent or a separate session" in said, name
+        assert "results are settled" in said or "results are read" in said, name
+    # the intensity check still reads scaled amounts from graph_layout mid-analysis
+    assert 'detail="amounts"' in described["graph_layout"]

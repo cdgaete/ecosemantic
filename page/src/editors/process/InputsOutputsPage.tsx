@@ -9,8 +9,8 @@ import { rowsOf } from '@/lib/placement'
 import { describeUncertainty } from '@/lib/uncertainty'
 import { RequestAction } from '@/requests/RequestAction'
 import { DataTable, type Column } from '@/window/DataTable'
-import { EditorHeader } from '@/window/EditorHeader'
 import { Section } from '@/window/Section'
+import { useFollowedExchange, useFollowSupplier, type FollowSupplier } from '@/window/supplier'
 import type { CanvasVariant } from '@/window/useCanvasState'
 import { amountColumn, elementaryProvider, flowColumn, namedWithLocation, providerColumn, providerLink, unitColumn } from '../exchangeColumns'
 
@@ -19,27 +19,38 @@ interface ProviderInfo {
   location: string | null
 }
 
-function provider(exchange: Exchange, systemId: string, system: ProductSystem, flows: Record<string, FlowSide>, providers: Record<string, ProviderInfo>): ReactNode {
+function provider(
+  exchange: Exchange,
+  systemId: string,
+  system: ProductSystem,
+  flows: Record<string, FlowSide>,
+  providers: Record<string, ProviderInfo>,
+  follow: FollowSupplier,
+): ReactNode {
   const input = exchange.input
   if (!input) return ''
   if (input.kind === 'foreground') {
     const target = system.processes.find((p) => p.code === input.code)
-    return providerLink(paths.process(systemId, input.code), 'process', `${target?.name ?? input.code} · foreground`)
+    const to = paths.process(systemId, input.code)
+    return providerLink({ to, icon: 'process', label: `${target?.name ?? input.code} · foreground`, follow: (from) => follow(to, exchange.id, from) })
   }
   if (input.kind === 'system') {
-    return providerLink(paths.system(input.product_system_id), 'system', `${exchange.name} · linked system`)
+    return providerLink({ to: paths.system(input.product_system_id), icon: 'system', label: `${exchange.name} · linked system` })
   }
   if (input.kind === 'background') {
     const found = providers[`${input.database}:${input.id}`]
     const label = found ? namedWithLocation(found.name, found.location) : exchange.name
-    return providerLink(paths.dataset(systemId, input.database, input.id), 'product', label)
+    const to = paths.dataset(systemId, input.database, input.id)
+    return providerLink({ to, icon: 'product', label, follow: (from) => follow(to, exchange.id, from) })
   }
   return elementaryProvider(flows[input.id])
 }
 
 export function InputsOutputsPage({ systemId, system, process, state }: { systemId: string; system: ProductSystem; process: Process; state: CanvasVariant | null }) {
   const { flows, errors: flowErrors } = useFlowSides(process.exchanges)
-  const layout = useLayout(systemId, state?.name ?? null)
+  const follow = useFollowSupplier(process.name)
+  const followed = useFollowedExchange()
+  const layout = useLayout(systemId, state?.name ?? null, [])
   const background = process.exchanges.filter((e) => e.input?.kind === 'background')
   const backgrounds = useQueries({
     queries: background.map((e) => {
@@ -61,7 +72,7 @@ export function InputsOutputsPage({ systemId, system, process, state }: { system
     unitColumn((e) => e.unit),
     { key: 'formula', header: 'Formula', render: (e) => (e.formula ? <code>{e.formula}</code> : '') },
     { key: 'uncertainty', header: 'Uncertainty', render: (e) => describeUncertainty(e.uncertainty, e.unit) },
-    providerColumn((e) => provider(e, systemId, system, flows, providers)),
+    providerColumn((e) => provider(e, systemId, system, flows, providers, follow)),
     { key: 'description', header: 'Description', render: (e) => e.comment ?? '' },
     { key: 'request', header: '', render: (e) => <RequestAction systemId={systemId} entity="exchange" entityId={e.id} /> },
   ]
@@ -75,13 +86,12 @@ export function InputsOutputsPage({ systemId, system, process, state }: { system
   const rows = rowsOf(process, placement)
   return (
     <>
-      <EditorHeader icon="process" page="Inputs/Outputs" entity={process.name} state={state} />
       {errors.length > 0 ? <p className="px-4 text-destructive">{errors.join('; ')}</p> : null}
       <Section title="Inputs" sectionKey={key('inputs')} actions={action}>
-        <DataTable columns={columns} rows={rows.inputs} rowKey={(e) => e.id} rowClassName={rowClass} empty="No input." />
+        <DataTable columns={columns} rows={rows.inputs} rowKey={(e) => e.id} rowClassName={rowClass} empty="No input." current={followed?.exchange} />
       </Section>
       <Section title="Outputs" sectionKey={key('outputs')} actions={action}>
-        <DataTable columns={columns} rows={rows.outputs} rowKey={(e) => e.id} rowClassName={rowClass} />
+        <DataTable columns={columns} rows={rows.outputs} rowKey={(e) => e.id} rowClassName={rowClass} current={followed?.exchange} />
       </Section>
     </>
   )

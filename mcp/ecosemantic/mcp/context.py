@@ -18,7 +18,7 @@ from urllib.parse import urlencode
 
 from ecosemantic.events import EventBus, following
 from ecosemantic.mcp.calls import current
-from ecosemantic.model.entities import Actor, Person
+from ecosemantic.model.entities import Actor, ActorKind, Person
 from ecosemantic.ports.activity import ActivityPort
 from ecosemantic.ports.calculation import CalculationPort
 from ecosemantic.ports.install import InstallLauncher, InstallPort
@@ -130,6 +130,15 @@ class ServerContext:
         if call is not None and call.origin == "agent":
             return Actor(kind="agent", id=call.agent, name=call.client, on_behalf_of=self.person)
         return _person_actor(self.person)
+
+    def placing(self) -> ActorKind:
+        """Who put a card where a write holds it: the person at the page for a call the page made,
+        else the kind `acting` answers. `acting` alone is not enough, because the page's call
+        without a signed-in person answers an agent, and a drag is the person at the browser."""
+        call = current()
+        if call is not None and call.origin == "view":
+            return "person"
+        return self.acting().kind
 
     def posted_by(self, stated: str) -> Actor:
         """Who a route's write is made by: the person this context names, or, when it names none,

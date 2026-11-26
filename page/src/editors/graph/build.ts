@@ -15,6 +15,11 @@ export interface Supplies {
   stages: number
 }
 
+export interface Rows {
+  expanded: boolean
+  toggle: (code: string) => void
+}
+
 export interface ProcessNodeData extends Record<string, unknown> {
   process: Process
   reference: boolean
@@ -26,6 +31,7 @@ export interface ProcessNodeData extends Record<string, unknown> {
   card: CardGeometry
   own: OwnShown | null
   supplies: Supplies | null
+  rows: Rows
 }
 
 export type ProcessNodeType = Node<ProcessNodeData, 'process'>
@@ -58,7 +64,7 @@ export function stageNodeId(stage: string, region: number): string {
   return `${STAGE_PREFIX}${stage}:${region}`
 }
 
-type Unplaced<N extends GraphNode> = Omit<N, 'data'> & { data: { [K in keyof N['data'] as K extends 'placement' | 'card' ? never : K]: N['data'][K] } }
+type Unplaced<N extends GraphNode> = Omit<N, 'data'> & { data: { [K in keyof N['data'] as K extends 'placement' | 'card' | 'rows' ? never : K]: N['data'][K] } }
 
 export type BuiltNode = Unplaced<ProcessNodeType> | Unplaced<LinkedNodeType>
 

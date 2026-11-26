@@ -12,7 +12,7 @@ from ecosemantic.errors import NotSupported
 from ecosemantic.model.entities import Actor, ProductSystem
 from ecosemantic.package.log import next_entry, refuse_base
 from ecosemantic.package.requests import next_request, resolve
-from ecosemantic.ports.storage import no_product_system, no_version
+from ecosemantic.ports.storage import no_product_system, no_version, stale_layout
 from ecosemantic.ports.types import (
     Layout,
     LogEntry,
@@ -109,8 +109,12 @@ class MemoryStorage:
         self._held(product_system_id)
         return self._layouts.get(product_system_id, Layout()).model_copy(deep=True)
 
-    async def put_layout(self, product_system_id: uuid.UUID, layout: Layout) -> Layout:
+    async def put_layout(
+        self, product_system_id: uuid.UUID, layout: Layout, *, expected: Layout | None
+    ) -> Layout:
         self._held(product_system_id)
+        if expected is not None and self._layouts.get(product_system_id, Layout()) != expected:
+            raise stale_layout(product_system_id)
         self._layouts[product_system_id] = layout.model_copy(deep=True)
         self._announce(product_system_id)
         return layout

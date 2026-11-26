@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError
 
-from ecosemantic.errors import NotFound, unreadable
+from ecosemantic.errors import NotFound, UnreadableLayout, unreadable, unreadable_message
 from ecosemantic.files import write_whole
 from ecosemantic.model.entities import Scenario
 from ecosemantic.model.refs import BackgroundRef, Database, ElementaryFlowRef, SystemRef
@@ -153,9 +153,7 @@ def read_layout(root: Path) -> Layout:
     try:
         return Layout.model_validate_json(path.read_bytes())
     except ValidationError as error:
-        raise unreadable(
-            path.name, error, f"remove {path}; the drawing places its cards again"
-        ) from error
+        raise UnreadableLayout(unreadable_message(path.name, error)) from error
 
 
 def supplier_key(provider_id: str, flow_id: str) -> str:

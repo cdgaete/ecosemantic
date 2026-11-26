@@ -5,7 +5,8 @@ row it feeds from the left."""
 from __future__ import annotations
 
 import uuid
-from collections.abc import Mapping
+from bisect import bisect_left
+from collections.abc import Iterator, Mapping
 
 from pydantic import BaseModel
 
@@ -20,6 +21,7 @@ LABEL_PAD = 8.0
 LABEL_HEIGHT = 16.0
 LABEL_GAP = 6.0
 LABEL_LIFT = 2.0
+LABEL_TRIES = 2
 LANE_MARGIN = 12.0
 LANE_SPACING = 12.0
 LANE_TRIES = 64
@@ -166,13 +168,93 @@ def _label(end: Point, text: LinkText) -> Label:
     )
 
 
+def _verticals(routes: list[Route]) -> list[tuple[float, float, float, str]]:
+    """Every upright segment of these arrows as the x it runs at, the heights it covers and the
+    provider it belongs to, sorted by x so a box asks only about the ones it spans."""
+    found = [
+        (x0, min(y0, y1), max(y0, y1), r.provider)
+        for r in routes
+        for (x0, y0), (x1, y1) in zip(r.points, r.points[1:], strict=False)
+        if x0 == x1 and y0 != y1
+    ]
+    return sorted(found)
+
+
+def _horizontals(routes: list[Route]) -> list[tuple[float, float, float, str]]:
+    """Every flat segment of these arrows as the y it runs at, the xs it covers and the provider it
+    belongs to, sorted by y."""
+    found = [
+        (y0, min(x0, x1), max(x0, x1), r.provider)
+        for r in routes
+        for (x0, y0), (x1, y1) in zip(r.points, r.points[1:], strict=False)
+        if y0 == y1 and x0 != x1
+    ]
+    return sorted(found)
+
+
+def _near(
+    entries: list[tuple[float, float, float, str]], low: float, high: float
+) -> Iterator[tuple[float, float, float, str]]:
+    """The entries whose first value lies between these two, from an index sorted by it."""
+    start = bisect_left(entries, (low,))
+    for entry in entries[start:]:
+        if entry[0] > high:
+            break
+        yield entry
+
+
+def _overlapping(box: Label, other: Label | Placement) -> bool:
+    """Whether these two rectangles share any area."""
+    return (
+        box.x < other.x + other.width
+        and other.x < box.x + box.width
+        and box.y < other.y + other.height
+        and other.y < box.y + box.height
+    )
+
+
+def _beside(end: Point, label: Label) -> list[Label]:
+    """The boxes a label can take beside the end of its own arrow, best first: above the line into
+    the consumer, below it, and each of those one label further from the end."""
+    found: list[Label] = []
+    for step in range(LABEL_TRIES):
+        x = label.x - step * (label.width + LABEL_GAP)
+        above = end[1] - LABEL_LIFT - label.height
+        found.append(label.model_copy(update={"x": x, "y": above}))
+        found.append(label.model_copy(update={"x": x, "y": end[1] + LABEL_LIFT}))
+    return found
+
+
+def _clear(
+    box: Label,
+    upright: list[tuple[float, float, float, str]],
+    flat: list[tuple[float, float, float, str]],
+    cards: list[Placement],
+    placed: list[Label],
+    provider: str,
+) -> bool:
+    """Whether no other provider's stroke runs through this box and no card and no label already
+    placed occupies it."""
+    left, right = box.x, box.x + box.width
+    top, bottom = box.y, box.y + box.height
+    for _, start, end, other in _near(upright, left, right):
+        if other != provider and max(start, top) < min(end, bottom):
+            return False
+    for _, start, end, other in _near(flat, top, bottom):
+        if other != provider and max(start, left) < min(end, right):
+            return False
+    return not any(_overlapping(box, other) for other in [*cards, *placed])
+
+
 def route(
     placements: list[Placement],
     links: list[Link],
     texts: Mapping[uuid.UUID, LinkText],
 ) -> list[Route]:
-    """Every link's route over these placements, deterministic for one arrangement, each with
-    the box of its quantity text placed before the consumer."""
+    """Every link's route over these placements, deterministic for one arrangement, each with the
+    box of its quantity text beside the end of its own arrow: above the line into the consumer,
+    below it, or one label further from the end when another provider's stroke runs through the
+    nearer boxes, and clear of every card and every label placed before it."""
     if not placements:
         return []
     spots = {p.code: p for p in placements}
@@ -230,4 +312,19 @@ def route(
                 label=_label(end, texts[link.exchange_id]),
             )
         )
-    return found
+    upright = _verticals(found)
+    flat = _horizontals(found)
+    labels: list[Label] = []
+    cleared: list[Route] = []
+    for arrow in found:
+        label = next(
+            (
+                box
+                for box in _beside(arrow.points[-1], arrow.label)
+                if _clear(box, upright, flat, placements, labels, arrow.provider)
+            ),
+            arrow.label,
+        )
+        labels.append(label)
+        cleared.append(arrow.model_copy(update={"label": label}))
+    return cleared

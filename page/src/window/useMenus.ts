@@ -25,7 +25,7 @@ export function useMenus(): { menus: Menu[]; dialog: ReactNode; go: (path: strin
   const state = useCanvasVariant(read.data?.value)
   const resolved = useResultParams(systemId ?? '', location.search)
   const files = useFiles()
-  const release = useReleaseCards(systemId ?? '', state?.name ?? null)
+  const release = useReleaseCards(systemId ?? '', state?.name ?? null, [])
   const onResult = systemId !== null && location.pathname.startsWith(`/systems/${systemId}/results/`) && !location.pathname.endsWith('/setup')
   const all = menus({
     systemId,

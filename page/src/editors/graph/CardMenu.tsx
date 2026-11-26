@@ -1,16 +1,33 @@
 import { NodeToolbar, Position, useInternalNode, useNodeId, useStore } from '@xyflow/react'
 import { useLayoutEffect, useState, type ReactNode } from 'react'
+import { useLocation } from 'react-router-dom'
 import type { Process } from '@/api/types'
-import { paths, useGo } from '@/lib/paths'
+import { isActivityPath, paths, processOfPath, useGo } from '@/lib/paths'
 import { AppLink } from '@/lib/router'
+import { cn } from '@/lib/utils'
 import { useRequestDialog } from '@/requests/useRequestDialog'
 import { useUi } from '@/store/ui'
 import { useClearance } from '@/window/clearance'
-import { openInspector } from '@/window/inspector'
+import { DetailLink } from '@/window/DetailLink'
+import { openInspector, useInspectorShown } from '@/window/inspector'
 import { runCanvas } from '@/window/shortcuts'
-import { clearArea, TOOLBAR_OFFSET, toolbarFor, type Size } from './layout'
+import { clearArea, POINTER_WIDTH, TOOLBAR_OFFSET, toolbarFor, type Size, type ToolbarSide } from './layout'
 
 const ITEM = 'nodrag nopan whitespace-nowrap rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors duration-150 hover:bg-foreground/8 hover:text-foreground'
+
+function Pointer({ side, at }: { side: ToolbarSide; at: number }) {
+  return (
+    <span
+      aria-hidden
+      data-pointer={side}
+      style={{ left: at - POINTER_WIDTH / 2 }}
+      className={cn(
+        'pointer-events-none absolute h-0 w-0 border-x-[5px] border-x-transparent',
+        side === 'top' ? '-bottom-1.5 border-t-[6px] border-t-muted-foreground/55' : '-top-1.5 border-b-[6px] border-b-muted-foreground/55',
+      )}
+    />
+  )
+}
 
 /** A card's menu, drawn while the card is the one shown: the process chosen, or the linked system a click selected. */
 export function CardToolbar({ size, shown, children }: { size: Size; shown: boolean; children: ReactNode }) {
@@ -56,7 +73,8 @@ export function CardToolbar({ size, shown, children }: { size: Size; shown: bool
       offset={TOOLBAR_OFFSET}
       style={placed === null ? undefined : { translate: `${placed.left - left}px 0px` }}
     >
-      <div ref={setRow} role="toolbar" aria-label="Card" style={placed?.width == null ? undefined : { width: placed.width }} className="inline-flex flex-wrap items-center gap-0.5 rounded-xl border bg-chrome/95 p-1 shadow-lg">
+      <div ref={setRow} role="toolbar" aria-label="Card" style={placed?.width == null ? undefined : { width: placed.width }} className="relative inline-flex flex-wrap items-center gap-0.5 rounded-xl border bg-chrome/95 p-1 shadow-lg">
+        {placed === null ? null : <Pointer side={placed.side} at={placed.pointer} />}
         {children}
       </div>
     </NodeToolbar>
@@ -65,24 +83,34 @@ export function CardToolbar({ size, shown, children }: { size: Size; shown: bool
 
 export function ProcessMenuItems({ systemId, process }: { systemId: string; process: Process }) {
   const go = useGo()
+  const { pathname } = useLocation()
+  const shown = useInspectorShown()
+  const chosen = useUi((s) => s.chosenProcess)
+  const here = processOfPath(pathname)
+  const onDetails = here !== null && here.systemId === systemId && here.code === process.code
+  const onActivity = isActivityPath(pathname, systemId) && chosen === process.id
   return (
     <>
-      <AppLink to={paths.process(systemId, process.code)} className={ITEM}>
-        Open details
-      </AppLink>
-      <button
-        type="button"
-        className={ITEM}
-        onClick={() => {
-          useUi.getState().chooseProcess(process.id)
-          go(paths.system(systemId))
-          openInspector()
-        }}
-      >
-        Filter the log to this process
-      </button>
+      {shown && onDetails ? null : (
+        <DetailLink to={onDetails ? pathname : paths.process(systemId, process.code)} className={ITEM}>
+          Open details
+        </DetailLink>
+      )}
+      {shown && onActivity ? null : (
+        <button
+          type="button"
+          className={ITEM}
+          onClick={() => {
+            useUi.getState().chooseProcess(process.id)
+            go(paths.system(systemId))
+            openInspector()
+          }}
+        >
+          Show process activity
+        </button>
+      )}
       <button type="button" className={ITEM} onClick={() => runCanvas({ show: process.code })}>
-        Focus
+        Center card
       </button>
       <button type="button" className={ITEM} onClick={() => useRequestDialog.getState().open({ systemId, entity: 'process', entityId: process.id })}>
         Request a change
@@ -98,7 +126,7 @@ export function LinkedMenuItems({ to, node }: { to: string; node: string }) {
         Open
       </AppLink>
       <button type="button" className={ITEM} onClick={() => runCanvas({ show: node })}>
-        Focus
+        Center card
       </button>
     </>
   )

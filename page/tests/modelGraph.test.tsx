@@ -1,10 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { NodeChange } from '@xyflow/react'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { createElement } from 'react'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { Answer, Arrangement, CardGeometry, LogEntry, ProductSystem } from '@/api/types'
-import { api } from '@/api/client'
+import { ApiError, api } from '@/api/client'
 import { formatAmount } from '@/lib/format'
+import { paths } from '@/lib/paths'
 import { layoutAnswer, placementsFor } from './placements'
 import type { Outlines, OwnShown } from '@/editors/graph/build'
 import { ModelGraph } from '@/editors/graph/ModelGraph'
@@ -12,6 +15,19 @@ import { useUi } from '@/store/ui'
 import { Slot, SlotsProvider } from '@/window/slots'
 import system from './fixtures/system.json'
 import elementaryFlow from './fixtures/elementary_flow.json'
+
+const flowProps = vi.hoisted(() => ({ onNodesChange: null as unknown as (changes: NodeChange[]) => void }))
+
+vi.mock('@xyflow/react', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@xyflow/react')>()
+  return {
+    ...original,
+    ReactFlow: (props: Record<string, unknown>) => {
+      flowProps.onNodesChange = props.onNodesChange as never
+      return createElement(original.ReactFlow as never, props as never)
+    },
+  }
+})
 
 const answered: { release: () => void } = { release: () => undefined }
 const flowAnswer = vi.fn(
@@ -28,14 +44,22 @@ vi.mock('@/api/client', async (importOriginal) => {
     api: {
       ...original.api,
       elementaryFlow: () => flowAnswer(),
-      layout: vi.fn(async (_id: string, variant: string | null) => (variant === null ? null : rendered.layouts[variant]) ?? rendered.layout ?? layoutAnswer(rendered.system as ProductSystem)),
+      layout: vi.fn(async (_id: string, variant: string | null, expanded: string[] = []) => (variant === null ? null : rendered.layouts[variant]) ?? rendered.layout ?? layoutAnswer(rendered.system as ProductSystem, expanded)),
       placeCards: vi.fn(async () => layoutAnswer(rendered.system as ProductSystem)),
+      releaseCards: vi.fn(async () => layoutAnswer(rendered.system as ProductSystem)),
       systemAs: vi.fn(async (_id: string, variant: string) => ({ value: varied(rendered.system as ProductSystem, variant), open_requests: 0, hint: null, view_url: null })),
     },
   }
 })
 
 const doc = system.value as ProductSystem
+
+function Address() {
+  const location = useLocation()
+  return <span data-testid="address">{location.pathname}</span>
+}
+
+const address = () => screen.getByTestId('address').textContent ?? ''
 
 function varied(product: ProductSystem, variant: string): ProductSystem {
   // the heavy case doubles the widget's steel in this double of the route
@@ -48,10 +72,10 @@ const ROW = 22
 const { rendered } = vi.hoisted(() => ({ rendered: { system: null as unknown, layout: null as unknown as Answer<Arrangement> | null, layouts: {} as Record<string, Answer<Arrangement>> } }))
 
 
-function Graph({ client, product, outlines, latest = null, owns }: { client: QueryClient; product: ProductSystem; outlines?: Outlines; latest?: LogEntry | null; owns?: Map<string, OwnShown> }) {
+function Graph({ client, product, outlines, latest = null, owns, at = '/' }: { client: QueryClient; product: ProductSystem; outlines?: Outlines; latest?: LogEntry | null; owns?: Map<string, OwnShown>; at?: string }) {
   return (
     <QueryClientProvider client={client}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[at]}>
         <TooltipProvider>
           <SlotsProvider>
             <Slot name="tools" className="slot-tools" />
@@ -59,6 +83,7 @@ function Graph({ client, product, outlines, latest = null, owns }: { client: Que
             <Slot name="minimap" className="slot-minimap" />
             <Slot name="notice" className="slot-notice" />
             <ModelGraph system={product} latest={latest} outlines={outlines} owns={owns} />
+            <Address />
           </SlotsProvider>
         </TooltipProvider>
       </MemoryRouter>
@@ -66,10 +91,10 @@ function Graph({ client, product, outlines, latest = null, owns }: { client: Que
   )
 }
 
-function renderGraph(product: ProductSystem, outlines?: Outlines, latest: LogEntry | null = null, owns?: Map<string, OwnShown>) {
+function renderGraph(product: ProductSystem, outlines?: Outlines, latest: LogEntry | null = null, owns?: Map<string, OwnShown>, at = '/') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   rendered.system = product
-  const view = render(<Graph client={client} product={product} outlines={outlines} latest={latest} owns={owns} />)
+  const view = render(<Graph at={at} client={client} product={product} outlines={outlines} latest={latest} owns={owns} />)
   return {
     ...view,
     redraw: (next: ProductSystem) => {
@@ -79,9 +104,27 @@ function renderGraph(product: ProductSystem, outlines?: Outlines, latest: LogEnt
   }
 }
 
+function manyRows(prefix: string, count: number): ProductSystem {
+  const widget = doc.processes.find((p) => p.code === 'widget')!
+  const input = widget.exchanges.find((e) => e.type !== 'production')!
+  const many = Array.from({ length: count }, (_, i) => ({ ...input, id: `many-${i}`, name: `${prefix} ${i + 1}` }))
+  return { ...doc, processes: doc.processes.map((p) => (p.code === 'widget' ? { ...p, exchanges: [...p.exchanges.filter((e) => e.type === 'production'), ...many] } : p)) }
+}
+
 function positionOf(container: HTMLElement, id: string): string | null {
   const node = container.querySelector(`.react-flow__node[data-id="${id}"]`) as HTMLElement | null
   return node ? node.style.transform : null
+}
+
+function ownPartsOf(): Map<string, OwnShown> {
+  return new Map([
+    ['widget', { score: 2.49, fraction: 0.5988, unit: 'kg CO2-Eq' }],
+    ['frame', { score: 1.668, fraction: 0.4012, unit: 'kg CO2-Eq' }],
+  ])
+}
+
+function badgeOf(container: HTMLElement, code: string): HTMLElement {
+  return container.querySelector(`.react-flow__node[data-id="${code}"] [data-own]`) as HTMLElement
 }
 
 function more(): void {
@@ -107,6 +150,17 @@ describe('model graph', () => {
     expect(unset.container.querySelector('[class*="outline-[2.5px]"]')).toBeNull()
   })
 
+  it('marks the title each card draws, for the canvas to measure where it sits', async () => {
+    const widget = doc.processes.find((p) => p.code === 'widget')!
+    const { container } = renderGraph(doc)
+    const title = await waitFor(() => {
+      const found = container.querySelector('.react-flow__node[data-id="widget"] [data-title]')
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    })
+    expect(title.textContent).toBe(widget.name)
+  })
+
   it("opens a background input from its card's row beside the graph, under the system's own address", async () => {
     const { container } = renderGraph(doc)
     await waitFor(() => expect(container.querySelector('.react-flow__node[data-id="widget"]')).not.toBeNull())
@@ -116,11 +170,8 @@ describe('model graph', () => {
     await waitFor(() => expect(card.getByText('steel').closest('a')?.getAttribute('href')).toBe(`/systems/${doc.id}/datasets/${input.database}/${input.id}`))
   })
 
-  it('folds the inputs of a card past six behind a link to its input table, at the card\'s own height', async () => {
-    const widget = doc.processes.find((p) => p.code === 'widget')!
-    const input = widget.exchanges.find((e) => e.type !== 'production')!
-    const many = Array.from({ length: 9 }, (_, i) => ({ ...input, id: `many-${i}`, name: `input number ${i + 1}` }))
-    const product: ProductSystem = { ...doc, processes: doc.processes.map((p) => (p.code === 'widget' ? { ...p, exchanges: [...p.exchanges.filter((e) => e.type === 'production'), ...many] } : p)) }
+  it('folds the inputs of a card past six behind a row of its own, at the card\'s own height', async () => {
+    const product = manyRows('input number', 9)
     const { container } = renderGraph(product)
     await waitFor(() => expect(container.querySelector('.react-flow__node[data-id="widget"]')).not.toBeNull())
     const node = container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement
@@ -128,13 +179,246 @@ describe('model graph', () => {
     await waitFor(() => expect(card.getByText('input number 6')).toBeInTheDocument())
     expect(card.queryByText('input number 7')).not.toBeInTheDocument()
     const placement = placementsFor(product).find((p) => p.code === 'widget')!
-    const fold = card.getByText('Show 3 more inputs')
-    expect(fold.closest('a')?.getAttribute('href')).toBe(`/systems/${product.id}/processes/widget/io`)
+    expect(card.getByText('Show 3 more inputs').closest('a')).toBeNull()
     expect((node.firstElementChild as HTMLElement).style.height).toBe(`${placement.height}px`)
     const foldAnchor = placement.inputs[placement.shown_inputs]!.y
     const handles = new Map(Array.from(node.querySelectorAll<HTMLElement>('.react-flow__handle.target')).map((h) => [h.dataset.handleid, h.style.top]))
     for (const hidden of ['many-6', 'many-7', 'many-8']) expect(handles.get(hidden)).toBe(`${foldAnchor}px`)
     expect(handles.get('many-5')).toBe(`${foldAnchor - ROW}px`)
+  })
+
+  it('opens a card\'s folded rows inside it and folds them again, writing nothing', async () => {
+    const product = manyRows('input number', 9)
+    vi.mocked(api.placeCards).mockClear()
+    vi.mocked(api.layout).mockClear()
+    const { container } = renderGraph(product)
+    const card = () => within(container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    await waitFor(() => expect(card().getByText('input number 6')).toBeInTheDocument())
+    fireEvent.click(card().getByText('Show 3 more inputs'))
+    await waitFor(() => expect(card().getByText('input number 9')).toBeInTheDocument())
+    expect(vi.mocked(api.layout).mock.calls.map((call) => call[2])).toContainEqual(['widget'])
+    expect(api.placeCards).not.toHaveBeenCalled()
+    const node = container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement
+    const expanded = placementsFor(product, ['widget']).find((p) => p.code === 'widget')!
+    expect((node.firstElementChild as HTMLElement).style.height).toBe(`${expanded.height}px`)
+    expect(card().queryByText(/more inputs/)).not.toBeInTheDocument()
+    const handles = Array.from(node.querySelectorAll<HTMLElement>('.react-flow__handle.target')).map((h) => h.style.top)
+    expect(new Set(handles).size).toBe(handles.length)
+    fireEvent.click(card().getByLabelText('Collapse the rows'))
+    await waitFor(() => expect(card().queryByText('input number 7')).not.toBeInTheDocument())
+    expect(vi.mocked(api.layout).mock.calls.map((call) => call[2])).toContainEqual([])
+  })
+
+  it('opens the details of the card a deliberate click activates, showing a closed inspector again', async () => {
+    const widget = doc.processes.find((p) => p.code === 'widget')!
+    useUi.setState({ inspector: 'closed', sheetOpen: false, chosenProcess: null })
+    const { container } = renderGraph(doc)
+    const node = await waitFor(() => {
+      const found = container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement | null
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    })
+    fireEvent.click(node)
+    expect(address()).toBe(paths.process(doc.id, widget.code))
+    expect(useUi.getState().inspector).toBe('open')
+    expect(useUi.getState().chosenProcess).toBe(widget.id)
+    useUi.setState({ inspector: 'open', chosenProcess: null })
+  })
+
+  it('shows a closed inspector again on a card of the process the address already shows', async () => {
+    const widget = doc.processes.find((p) => p.code === 'widget')!
+    useUi.setState({ inspector: 'closed', sheetOpen: false, chosenProcess: null })
+    const { container } = renderGraph(doc, undefined, null, undefined, paths.process(doc.id, widget.code))
+    const node = await waitFor(() => {
+      const found = container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement | null
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    })
+    fireEvent.click(node)
+    expect(address()).toBe(paths.process(doc.id, widget.code))
+    expect(useUi.getState().inspector).toBe('open')
+    useUi.setState({ inspector: 'open' })
+  })
+
+  it('keeps a click on a card\'s fold to its own rows, opening no details', async () => {
+    const product = manyRows('input number', 9)
+    useUi.setState({ inspector: 'closed', sheetOpen: false })
+    const { container } = renderGraph(product)
+    const card = () => within(container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    await waitFor(() => expect(card().getByText('Show 3 more inputs')).toBeInTheDocument())
+    fireEvent.click(card().getByText('Show 3 more inputs'))
+    await waitFor(() => expect(card().getByText('input number 9')).toBeInTheDocument())
+    expect(address()).toBe('/')
+    expect(useUi.getState().inspector).toBe('closed')
+    useUi.setState({ inspector: 'open' })
+  })
+
+  it('shows a closed inspector again on the title of the card the address already shows', async () => {
+    const widget = doc.processes.find((p) => p.code === 'widget')!
+    useUi.setState({ inspector: 'closed', sheetOpen: false, chosenProcess: null })
+    const { container } = renderGraph(doc, undefined, null, undefined, paths.process(doc.id, widget.code))
+    const title = await waitFor(() => {
+      const found = container.querySelector('.react-flow__node[data-id="widget"] a') as HTMLAnchorElement | null
+      expect(found).not.toBeNull()
+      return found as HTMLAnchorElement
+    })
+    fireEvent.click(title)
+    expect(address()).toBe(paths.process(doc.id, widget.code))
+    expect(useUi.getState().inspector).toBe('open')
+    useUi.setState({ inspector: 'open' })
+  })
+
+  it('shows a closed inspector again on a row\'s link to the page it opens, and leaves it closed on a modified activation', async () => {
+    const widget = doc.processes.find((p) => p.code === 'widget')!
+    const steel = widget.exchanges.find((e) => e.name === 'steel')!
+    const input = steel.input as { database: string; id: string }
+    useUi.setState({ inspector: 'closed', sheetOpen: false })
+    const { container } = renderGraph(doc)
+    const card = () => within(container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    await waitFor(() => expect(card().getByText('steel').closest('a')).not.toBeNull())
+    fireEvent.click(card().getByText('steel'), { ctrlKey: true })
+    expect(useUi.getState().inspector).toBe('closed')
+    fireEvent.click(card().getByText('steel'))
+    expect(address()).toBe(paths.dataset(doc.id, input.database, input.id))
+    expect(useUi.getState().inspector).toBe('open')
+    useUi.setState({ inspector: 'open' })
+  })
+
+  it('shows a closed inspector again on a foreground row\'s link to the process it opens', async () => {
+    const widget = doc.processes.find((p) => p.code === 'widget')!
+    const frame = widget.exchanges.find((e) => e.input?.kind === 'foreground')!
+    const code = (frame.input as { code: string }).code
+    useUi.setState({ inspector: 'closed', sheetOpen: false })
+    const { container } = renderGraph(doc)
+    const card = () => within(container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    await waitFor(() => expect(card().getByText(frame.name).closest('a')).not.toBeNull())
+    fireEvent.click(card().getByText(frame.name))
+    expect(address()).toBe(paths.process(doc.id, code))
+    expect(useUi.getState().inspector).toBe('open')
+    useUi.setState({ inspector: 'open' })
+  })
+
+  it('leaves a docked result on a card click without opening its details, and dismisses the inspector only on a bare graph', async () => {
+    useUi.setState({ inspector: 'open', sheetOpen: false, chosenProcess: null })
+    const { container } = renderGraph(doc, undefined, null, undefined, `/systems/${doc.id}/results/impact`)
+    const node = await waitFor(() => {
+      const found = container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement | null
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    })
+    fireEvent.click(node)
+    expect(address()).toBe(`/systems/${doc.id}`)
+    expect(useUi.getState().inspector).toBe('open')
+    fireEvent.click(container.querySelector('.react-flow__pane') as HTMLElement)
+    expect(useUi.getState().inspector).toBe('closed')
+    useUi.setState({ inspector: 'open', chosenProcess: null })
+  })
+
+  it('dismisses a shown inspector on a blank click of the canvas, under the system the graph draws', async () => {
+    const widget = doc.processes.find((p) => p.code === 'widget')!
+    useUi.setState({ inspector: 'open', sheetOpen: false, chosenProcess: widget.id })
+    const { container } = renderGraph(doc, undefined, null, undefined, paths.system(doc.id))
+    await waitFor(() => expect(container.querySelector('.react-flow__pane')).not.toBeNull())
+    fireEvent.click(container.querySelector('.react-flow__pane') as HTMLElement)
+    expect(useUi.getState().inspector).toBe('closed')
+    expect(useUi.getState().chosenProcess).toBeNull()
+    useUi.setState({ inspector: 'open' })
+  })
+
+  it('keeps a closed inspector closed on a blank click of the canvas', async () => {
+    useUi.setState({ inspector: 'closed', sheetOpen: false })
+    const { container } = renderGraph(doc, undefined, null, undefined, paths.system(doc.id))
+    await waitFor(() => expect(container.querySelector('.react-flow__pane')).not.toBeNull())
+    fireEvent.click(container.querySelector('.react-flow__pane') as HTMLElement)
+    expect(useUi.getState().inspector).toBe('closed')
+  })
+
+  it('dismisses the sheet on a blank click of the canvas below 768 px', async () => {
+    const width = window.innerWidth
+    window.innerWidth = 700
+    useUi.setState({ inspector: 'open', sheetOpen: true })
+    const { container } = renderGraph(doc, undefined, null, undefined, paths.system(doc.id))
+    await waitFor(() => expect(container.querySelector('.react-flow__pane')).not.toBeNull())
+    fireEvent.click(container.querySelector('.react-flow__pane') as HTMLElement)
+    expect(useUi.getState().sheetOpen).toBe(false)
+    expect(useUi.getState().inspector).toBe('open')
+    window.innerWidth = width
+    useUi.setState({ sheetOpen: false })
+  })
+
+  it('folds the output rows of a card past six, keeping the production output', async () => {
+    const widget = doc.processes.find((p) => p.code === 'widget')!
+    const emission = widget.exchanges.find((e) => e.type === 'elementary')!
+    // the production row and the emission the fixture already carries, then seven more output rows
+    const many = Array.from({ length: 6 }, (_, i) => ({ ...emission, id: `out-${i}`, name: `output number ${i + 1}` }))
+    const product: ProductSystem = { ...doc, processes: doc.processes.map((p) => (p.code === 'widget' ? { ...p, exchanges: [...p.exchanges, ...many] } : p)) }
+    const { container } = renderGraph(product)
+    const card = () => within(container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    await waitFor(() => expect(card().getByText('Show 2 more outputs')).toBeInTheDocument())
+    expect(card().getByText('output number 4')).toBeInTheDocument()
+    expect(card().queryByText('output number 5')).not.toBeInTheDocument()
+    const placement = placementsFor(product).find((p) => p.code === 'widget')!
+    expect(placement.folded_outputs).toBe(2)
+  })
+
+  it('places a card it dragged and answers the rows it shows', async () => {
+    const product = manyRows('input number', 9)
+    vi.mocked(api.placeCards).mockClear()
+    const { container } = renderGraph(product)
+    const card = () => within(container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    await waitFor(() => expect(card().getByText('Show 3 more inputs')).toBeInTheDocument())
+    fireEvent.click(card().getByText('Show 3 more inputs'))
+    await waitFor(() => expect(card().getByText('input number 9')).toBeInTheDocument())
+    await act(async () => {
+      flowProps.onNodesChange([{ type: 'position', id: 'widget', position: { x: 40, y: 60 }, dragging: false }])
+    })
+    await waitFor(() => expect(api.placeCards).toHaveBeenCalled())
+    expect(vi.mocked(api.placeCards).mock.calls[0].slice(1)).toEqual([[{ code: 'widget', x: 40, y: 60 }], null, ['widget']])
+  })
+
+  it('asks the layout under the case the canvas shows and the rows it opens', async () => {
+    const product = manyRows('input number', 9)
+    vi.mocked(api.layout).mockClear()
+    const { container, getByLabelText } = renderGraph(product)
+    const card = () => within(container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    await waitFor(() => expect(card().getByText('Show 3 more inputs')).toBeInTheDocument())
+    fireEvent.click(card().getByText('Show 3 more inputs'))
+    await waitFor(() => expect(card().getByText('input number 9')).toBeInTheDocument())
+    fireEvent.change(getByLabelText('State'), { target: { value: 'heavy' } })
+    await waitFor(() => expect(vi.mocked(api.systemAs)).toHaveBeenCalledWith(doc.id, 'heavy'))
+    await waitFor(() =>
+      expect(vi.mocked(api.layout).mock.calls.map((call) => [call[1], call[2]])).toContainEqual(['heavy', ['widget']]),
+    )
+  })
+
+  it('resets the layout under the rows the canvas shows', async () => {
+    const product = manyRows('input number', 9)
+    vi.mocked(api.releaseCards).mockClear()
+    const { container } = renderGraph(product)
+    const card = () => within(container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    await waitFor(() => expect(card().getByText('Show 3 more inputs')).toBeInTheDocument())
+    fireEvent.click(card().getByText('Show 3 more inputs'))
+    await waitFor(() => expect(card().getByText('input number 9')).toBeInTheDocument())
+    more()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Reset layout' }))
+    await waitFor(() => expect(api.releaseCards).toHaveBeenCalledWith(product.id, null, ['widget']))
+  })
+
+  it('expands every card from the canvas options and folds them all again', async () => {
+    const product = manyRows('input number', 9)
+    vi.mocked(api.layout).mockClear()
+    const { container } = renderGraph(product)
+    const card = () => within(container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    await waitFor(() => expect(card().getByText('Show 3 more inputs')).toBeInTheDocument())
+    choose(/All rows/)
+    await waitFor(() => expect(card().getByText('input number 9')).toBeInTheDocument())
+    more()
+    expect(screen.getByRole('menuitemcheckbox', { name: /All rows/ })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    expect(vi.mocked(api.layout).mock.calls.map((call) => call[2])).toContainEqual(['frame', 'widget'])
+    choose(/All rows/)
+    await waitFor(() => expect(card().queryByText('input number 9')).not.toBeInTheDocument())
+    expect(card().getByText('Show 3 more inputs')).toBeInTheDocument()
   })
 
   it('sizes the card, its header, its section labels and its rows from the geometry the layout hands it', async () => {
@@ -264,8 +548,8 @@ describe('model graph', () => {
     })
     expect(toolbar.closest('.react-flow__panel')).toBeNull()
     expect(toolbar.closest('.slot-tools')).not.toBeNull()
-    expect(toolbar.className).toContain('flex-wrap')
     expect(toolbar.className).toContain('max-w-full')
+    expect(toolbar.querySelector('[data-wrap]')?.className).toContain('flex-wrap')
   })
 
   it('draws the minimap in its own slot at its own size, and nothing there while it is off', async () => {
@@ -375,18 +659,40 @@ describe('model graph', () => {
     expect((node.firstElementChild as HTMLElement).style.height).toBe(`${placement.height}px`)
   })
 
-  it("each card shows its own part of the band's result", async () => {
-    const owns: Map<string, OwnShown> = new Map([
-      ['widget', { score: 2.49, fraction: 0.5988, unit: 'kg CO2-Eq' }],
-      ['frame', { score: 1.668, fraction: 0.4012, unit: 'kg CO2-Eq' }],
-    ])
-    const { container } = renderGraph(doc, undefined, null, owns)
+  it("each card's badge carries its own part of the band's result", async () => {
+    const { container } = renderGraph(doc, undefined, null, ownPartsOf())
     await waitFor(() => expect(container.querySelector('.react-flow__node[data-id="widget"]')).not.toBeNull())
-    const widget = within(container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
-    const frame = within(container.querySelector('.react-flow__node[data-id="frame"]') as HTMLElement)
-    expect(widget.getByText(`own ${formatAmount(2.49)}`)).toBeInTheDocument()
-    expect(frame.getByText(`own ${formatAmount(1.668)}`)).toBeInTheDocument()
-    expect(widget.getByTitle('Own part: 2.49 kg CO2-Eq, 59.9 %')).toBeInTheDocument()
+    const widget = badgeOf(container, 'widget')
+    const frame = badgeOf(container, 'frame')
+    expect(widget.textContent).toBe(`own ${formatAmount(2.49)}`)
+    expect(widget.title).toBe('Own part: 2.49 kg CO2-Eq, 59.9 %')
+    expect(frame.textContent).toBe(`own ${formatAmount(1.668)}`)
+  })
+
+  it("stands a card's own part above the selection outline, gapped from it by the card's background", async () => {
+    useUi.setState({ chosenProcess: doc.processes.find((p) => p.code === 'widget')!.id })
+    const { container } = renderGraph(doc, undefined, null, ownPartsOf())
+    await waitFor(() => expect(container.querySelector('.react-flow__node[data-id="widget"] [data-own]')).not.toBeNull())
+    const badge = badgeOf(container, 'widget')
+    expect(container.querySelector('.react-flow__node[data-id="widget"] [data-selection]')).not.toBeNull()
+    expect(badge.className.split(' ')).toContain('z-10')
+    expect(badge.className.split(' ')).toContain('shadow-[0_0_0_2px_rgb(var(--background))]')
+    useUi.setState({ chosenProcess: null })
+  })
+
+  it("keeps a card's own part the same size and place whether or not the card is chosen", async () => {
+    const widgetId = doc.processes.find((p) => p.code === 'widget')!.id
+    const unselected = renderGraph(doc, undefined, null, ownPartsOf())
+    await waitFor(() => expect(unselected.container.querySelector('.react-flow__node[data-id="widget"] [data-own]')).not.toBeNull())
+    const plain = badgeOf(unselected.container, 'widget')
+    const plainBox = { className: plain.className, style: plain.getAttribute('style') }
+    unselected.unmount()
+    useUi.setState({ chosenProcess: widgetId })
+    const selected = renderGraph(doc, undefined, null, ownPartsOf())
+    await waitFor(() => expect(selected.container.querySelector('.react-flow__node[data-id="widget"] [data-own]')).not.toBeNull())
+    const chosen = badgeOf(selected.container, 'widget')
+    expect({ className: chosen.className, style: chosen.getAttribute('style') }).toEqual(plainBox)
+    useUi.setState({ chosenProcess: null })
   })
 
   it('a card shows no part without owns', async () => {
@@ -410,6 +716,20 @@ describe('model graph', () => {
       expect(positionOf(container, placement.code)?.replace(/\s+/g, '')).toContain(`translate(${placement.x}px,${placement.y}px)`)
     }
   })
+  it('shows a drag the store refuses and draws the card where the layout holds it', async () => {
+    const message = 'the layout of s changed since it was read; read it again'
+    vi.mocked(api.placeCards).mockRejectedValueOnce(new ApiError(409, { error: 'conflict', message, details: {} }))
+    const { container } = renderGraph(doc)
+    await waitFor(() => expect(container.querySelector('.react-flow__node[data-id="widget"]')).not.toBeNull())
+    const held = placementsFor(doc).find((p) => p.code === 'widget')!
+    expect(positionOf(container, 'widget')?.replace(/\s+/g, '')).toContain(`translate(${held.x}px,${held.y}px)`)
+    await act(async () => {
+      flowProps.onNodesChange([{ type: 'position', id: 'widget', position: { x: 900, y: 900 }, dragging: false }])
+    })
+    expect(await screen.findByRole('status')).toHaveTextContent(message)
+    expect(positionOf(container, 'widget')?.replace(/\s+/g, '')).toContain(`translate(${held.x}px,${held.y}px)`)
+  })
+
   it.each(['light', 'dark'] as const)('draws the graph controls in the %s theme in the xyflow colour mode of that name', async (theme) => {
     useUi.getState().setTheme(theme)
     const { container } = renderGraph(doc)
@@ -488,7 +808,7 @@ describe('model graph', () => {
       await waitFor(() => expect(rowOf(container, 'steel').textContent).toContain(formatAmount(2.5)))
       fireEvent.change(getByLabelText('State'), { target: { value: 'heavy' } })
       await waitFor(() => expect(rowOf(container, 'steel').textContent).toContain(formatAmount(5)))
-      expect(api.layout).toHaveBeenCalledWith(doc.id, 'heavy', expect.any(AbortSignal))
+      expect(api.layout).toHaveBeenCalledWith(doc.id, 'heavy', [], expect.any(AbortSignal))
       more()
       expect(screen.getByRole('menuitemcheckbox', { name: /Scaled to 1 unit/ })).toHaveAttribute('aria-checked', 'true')
       expect(screen.getByRole('menuitemcheckbox', { name: /Scaled to 1 unit/ })).not.toHaveAttribute('aria-disabled', 'true')

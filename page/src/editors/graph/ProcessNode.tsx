@@ -2,11 +2,11 @@ import { Handle, Position, useStore, type NodeProps } from '@xyflow/react'
 import { memo, type CSSProperties, type ReactNode } from 'react'
 import type { CardGeometry, Exchange } from '@/api/types'
 import { formatAmount, formatShare } from '@/lib/format'
-import { AppLink } from '@/lib/router'
 import { paths } from '@/lib/paths'
 import { rowsOf } from '@/lib/placement'
 import { cn } from '@/lib/utils'
 import { useUi } from '@/store/ui'
+import { DetailLink } from '@/window/DetailLink'
 import { Icon, type IconName } from '@/window/Icon'
 import type { ProcessNodeType } from './build'
 import { CardToolbar, ProcessMenuItems } from './CardMenu'
@@ -21,6 +21,35 @@ function iconOf(exchange: Exchange): IconName {
 function foldLabel(hidden: Exchange[]): string {
   const idle = hidden.filter((e) => e.amount === 0).length
   return `Show ${hidden.length} more inputs${idle > 0 ? `, ${idle} of them at zero` : ''}`
+}
+
+function FoldRow({ label, height, onClick }: { label: string; height: number; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{ height, lineHeight: `${height}px` }}
+      className="nodrag nopan block w-full rounded-md text-center text-muted-foreground hover:bg-foreground/8 hover:text-foreground"
+    >
+      {label}
+    </button>
+  )
+}
+
+function FoldToggle({ expanded, top, height, onClick }: { expanded: boolean; top: number; height: number; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={expanded}
+      aria-label={expanded ? 'Collapse the rows' : 'Expand the rows'}
+      title={expanded ? 'Collapse the rows' : 'Expand the rows'}
+      style={{ top, height }}
+      className="nodrag nopan absolute right-2 flex items-center rounded-sm px-1 text-xs text-muted-foreground hover:bg-foreground/8 hover:text-foreground"
+    >
+      {expanded ? '▾' : '▸'}
+    </button>
+  )
 }
 
 function amountCell(exchange: Exchange, scaled: Record<string, number> | null, values: boolean): ReactNode {
@@ -39,13 +68,13 @@ function Row({ exchange, systemId, hot, scaled, card }: { exchange: Exchange; sy
   const amount = amountCell(exchange, scaled, values)
   const name =
     exchange.input?.kind === 'background' ? (
-      <AppLink to={paths.dataset(systemId, exchange.input.database, exchange.input.id)} title={exchange.name} className="truncate hover:underline nodrag nopan">
+      <DetailLink to={paths.dataset(systemId, exchange.input.database, exchange.input.id)} title={exchange.name} className="truncate hover:underline nodrag nopan">
         {exchange.name}
-      </AppLink>
+      </DetailLink>
     ) : exchange.input?.kind === 'foreground' ? (
-      <AppLink to={paths.process(systemId, exchange.input.code)} title={exchange.name} className="truncate hover:underline nodrag nopan">
+      <DetailLink to={paths.process(systemId, exchange.input.code)} title={exchange.name} className="truncate hover:underline nodrag nopan">
         {exchange.name}
-      </AppLink>
+      </DetailLink>
     ) : (
       <span title={exchange.name} className="truncate">
         {exchange.name}
@@ -71,12 +100,16 @@ function Row({ exchange, systemId, hot, scaled, card }: { exchange: Exchange; sy
 }
 
 function ProcessNodeComponent({ data }: NodeProps<ProcessNodeType>) {
-  const { process, reference, hot, hotExchanges, outline, systemId, placement, card, own, supplies } = data
+  const { process, reference, hot, hotExchanges, outline, systemId, placement, card, own, supplies, rows } = data
   const { inputs, outputs } = rowsOf(process, placement)
   const detail = useStore((s) => detailAt(s.transform[2]))
   const chosen = useUi((s) => s.chosenProcess === process.id)
   const listed = inputs.slice(0, placement.shown_inputs)
   const hidden = inputs.slice(placement.shown_inputs)
+  const listedOutputs = outputs.slice(0, placement.shown_outputs)
+  const hiddenOutputs = outputs.slice(placement.shown_outputs)
+  const foldable = placement.folded_inputs + placement.folded_outputs > 0
+  const expand = () => rows.toggle(placement.code)
   return (
     <>
       <CardToolbar size={{ width: card.width, height: placement.height }} shown={chosen}>
@@ -98,9 +131,9 @@ function ProcessNodeComponent({ data }: NodeProps<ProcessNodeType>) {
         <Handle type="source" position={Position.Right} id="out" style={{ top: placement.output }} className="!bg-link-stroke" />
         <div style={{ height: detail === 'rows' ? card.header_height : '100%' }} className={cn('grid grid-cols-[auto_minmax(0,1fr)_auto] gap-x-2 overflow-hidden px-3 font-semibold leading-snug', detail === 'rows' ? 'content-start items-start py-1' : 'content-start items-start py-3 text-2xl')}>
           <Icon name="process" />
-          <AppLink to={paths.process(systemId, process.code)} title={process.name} className={cn('min-w-0 hover:underline nodrag nopan', detail === 'rows' ? 'line-clamp-1 break-all' : 'line-clamp-3 [overflow-wrap:anywhere]')}>
+          <DetailLink to={paths.process(systemId, process.code)} data-title title={process.name} className={cn('min-w-0 hover:underline nodrag nopan', detail === 'rows' ? 'line-clamp-1 break-all' : 'line-clamp-3 [overflow-wrap:anywhere]')}>
             {process.name}
-          </AppLink>
+          </DetailLink>
           <span className="shrink-0 rounded-full bg-muted px-1.5 font-normal text-muted-foreground">{process.location}</span>
           {supplies === null ? null : (
             <span className="col-start-2 row-start-2 text-xs font-normal leading-tight text-muted-foreground">{`supplies ${supplies.processes} processes in ${supplies.stages} stages`}</span>
@@ -108,22 +141,20 @@ function ProcessNodeComponent({ data }: NodeProps<ProcessNodeType>) {
         </div>
         {detail === 'rows' ? (
           <>
-            <div style={{ paddingTop: card.section_padding, paddingBottom: card.section_padding }} className="px-2">
+            <div style={{ paddingTop: card.section_padding, paddingBottom: card.section_padding }} className="relative px-2">
               <div style={{ height: card.section_label }} className="px-1 text-xs text-muted-foreground">›› Input flows</div>
+              {foldable ? <FoldToggle expanded={rows.expanded} top={card.section_padding} height={card.section_label} onClick={expand} /> : null}
               {listed.map((e) => (
                 <Row key={e.id} exchange={e} systemId={systemId} hot={hotExchanges.includes(e.id)} scaled={placement.scaled} card={card} />
               ))}
-              {hidden.length > 0 ? (
-                <AppLink to={paths.process(systemId, process.code, 'io')} style={{ height: card.row_height, lineHeight: `${card.row_height}px` }} className="nodrag nopan block w-full rounded-md text-center text-muted-foreground hover:bg-foreground/8 hover:text-foreground">
-                  {foldLabel(hidden)}
-                </AppLink>
-              ) : null}
+              {hidden.length > 0 ? <FoldRow label={foldLabel(hidden)} height={card.row_height} onClick={expand} /> : null}
             </div>
-            <div style={{ paddingTop: card.section_padding, paddingBottom: card.section_padding }} className="px-2 shadow-[inset_0_1px_0_rgb(var(--node-border))]">
+            <div style={{ paddingTop: card.section_padding, paddingBottom: card.section_padding }} className="relative px-2 shadow-[inset_0_1px_0_rgb(var(--node-border))]">
               <div style={{ height: card.section_label }} className="px-1 text-right text-xs text-muted-foreground">Output flows ››</div>
-              {outputs.map((e) => (
+              {listedOutputs.map((e) => (
                 <Row key={e.id} exchange={e} systemId={systemId} hot={hotExchanges.includes(e.id)} scaled={placement.scaled} card={card} />
               ))}
+              {hiddenOutputs.length > 0 ? <FoldRow label={`Show ${hiddenOutputs.length} more outputs`} height={card.row_height} onClick={expand} /> : null}
             </div>
           </>
         ) : null}
@@ -132,7 +163,7 @@ function ProcessNodeComponent({ data }: NodeProps<ProcessNodeType>) {
         <span
           data-own
           title={`Own part: ${formatAmount(own.score)} ${own.unit}, ${formatShare(own.fraction)}`}
-          className="nodrag nopan absolute bottom-0 right-1 translate-y-1/2 rounded-full border bg-background px-1.5 text-xs tabular-nums"
+          className="nodrag nopan absolute bottom-0 right-1 z-10 translate-y-1/2 rounded-full border bg-background px-1.5 text-xs tabular-nums shadow-[0_0_0_2px_rgb(var(--background))]"
         >
           own {formatAmount(own.score)}
         </span>

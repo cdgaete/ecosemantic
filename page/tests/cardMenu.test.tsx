@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import type { Process, ProductSystem } from '@/api/types'
 import { LinkedMenuItems, ProcessMenuItems } from '@/editors/graph/CardMenu'
-import { clearArea, toolbarFor, TOOLBAR_OFFSET } from '@/editors/graph/layout'
+import { clearArea, POINTER_WIDTH, toolbarFor, TOOLBAR_OFFSET } from '@/editors/graph/layout'
 import { LinkedNode } from '@/editors/graph/LinkedNode'
 import { ProcessNode } from '@/editors/graph/ProcessNode'
 import type { LinkedNodeData, ProcessNodeData } from '@/editors/graph/build'
@@ -63,6 +63,79 @@ describe("a card's menu", () => {
     expect(link.getAttribute('href')?.endsWith(`/processes/${process.code}/general`)).toBe(true)
   })
 
+  it('shows the inspector again on a plain activation of the details link, at the address it already shows', () => {
+    renderAt(paths.process(doc.id, process.code), <ProcessMenuItems systemId={doc.id} process={process} />)
+    fireEvent.click(screen.getByRole('link', { name: 'Open details' }))
+    expect(useUi.getState().inspector).toBe('open')
+  })
+
+  it.each([
+    { ctrlKey: true },
+    { metaKey: true },
+    { shiftKey: true },
+    { altKey: true },
+    { button: 1 },
+  ])('leaves a closed inspector closed on a modified or non-primary activation: %o', (modifiers) => {
+    renderAt(paths.process(doc.id, process.code), <ProcessMenuItems systemId={doc.id} process={process} />)
+    fireEvent.click(screen.getByRole('link', { name: 'Open details' }), modifiers)
+    expect(useUi.getState().inspector).toBe('closed')
+  })
+
+  it("offers no details of the process the inspector already shows", () => {
+    useUi.setState({ inspector: 'open' })
+    renderAt(paths.process(doc.id, process.code), <ProcessMenuItems systemId={doc.id} process={process} />)
+    expect(screen.queryByRole('link', { name: 'Open details' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show process activity' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Center card' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Request a change' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Filter the log to this process' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Focus' })).not.toBeInTheDocument()
+  })
+
+  it.each(['general', 'io'])('offers no details of that process on its %s subtab while the inspector shows it', (page) => {
+    useUi.setState({ inspector: 'open' })
+    renderAt(paths.process(doc.id, process.code, page), <ProcessMenuItems systemId={doc.id} process={process} />)
+    expect(screen.queryByRole('link', { name: 'Open details' })).not.toBeInTheDocument()
+  })
+
+  it('offers the details of a process while the inspector shows another one', () => {
+    const other = doc.processes.find((p) => p.code !== process.code)!
+    useUi.setState({ inspector: 'open', chosenProcess: other.id })
+    renderAt(paths.process(doc.id, other.code), <ProcessMenuItems systemId={doc.id} process={process} />)
+    expect(screen.getByRole('link', { name: 'Open details' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show process activity' })).toBeInTheDocument()
+  })
+
+  it('keeps the subtab the details link of a closed inspector points at', () => {
+    const io = paths.process(doc.id, process.code, 'io')
+    renderAt(io, <><ProcessMenuItems systemId={doc.id} process={process} /><Here /></>)
+    const link = screen.getByRole('link', { name: 'Open details' })
+    expect(link.getAttribute('href')?.endsWith(`/processes/${process.code}/io`)).toBe(true)
+    fireEvent.click(link)
+    expect(useUi.getState().inspector).toBe('open')
+    expect(screen.getByTestId('here').textContent).toBe(io)
+  })
+
+  it('offers no activity action while the log it filters is the one shown', () => {
+    useUi.setState({ inspector: 'open', chosenProcess: process.id })
+    renderAt(paths.system(doc.id), <ProcessMenuItems systemId={doc.id} process={process} />)
+    expect(screen.queryByRole('button', { name: 'Show process activity' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open details' })).toBeInTheDocument()
+  })
+
+  it('offers the activity action while the log filters another process', () => {
+    useUi.setState({ inspector: 'open', chosenProcess: null })
+    renderAt(paths.system(doc.id), <ProcessMenuItems systemId={doc.id} process={process} />)
+    expect(screen.getByRole('button', { name: 'Show process activity' })).toBeInTheDocument()
+  })
+
+  it.each([paths.process(doc.id, process.code), paths.system(doc.id)])('offers every action while the inspector is closed at %s', (path) => {
+    useUi.setState({ inspector: 'closed', chosenProcess: process.id })
+    renderAt(path, <ProcessMenuItems systemId={doc.id} process={process} />)
+    expect(screen.getByRole('link', { name: 'Open details' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show process activity' })).toBeInTheDocument()
+  })
+
   it('filters the log to the process and shows Activity', () => {
     renderAt(
       '/',
@@ -71,17 +144,17 @@ describe("a card's menu", () => {
         <Here />
       </>,
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Filter the log to this process' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show process activity' }))
     expect(useUi.getState().chosenProcess).toBe(process.id)
     expect(useUi.getState().inspector).toBe('open')
     expect(screen.getByTestId('here').textContent).toBe(paths.system(doc.id))
     expect(useRequestDialog.getState().target).toBeNull()
   })
 
-  it('centres the card', () => {
+  it('centers the card', () => {
     const received = onCanvas()
     renderAt('/', <ProcessMenuItems systemId={doc.id} process={process} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Focus' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Center card' }))
     expect(received).toEqual([{ show: process.code }])
   })
 
@@ -91,11 +164,11 @@ describe("a card's menu", () => {
     expect(useRequestDialog.getState().target).toEqual({ systemId: doc.id, entity: 'process', entityId: process.id })
   })
 
-  it('opens and centres a linked system', () => {
+  it('opens and centers a linked system', () => {
     const received = onCanvas()
     renderAt('/', <LinkedMenuItems to={target} node={node} />)
     expect(screen.getByRole('link', { name: 'Open' }).getAttribute('href')).toBe(target)
-    fireEvent.click(screen.getByRole('button', { name: 'Focus' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Center card' }))
     expect(received).toEqual([{ show: node }])
   })
 })
@@ -109,6 +182,7 @@ const GEOMETRY = layoutAnswer(PRODUCT).value.card
 const PLACEMENT = placementsFor(PRODUCT).find((p) => p.code === process.code)!
 const CARD_SIZE = { width: GEOMETRY.width, height: PLACEMENT.height }
 const NODE_TYPES = { process: ProcessNode }
+const ROWS = { expanded: false, toggle: () => undefined }
 
 const OTHER = PRODUCT.processes.find((p) => p.code !== process.code)!
 const OTHER_PLACEMENT = placementsFor(PRODUCT).find((p) => p.code === OTHER.code)!
@@ -123,7 +197,7 @@ function Canvas({ at, clicked = null }: { at: { x: number; y: number }; clicked?
         position: at,
         selected: clicked === process.code,
         measured: CARD_SIZE,
-        data: { process, reference: false, hot: false, hotExchanges: [], outline: null, systemId: PRODUCT.id, placement: PLACEMENT, card: GEOMETRY, own: null, supplies: null },
+        data: { process, reference: false, hot: false, hotExchanges: [], outline: null, systemId: PRODUCT.id, placement: PLACEMENT, card: GEOMETRY, own: null, supplies: null, rows: ROWS },
       },
       {
         id: OTHER.code,
@@ -131,7 +205,7 @@ function Canvas({ at, clicked = null }: { at: { x: number; y: number }; clicked?
         position: OTHER_AT,
         selected: clicked === OTHER.code,
         measured: { width: GEOMETRY.width, height: OTHER_PLACEMENT.height },
-        data: { process: OTHER, reference: false, hot: false, hotExchanges: [], outline: null, systemId: PRODUCT.id, placement: OTHER_PLACEMENT, card: GEOMETRY, own: null, supplies: null },
+        data: { process: OTHER, reference: false, hot: false, hotExchanges: [], outline: null, systemId: PRODUCT.id, placement: OTHER_PLACEMENT, card: GEOMETRY, own: null, supplies: null, rows: ROWS },
       },
     ],
     [at, clicked],
@@ -221,6 +295,26 @@ describe("the card toolbar's place on the canvas", () => {
     expect(placed.side).toBe('bottom')
     await waitFor(() => expect(bar.style.width).toBe('256px'))
     await waitFor(() => expect(bar.parentElement?.style.transform).toBe(`translate(${tight.x}px, ${tight.y + CARD_SIZE.height + TOOLBAR_OFFSET}px) translate(0%, 0%)`))
+  })
+
+  it('points its menu at the card it belongs to', async () => {
+    measuringRow()
+    render(<Canvas at={AT} />)
+    const bar = await screen.findByRole('toolbar', { name: 'Card' })
+    const placed = placedFor(AT, CLEARANCE, NATURAL.height)
+    const pointer = bar.querySelector('[data-pointer]')
+    expect(pointer?.getAttribute('data-pointer')).toBe('top')
+    expect((pointer as HTMLElement).style.left).toBe(`${placed.pointer - POINTER_WIDTH / 2}px`)
+  })
+
+  it('points up at the card from a menu under it', async () => {
+    measuringRow()
+    const below = { x: AT.x, y: 130 }
+    render(<Canvas at={below} />)
+    const bar = await screen.findByRole('toolbar', { name: 'Card' })
+    const placed = placedFor(below, CLEARANCE, NATURAL.height)
+    expect(placed.side).toBe('bottom')
+    expect(bar.querySelector('[data-pointer]')?.getAttribute('data-pointer')).toBe('bottom')
   })
 
   it('places the toolbar of a card chosen after the canvas drew it', async () => {

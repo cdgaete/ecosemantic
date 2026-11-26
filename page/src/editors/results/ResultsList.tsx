@@ -6,6 +6,7 @@ import { useCalculations, useSystem } from '@/api/queries'
 import { useSystemStream } from '@/api/stream'
 import type { Call, ProductSystem } from '@/api/types'
 import { Button } from '@/components/ui/button'
+import { NEW_CALCULATION } from '@/editors/results/calculations'
 import { formatAgo, formatAmount, shortHash } from '@/lib/format'
 import { movedSince } from '@/lib/hashes'
 import { paths, useGo } from '@/lib/paths'
@@ -85,7 +86,7 @@ export function ResultsList() {
   const recorded = calculations.data?.value ?? []
   const start = (
     <Button size="sm" onClick={() => go(paths.results(id, 'setup', ''))}>
-      <Plus className="size-3.5" /> New calculation
+      <Plus className="size-3.5" /> {NEW_CALCULATION}
     </Button>
   )
   return (

@@ -11,6 +11,7 @@ A score is one number; reading it means saying where it comes from. Decompose it
 5. `contribution_analysis` with `by="stage"` splits the score over the life-cycle stages, each process's own part under its stage; and every decomposition and the inventory take `variant` to read a case or a scenario.
 6. `calculate_inventory` pages every elementary flow of the system, filtered by `compartment` or `query`. Amounts at or below the answer's `floor` are float64 residue, set aside and counted in `dropped`.
 7. State each claim with the decomposition that shows it: a share is a process's or a flow's score over the total, under the method named.
+8. Draw the graph for the report once the claims stand and the results are settled, in a subagent or a separate session when the client has one: `graph_layout` reads the drawing, `arrange_graph` moves only the cards the report needs elsewhere, and only the score, the troubles left and the page link come back. A nonzero score alone is no reason to move another card.
 
 ## Worked example: a bottle on the fixture database
 

@@ -1,5 +1,6 @@
 import { useUi, type InspectorMode } from '@/store/ui'
-import { inspectorShown, openInspector, opensInspector, toggleInspector, toggleWidened, widthWithin } from '@/window/inspector'
+import { dismissInspector, inspectorShown, openInspector, opensInspector, toggleInspector, toggleSheetHeight, toggleWidened } from '@/window/inspector'
+import { widthWithin } from '@/window/resize'
 
 describe('inspectorShown', () => {
   it.each([
@@ -56,6 +57,18 @@ describe('the inspector', () => {
     expect(useUi.getState().inspector).toBe('closed')
   })
 
+  it('shortens the sheet and returns it to the ordinary height', () => {
+    useUi.setState({ sheetShort: false })
+    toggleSheetHeight()
+    expect(useUi.getState().sheetShort).toBe(true)
+    toggleSheetHeight()
+    expect(useUi.getState().sheetShort).toBe(false)
+  })
+
+  it('shows the ordinary sheet in a store nothing has changed', () => {
+    expect(useUi.getInitialState().sheetShort).toBe(false)
+  })
+
   it('keeps a widened inspector widened when it is opened', () => {
     useUi.setState({ inspector: 'widened' })
     openInspector()
@@ -77,5 +90,50 @@ describe('the inspector', () => {
     expect(opensInspector('/systems/s1/log')).toBe(false)
     expect(opensInspector('/databases')).toBe(false)
     expect(opensInspector('/')).toBe(false)
+  })
+})
+
+describe('dismissInspector', () => {
+  beforeEach(() => {
+    window.innerWidth = 1024
+    useUi.setState({ inspector: 'open', sheetOpen: false })
+  })
+
+  it('closes a shown inspector at an address no sheet holds', () => {
+    dismissInspector('/systems/s1')
+    expect(useUi.getState().inspector).toBe('closed')
+  })
+
+  it('keeps a closed inspector closed', () => {
+    useUi.setState({ inspector: 'closed' })
+    dismissInspector('/systems/s1')
+    expect(useUi.getState().inspector).toBe('closed')
+  })
+
+  it('dismisses the sheet below 768 px and keeps the inspector mode as it is', () => {
+    window.innerWidth = 700
+    useUi.setState({ sheetOpen: true, inspector: 'closed' })
+    dismissInspector('/systems/s1')
+    expect(useUi.getState().sheetOpen).toBe(false)
+    expect(useUi.getState().inspector).toBe('closed')
+  })
+
+  it('dismisses nothing at an address a sheet holds', () => {
+    dismissInspector('/systems/s1/results/impact')
+    expect(useUi.getState().inspector).toBe('open')
+    dismissInspector('/databases/db/datasets')
+    expect(useUi.getState().inspector).toBe('open')
+  })
+
+  it.each(['/', '/databases', '/accounts'])('keeps the inspector as it is at %s, where no inspector is drawn', (pathname) => {
+    dismissInspector(pathname)
+    expect(useUi.getState().inspector).toBe('open')
+  })
+
+  it.each(['/', '/databases'])('keeps the sheet as it is below 768 px at %s', (pathname) => {
+    window.innerWidth = 700
+    useUi.setState({ sheetOpen: true })
+    dismissInspector(pathname)
+    expect(useUi.getState().sheetOpen).toBe(true)
   })
 })

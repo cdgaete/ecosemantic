@@ -58,6 +58,10 @@ HELD = {
     Process: {"product_system_id", "code"},
 }
 BROADENED = {"input", "database", "linked"}
+FIXED: dict[str, set[str]] = {
+    "graph_layout": {"detail", "card", "exchange_id", "cursor"},
+    "arrange_graph": {"detail"},
+}
 
 
 @pytest.fixture
@@ -207,6 +211,77 @@ async def test_the_python_path_and_the_tool_path_answer_alike(
     assert _without_system(scored) == _without_system(impact["value"])
 
 
+def test_the_python_api_places_as_its_actor(bundle_dir: Path, tmp_path: Path) -> None:
+    def placer(actor: Actor | None) -> str | None:
+        directory = tmp_path / (actor.id if actor is not None and actor.id else "default")
+        directory.mkdir()
+        with python_api.open(bundle_dir, directory, actor=actor) as opened:
+            ps = opened.create_product_system("placed", FIXTURE_DB)
+            ps.create_process("widget", "widget assembly", "unit", "widget")
+            ps.update_product_system(reference_process="widget")
+            answer = ps.arrange_graph([{"code": "widget", "x": 5.0, "y": 6.0}])
+            return next(card for card in answer.value.cards if card.code == "widget").placed_by
+
+    assert placer(None) == "person"
+    assert placer(Actor(kind="agent", id="script")) == "agent"
+
+
+def test_release_agent_holds_lets_an_agents_hold_go_and_keeps_a_persons(
+    bundle_dir: Path, tmp_path: Path
+) -> None:
+    directory = tmp_path / "released"
+    directory.mkdir()
+    with python_api.open(bundle_dir, directory) as opened:
+        ps = opened.create_product_system("placed", FIXTURE_DB)
+        ps.create_process("widget", "widget assembly", "unit", "widget")
+        ps.create_process("frame", "frame production", "kilogram", "frame")
+        ps.update_product_system(reference_process="widget")
+        ps.arrange_graph([{"code": "frame", "x": 5.0, "y": 6.0}])
+        identifier = ps.id
+    with python_api.open(bundle_dir, directory, actor=Actor(kind="agent", id="script")) as agent:
+        placed = agent.product_system(identifier)
+        placed.arrange_graph([{"code": "widget", "x": 40.0, "y": 60.0}])
+        answer = placed.arrange_graph([], release_agent_holds=True)
+        held = [(card.code, card.placed_by) for card in answer.value.cards if card.held]
+    assert held == [("frame", "person")]
+
+
+def test_only_if_better_keeps_an_agents_hold_that_does_not_lower_the_score(
+    bundle_dir: Path, tmp_path: Path
+) -> None:
+    directory = tmp_path / "better"
+    directory.mkdir()
+    with python_api.open(bundle_dir, directory) as opened:
+        ps = opened.create_product_system("placed", FIXTURE_DB)
+        ps.create_process("widget", "widget assembly", "unit", "widget")
+        ps.create_process("frame", "frame production", "kilogram", "frame")
+        ps.update_product_system(reference_process="widget")
+        placed = ps.arrange_graph([{"code": "frame", "x": 5.0, "y": 6.0}])
+        where = {card.code: (card.x, card.y) for card in placed.value.cards}
+        identifier = ps.id
+    with python_api.open(bundle_dir, directory, actor=Actor(kind="agent", id="script")) as agent:
+        held = agent.product_system(identifier)
+        useful = held.arrange_graph(
+            [{"code": "widget", "x": where["widget"][0], "y": where["widget"][1]}]
+        )
+        assert useful.value.score == placed.value.score
+        kept = held.arrange_graph([], release_agent_holds=True, only_if_better=True)
+        assert kept.value.score == useful.value.score
+        assert {card.code: card.placed_by for card in kept.value.cards if card.held} == {
+            "frame": "person",
+            "widget": "agent",
+        }
+        misplaced = held.arrange_graph(
+            [{"code": "widget", "x": where["frame"][0], "y": where["frame"][1]}]
+        )
+        assert misplaced.value.score > kept.value.score
+        better = held.arrange_graph([], release_agent_holds=True, only_if_better=True)
+        assert better.value.score == placed.value.score < misplaced.value.score
+        assert {card.code: card.placed_by for card in better.value.cards if card.held} == {
+            "frame": "person"
+        }
+
+
 def test_a_workspace_s_write_is_logged_as_the_person(ws: Workspace) -> None:
     ps = ws.create_product_system("jar", FIXTURE_DB)
     entry = ps.get_product_system_log().items[0]
@@ -288,7 +363,7 @@ def test_each_method_takes_its_tool_s_arguments() -> None:
         tool = [
             parameter
             for parameter in list(inspect.signature(functions[name]).parameters.values())[1:]
-            if parameter.name not in HELD[handle]
+            if parameter.name not in HELD[handle] | FIXED.get(name, set())
         ]
         own = list(inspect.signature(method).parameters.values())[1:]
         assert [p.name for p in own] == [p.name for p in tool], name

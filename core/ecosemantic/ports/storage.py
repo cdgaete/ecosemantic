@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from ecosemantic.errors import NotFound
+from ecosemantic.errors import Conflict, NotFound
 from ecosemantic.model.entities import Actor, ProductSystem
 from ecosemantic.ports.types import (
     Layout,
@@ -32,6 +32,11 @@ def no_version(product_system_id: uuid.UUID, content_hash: str) -> NotFound:
     return NotFound(f"no version {content_hash} of product system {product_system_id}")
 
 
+def stale_layout(product_system_id: uuid.UUID) -> Conflict:
+    """The refusal every store raises for a layout put over a read the store has moved past."""
+    return Conflict(f"the layout of {product_system_id} changed since it was read; read it again")
+
+
 @runtime_checkable
 class StoragePort(Protocol):
     async def list_product_systems(self) -> list[ProductSystemSummary]: ...
@@ -52,7 +57,13 @@ class StoragePort(Protocol):
 
     async def get_layout(self, product_system_id: uuid.UUID) -> Layout: ...
 
-    async def put_layout(self, product_system_id: uuid.UUID, layout: Layout) -> Layout: ...
+    async def put_layout(
+        self, product_system_id: uuid.UUID, layout: Layout, *, expected: Layout | None
+    ) -> Layout:
+        """Write a layout. `expected` is the layout the write was computed from: the store reads
+        its own and raises Conflict when they differ, so a placement made over a stale read is
+        refused rather than lost; None writes without reading."""
+        ...
 
     async def post_request(self, product_system_id: uuid.UUID, draft: RequestDraft) -> Request: ...
 

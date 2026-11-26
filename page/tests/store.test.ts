@@ -162,6 +162,19 @@ describe('ui store', () => {
     localStorage.removeItem('ecosemantic-page')
   })
 
+  it('persists the width the result drawer was dragged to, apart from the inspector width', async () => {
+    localStorage.setItem('ecosemantic-page', JSON.stringify({ state: { theme: 'dark' }, version: 5 }))
+    await useUi.persist.rehydrate()
+    expect(useUi.getState().resultWidth).toBeNull()
+    useUi.getState().setInspectorWidth(480)
+    useUi.getState().setResultWidth(880)
+    const saved = JSON.parse(localStorage.getItem('ecosemantic-page') ?? '{}') as { state: { inspectorWidth: number | null; resultWidth: number | null } }
+    expect(saved.state.inspectorWidth).toBe(480)
+    expect(saved.state.resultWidth).toBe(880)
+    useUi.setState({ inspectorWidth: null, resultWidth: null })
+    localStorage.removeItem('ecosemantic-page')
+  })
+
   it('persists the place the canvas tools were dropped at', async () => {
     localStorage.setItem('ecosemantic-page', JSON.stringify({ state: { theme: 'dark' }, version: 5 }))
     await useUi.persist.rehydrate()
@@ -241,6 +254,17 @@ describe('ui store', () => {
     await useUi.persist.rehydrate()
     expect(useUi.getState().scaledView).toBe(true)
     expect(useUi.getState().formulaValues).toBe(true)
+    localStorage.removeItem('ecosemantic-page')
+  })
+
+  it('opens the ordinary sheet on every load, whatever an earlier visit left saved', async () => {
+    localStorage.setItem('ecosemantic-page', JSON.stringify({ state: { theme: 'dark', sheetShort: true }, version: 5 }))
+    await useUi.persist.rehydrate()
+    expect(useUi.getState().sheetShort).toBe(false)
+    useUi.getState().setSheetShort(true)
+    const saved = JSON.parse(localStorage.getItem('ecosemantic-page') ?? '{}') as { state: { sheetShort?: boolean } }
+    expect(saved.state.sheetShort).toBeUndefined()
+    useUi.setState({ sheetShort: false })
     localStorage.removeItem('ecosemantic-page')
   })
 })

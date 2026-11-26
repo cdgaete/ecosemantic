@@ -260,12 +260,42 @@ class StorageConformance:
     ) -> None:
         entry = await storage.put_product_system(product_system, AGENT, "created")
         code = product_system.processes[0].code
-        await storage.put_layout(product_system.id, Layout(held={code: Spot(x=10.0, y=20.0)}))
+        await storage.put_layout(
+            product_system.id, Layout(held={code: Spot(x=10.0, y=20.0)}), expected=None
+        )
         stored = await storage.get_layout(product_system.id)
         assert stored.held[code].x == 10.0 and stored.held[code].y == 20.0
         # placing a card is not an edit: no entry, and the same hash
         assert [e.seq for e in await storage.log(product_system.id)] == [entry.seq]
         assert (await storage.get_product_system(product_system.id)).hash == entry.result_hash
+
+    async def test_a_layout_written_over_a_stale_read_is_refused(
+        self, storage, product_system: ProductSystem
+    ) -> None:
+        await storage.put_product_system(product_system, AGENT, "created")
+        code = product_system.processes[0].code
+        first = Layout(held={code: Spot(x=1.0, y=2.0)})
+        await storage.put_layout(product_system.id, first, expected=None)
+        with pytest.raises(Conflict) as raised:
+            await storage.put_layout(
+                product_system.id, Layout(held={code: Spot(x=3.0, y=4.0)}), expected=Layout()
+            )
+        assert str(raised.value) == (
+            f"the layout of {product_system.id} changed since it was read; read it again"
+        )
+        assert await storage.get_layout(product_system.id) == first
+
+    async def test_a_layout_written_without_an_expected_one_replaces_any(
+        self, storage, product_system: ProductSystem
+    ) -> None:
+        await storage.put_product_system(product_system, AGENT, "created")
+        code = product_system.processes[0].code
+        await storage.put_layout(
+            product_system.id, Layout(held={code: Spot(x=1.0, y=2.0)}), expected=None
+        )
+        second = Layout(held={code: Spot(x=3.0, y=4.0)})
+        assert await storage.put_layout(product_system.id, second, expected=None) == second
+        assert await storage.get_layout(product_system.id) == second
 
 
 class PackageConformance:

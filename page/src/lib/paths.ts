@@ -1,10 +1,10 @@
 import { useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { matchPath, useNavigate } from 'react-router-dom'
 import { withToken } from '@/api/client'
 
 export function useGo() {
   const navigate = useNavigate()
-  return useCallback((path: string) => navigate(withToken(path)), [navigate])
+  return useCallback((path: string, state?: unknown) => navigate(withToken(path), state === undefined ? undefined : { state }), [navigate])
 }
 
 export type ExplorerSection = 'datasets' | 'flows' | 'methods' | 'units' | 'locations'
@@ -14,6 +14,7 @@ export type SearchKind = 'processes' | 'elementary-flows' | 'methods'
 export const paths = {
   home: () => '/',
   system: (id: string) => `/systems/${id}`,
+  systemEntry: (id: string, narrow: boolean) => (narrow ? paths.system(id) : paths.systemPage(id, 'general')),
   systemPage: (id: string, page: string) => `/systems/${id}/${page}`,
   version: (id: string, hash: string) => `/systems/${id}/versions/${hash}`,
   process: (id: string, code: string, page = 'general') => `/systems/${id}/processes/${code}/${page}`,
@@ -40,4 +41,12 @@ export function databaseOfPath(pathname: string): string | null {
 export function isActivityPath(pathname: string, id: string): boolean {
   const base = paths.system(id)
   return pathname === base || pathname === `${base}/` || pathname === `${base}/log` || pathname === `${base}/graph`
+}
+
+/** The system and the process whose details an address shows on any subtab, and null for an address that shows none. */
+export function processOfPath(pathname: string): { systemId: string; code: string } | null {
+  const found = matchPath('/systems/:id/processes/:code/*', pathname)
+  const id = found?.params.id
+  const code = found?.params.code
+  return id === undefined || code === undefined ? null : { systemId: id, code }
 }

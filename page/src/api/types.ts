@@ -176,7 +176,11 @@ export interface Placement {
   height: number
   depth: number
   shown_inputs: number
+  shown_outputs: number
+  folded_inputs: number
+  folded_outputs: number
   held: boolean
+  placed_by: ActorKind | null
   inputs: Port[]
   outputs: string[]
   output: number
@@ -189,8 +193,8 @@ export interface SharedSupplier { code: string; processes: number; stages: numbe
 export interface Label { x: number; y: number; width: number; height: number; per_unit: string; scaled: string | null; formula: string | null }
 export interface Route { provider: string; consumer: string; exchange_id: string; points: [number, number][]; label: Label }
 export type TroubleKind = 'cards_overlap' | 'edge_through_card' | 'edges_overlap' | 'edge_backwards' | 'edges_cross' | 'label_overlap'
-export interface Trouble { kind: TroubleKind; message: string; codes: string[] }
-export interface Arrangement { map: string; cards: Placement[]; edges: Route[]; troubles: Trouble[]; score: number; bounds: Record<string, number>; scaling: string | null; stages: StageRegions[]; shared_suppliers: SharedSupplier[]; card: CardGeometry }
+export interface Trouble { kind: TroubleKind; message: string; codes: string[]; exchange_ids: string[] }
+export interface Arrangement { kind: 'arrangement'; map: string | null; cards: Placement[]; edges: Route[]; troubles: Trouble[]; score: number; bounds: Record<string, number>; scaling: string | null; stages: StageRegions[]; shared_suppliers: SharedSupplier[]; card: CardGeometry }
 export interface SystemRead extends Answer<ProductSystem> { open_requests: number }
 export interface Method {
   id: string

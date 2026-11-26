@@ -43,8 +43,8 @@ beforeEach(() => {
 it('opens the calculation form, and offers nothing to repeat while no calculation is recorded', async () => {
   renderAt(`/systems/${id}`, button)
   await waitFor(() => expect(api.calculations).toHaveBeenCalled())
-  expect(screen.queryByRole('button', { name: /Calculate again/ })).not.toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Calculate an impact result' }))
+  expect(screen.queryByRole('button', { name: /Run again/ })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'New calculation…' }))
   expect(screen.getByTestId('place').textContent).toBe(`/systems/${id}/results/setup`)
 })
 
@@ -52,7 +52,7 @@ it('calculates the latest recorded calculation again in one click, as a calculat
   const family = { ...recorded, id: 'latest', arguments: { product_system_id: id, impact_method: 'IPCC 2021', variants: ['Solar bakery'] } }
   vi.mocked(api.calculations).mockResolvedValue({ value: [family, recorded] } as unknown as Recorded)
   renderAt(`/systems/${id}`, button)
-  const again = await screen.findByRole('button', { name: 'Calculate again: IPCC 2021 · Solar bakery' })
+  const again = await screen.findByRole('button', { name: 'Run again: IPCC 2021 · Solar bakery' })
   fireEvent.click(again)
   expect(screen.getByTestId('place').textContent).toBe(`/systems/${id}/results/impact?call=latest`)
   expect(useUi.getState().startedImpact).toBe(id)
@@ -63,6 +63,6 @@ it('names the base values when the latest calculation named no variant, and pass
   const family = { ...recorded, id: 'good', arguments: { product_system_id: id, impact_method: 'IPCC 2021' } }
   vi.mocked(api.calculations).mockResolvedValue({ value: [failed, family] } as unknown as Recorded)
   renderAt(`/systems/${id}`, button)
-  fireEvent.click(await screen.findByRole('button', { name: 'Calculate again: IPCC 2021 · base values' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Run again: IPCC 2021 · base values' }))
   expect(screen.getByTestId('place').textContent).toBe(`/systems/${id}/results/impact?call=good`)
 })

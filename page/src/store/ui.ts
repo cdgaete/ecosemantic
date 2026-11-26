@@ -29,10 +29,12 @@ interface UiState {
   person: string | null
   inspector: InspectorMode
   inspectorWidth: number | null
+  resultWidth: number | null
   timelineOpen: boolean
   toolsOffset: Offset | null
   origins: Record<SheetKind, string | null>
   sheetOpen: boolean
+  sheetShort: boolean
   toolsOpen: boolean
   navOpen: boolean
   paletteOpen: boolean
@@ -57,10 +59,12 @@ interface UiState {
   setPerson: (person: string) => void
   setInspector: (mode: InspectorMode) => void
   setInspectorWidth: (width: number | null) => void
+  setResultWidth: (width: number | null) => void
   setTimelineOpen: (open: boolean) => void
   setToolsOffset: (offset: Offset | null) => void
   setOrigin: (kind: SheetKind, address: string | null) => void
   setSheetOpen: (open: boolean) => void
+  setSheetShort: (short: boolean) => void
   setToolsOpen: (open: boolean) => void
   setNavOpen: (open: boolean) => void
   setPaletteOpen: (open: boolean) => void
@@ -133,10 +137,12 @@ export const useUi = create<UiState>()(
       person: null,
       inspector: 'open',
       inspectorWidth: null,
+      resultWidth: null,
       timelineOpen: true,
       toolsOffset: null,
       origins: { explorer: null, results: null },
       sheetOpen: false,
+      sheetShort: false,
       toolsOpen: false,
       navOpen: false,
       paletteOpen: false,
@@ -164,10 +170,12 @@ export const useUi = create<UiState>()(
       setPerson: (person) => set({ person }),
       setInspector: (inspector) => set({ inspector }),
       setInspectorWidth: (inspectorWidth) => set({ inspectorWidth }),
+      setResultWidth: (resultWidth) => set({ resultWidth }),
       setTimelineOpen: (timelineOpen) => set({ timelineOpen }),
       setToolsOffset: (toolsOffset) => set({ toolsOffset }),
       setOrigin: (kind, address) => set((state) => ({ origins: { ...state.origins, [kind]: address } })),
       setSheetOpen: (open) => set(open ? { sheetOpen: true, toolsOpen: false } : { sheetOpen: false }),
+      setSheetShort: (sheetShort) => set({ sheetShort }),
       setToolsOpen: (open) => set(open ? { toolsOpen: true, sheetOpen: false } : { toolsOpen: false }),
       setNavOpen: (navOpen) => set({ navOpen }),
       setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
@@ -213,12 +221,13 @@ export const useUi = create<UiState>()(
       name: 'ecosemantic-page',
       version: 5,
       migrate,
-      merge: (persisted, current) => ({ ...current, ...(persisted as Partial<UiState>), scaledView: current.scaledView }),
+      merge: (persisted, current) => ({ ...current, ...(persisted as Partial<UiState>), scaledView: current.scaledView, sheetShort: current.sheetShort }),
       partialize: (state) => ({
         theme: state.theme,
         person: state.person,
         inspector: state.inspector,
         inspectorWidth: state.inspectorWidth,
+        resultWidth: state.resultWidth,
         timelineOpen: state.timelineOpen,
         toolsOffset: state.toolsOffset,
         pinned: state.pinned,

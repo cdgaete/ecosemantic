@@ -9,7 +9,7 @@ import pytest
 from pydantic import BaseModel
 
 from ecosemantic import files
-from ecosemantic.errors import NotFound, Unavailable
+from ecosemantic.errors import NotFound, Unavailable, UnreadableLayout
 from ecosemantic.model.entities import Actor, ProductSystem
 from ecosemantic.package import sidecar as sidecar_module
 from ecosemantic.package.log import LOG_FILE, next_entry, read_log, write_log
@@ -183,7 +183,6 @@ def test_every_stored_document_this_version_cannot_read_is_unavailable(
     assert read_layout(tmp_path) == Layout()
     write_lines(tmp_path, REQUESTS_FILE, ['{"bad": 1}'])
     write_lines(tmp_path, LOG_FILE, ['{"bad": 1}'])
-    (folder / LAYOUT_FILE).write_text('{"held": {"a": 1}}', encoding="utf-8")
     (folder / "metadata.json").write_text('{"bad": {}}', encoding="utf-8")
     refusals: list[tuple[Callable[[Path], object], str, str]] = [
         (
@@ -193,17 +192,33 @@ def test_every_stored_document_this_version_cannot_read_is_unavailable(
         ),
         (read_log, "log.jsonl line 1", WORKING_VERSION_HINT),
         (read_sidecar, "metadata.json", WORKING_VERSION_HINT),
-        (
-            read_layout,
-            "layout.json",
-            f"remove {folder / LAYOUT_FILE}; the drawing places its cards again",
-        ),
     ]
     for reader, named, hint in refusals:
         with pytest.raises(Unavailable) as caught:
             reader(tmp_path)
         assert str(caught.value).startswith(f"{named} cannot be read by this version: ")
         assert caught.value.hint == hint
+
+
+def test_a_layout_without_a_placer_reads_as_none(tmp_path: Path) -> None:
+    directory = tmp_path / SIDECAR_DIR
+    directory.mkdir()
+    (directory / LAYOUT_FILE).write_text(
+        json.dumps({"held": {"a": {"x": 1.0, "y": 2.0}}}), encoding="utf-8"
+    )
+    assert read_layout(tmp_path).held["a"].placed_by is None
+
+
+def test_an_unreadable_layout_carries_no_path_and_no_hint(
+    product_system: ProductSystem, tmp_path: Path
+) -> None:
+    stored(tmp_path, product_system)
+    (tmp_path / SIDECAR_DIR / LAYOUT_FILE).write_text('{"held": {"a": 1}}', encoding="utf-8")
+    with pytest.raises(UnreadableLayout) as caught:
+        read_layout(tmp_path)
+    assert str(caught.value).startswith("layout.json cannot be read by this version: ")
+    assert str(tmp_path) not in str(caught.value)
+    assert caught.value.hint is None
 
 
 def test_a_failed_write_leaves_the_previous_file_whole(

@@ -259,7 +259,12 @@ PARITY: tuple[Row, ...] = (
         "/api/product-systems/{id}/layout",
         "/api/product-systems/$system/layout",
         "graph_layout",
-        {"product_system_id": "$system", "variant": None},
+        {
+            "product_system_id": "$system",
+            "variant": None,
+            "expanded": None,
+            "detail": "drawing",
+        },
         unknown=True,
     ),
     Row(
@@ -267,7 +272,11 @@ PARITY: tuple[Row, ...] = (
         "/api/product-systems/{id}/layout",
         "/api/product-systems/$system/layout",
         "arrange_graph",
-        {"product_system_id": "$system", "placements": [{"code": "cup", "x": 1.0, "y": 2.0}]},
+        {
+            "product_system_id": "$system",
+            "placements": [{"code": "cup", "x": 1.0, "y": 2.0}],
+            "detail": "drawing",
+        },
         body={"placements": [{"code": "cup", "x": 1.0, "y": 2.0}]},
         write=True,
         refused=Refusal(
@@ -282,7 +291,14 @@ PARITY: tuple[Row, ...] = (
         "/api/product-systems/{id}/layout",
         "/api/product-systems/$system/layout",
         "arrange_graph",
-        {"product_system_id": "$system", "placements": [], "release_all": True, "variant": None},
+        {
+            "product_system_id": "$system",
+            "placements": [],
+            "release_all": True,
+            "variant": None,
+            "expanded": None,
+            "detail": "drawing",
+        },
         write=True,
         unknown=True,
     ),

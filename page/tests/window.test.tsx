@@ -2,14 +2,15 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { renderAt } from './render'
 import { resizePage } from './setup'
-import { layoutAnswer } from './placements'
+import { layoutAnswer, placementsFor } from './placements'
 import { firstMethodOf } from './method'
 import type { Answer, LogEntry, ProductSystem } from '@/api/types'
 import { useLive } from '@/api/stream'
 import { App, Screens } from '@/App'
 import { api, rememberToken } from '@/api/client'
 import { shortHash } from '@/lib/format'
-import { useUi } from '@/store/ui'
+import { paths } from '@/lib/paths'
+import { useUi, type EditorTab } from '@/store/ui'
 import { useClearance } from '@/window/clearance'
 import { NavPane } from '@/window/NavPane'
 import systems from './fixtures/systems.json'
@@ -103,7 +104,7 @@ const rowsOf = (element: Element): number[] => {
 
 describe('window', () => {
   beforeEach(() => {
-    useUi.setState({ pinned: [], details: null, lastDetails: null, canvasSystemId: null, inspector: 'open', inspectorWidth: null, timelineOpen: true, toolsOffset: null, origins: { explorer: null, results: null }, sheetOpen: false, navOpen: false })
+    useUi.setState({ pinned: [], details: null, lastDetails: null, canvasSystemId: null, inspector: 'open', inspectorWidth: null, resultWidth: null, timelineOpen: true, toolsOffset: null, origins: { explorer: null, results: null }, sheetOpen: false, navOpen: false })
   })
 
   afterEach(() => {
@@ -133,7 +134,7 @@ describe('window', () => {
     await waitFor(() => expect(nodes(view)).toBeGreaterThan(0))
     expect(screen.getByRole('toolbar', { name: 'Frame' })).toBeInTheDocument()
     const banner = screen.getByRole('banner')
-    expect(within(banner).getByRole('heading', { name: system.value.name })).toBeInTheDocument()
+    expect(within(banner).getByRole('heading', { name: (named: string) => named.startsWith(system.value.name) })).toBeInTheDocument()
     expect(screen.getByRole('complementary', { name: 'Inspector' })).toBeInTheDocument()
   })
 
@@ -277,28 +278,148 @@ describe('window', () => {
     await waitFor(() => expect(place()).toBe(base))
   })
 
-  it('does nothing on Esc at an address that is not the explorer', async () => {
+  it('closes the inspector on Esc at an address no sheet holds, moving nowhere', async () => {
     renderAt(`${base}/general`, moving(explorer))
     await waitFor(() => expect(screen.getByRole('link', { name: 'Details' })).toHaveAttribute('aria-current', 'page'))
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(place()).toBe(`${base}/general`)
+    expect(screen.getByRole('button', { name: 'Show the inspector' })).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(place()).toBe(`${base}/general`)
   })
 
-  it('docks an open result under the graph, with the way back on the name island', async () => {
+  it('leaves the inspector preference as it is on Esc at a page that draws no inspector', async () => {
+    renderAt('/', <><App router={false} /><Place /></>)
+    await screen.findByRole('region', { name: 'Page' })
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(place()).toBe('/')
+    expect(useUi.getState().inspector).toBe('open')
+    expect(JSON.parse(localStorage.getItem('ecosemantic-page') ?? '{}').state.inspector).toBe('open')
+  })
+
+  it('draws an open result in a drawer at the right of the graph, with the way back on the name island', async () => {
     const view = renderAt(result, moving(explorer))
     const docked = await screen.findByRole('region', { name: 'Result' })
     await waitFor(() => expect(nodes(view)).toBeGreaterThan(0))
     expect(await within(docked).findByText(`Impact analysis – ${system.value.name}`)).toBeInTheDocument()
     expect(view.container.querySelector('[data-scrim]')).toBeNull()
     expect(screen.getByRole('button', { name: 'Fit the graph' })).toBeInTheDocument()
+    expect(docked.className).toContain('col-start-3')
+    expect(docked.className).toContain('row-span-2')
+    expect(docked.className).toContain('justify-self-end')
+    expect(docked.className).toContain('w-[min(68vw,calc(100vw-380px))]')
+    expect(docked).toHaveAttribute('data-clear', 'right')
+    expect(within(docked).getByRole('separator', { name: 'Resize the result drawer' })).toBeInTheDocument()
     expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Build timeline' })).not.toBeInTheDocument()
     const banner = nameIsland()
-    expect(within(banner).getByRole('heading', { name: system.value.name })).toBeInTheDocument()
+    expect(within(banner).getByRole('heading', { name: (named: string) => named.startsWith(system.value.name) })).toBeInTheDocument()
     expect(within(banner).getByRole('link', { name: 'Back to graph' })).toHaveAttribute('href', base)
     expect(within(banner).getByRole('button', { name: buildLabel })).toHaveAttribute('title', 'Back to the graph and its build timeline')
     fireEvent.keyDown(window, { key: 'Escape' })
     await waitFor(() => expect(place()).toBe(base))
+    await screen.findByRole('complementary', { name: 'Inspector' })
+  })
+
+  it('holds the result drawer at the width it is dragged to, between 320 px and four fifths of the window', async () => {
+    window.innerWidth = 1440
+    renderAt(result, <App router={false} />)
+    const drawer = await screen.findByRole('region', { name: 'Result' })
+    vi.spyOn(drawer, 'getBoundingClientRect').mockReturnValue({ left: 708, right: 1428, top: 0, bottom: 900, width: 720, height: 900, x: 708, y: 0, toJSON: () => ({}) })
+    const edge = within(drawer).getByRole('separator', { name: 'Resize the result drawer' })
+    fireEvent.pointerDown(edge, { clientX: 708 })
+    fireEvent.pointerMove(window, { clientX: 508 })
+    expect(drawer.style.width).toBe('920px')
+    expect(useUi.getState().resultWidth).toBeNull()
+    fireEvent.pointerUp(window)
+    expect(useUi.getState().resultWidth).toBe(920)
+    expect(drawer.style.width).toBe('920px')
+    fireEvent.pointerDown(edge, { clientX: 508 })
+    fireEvent.pointerMove(window, { clientX: 1400 })
+    fireEvent.pointerUp(window)
+    expect(useUi.getState().resultWidth).toBe(320)
+    fireEvent.pointerDown(edge, { clientX: 1400 })
+    fireEvent.pointerMove(window, { clientX: 10 })
+    fireEvent.pointerUp(window)
+    // four fifths of 1440
+    expect(useUi.getState().resultWidth).toBe(1152)
+    fireEvent.doubleClick(edge)
+    expect(useUi.getState().resultWidth).toBeNull()
+    expect(drawer.className).toContain('w-[min(68vw,calc(100vw-380px))]')
+  })
+
+  it('keeps the width of the drawer apart from the width the inspector holds', async () => {
+    window.innerWidth = 1440
+    useUi.setState({ inspectorWidth: 600, resultWidth: 900 })
+    renderAt(result, <App router={false} />)
+    const drawer = await screen.findByRole('region', { name: 'Result' })
+    expect(drawer.style.width).toBe('900px')
+    fireEvent.doubleClick(within(drawer).getByRole('separator', { name: 'Resize the result drawer' }))
+    expect(useUi.getState().resultWidth).toBeNull()
+    expect(useUi.getState().inspectorWidth).toBe(600)
+    expect(drawer.style.width).toBe('')
+  })
+
+  it('leaves the drawer on a click on the exposed graph, and keeps it on a click inside it and on the end of a drag', async () => {
+    const view = renderAt(result, moving(explorer))
+    const drawer = await screen.findByRole('region', { name: 'Result' })
+    await waitFor(() => expect(nodes(view)).toBeGreaterThan(0))
+    const pane = view.container.querySelector('.react-flow__pane') as HTMLElement
+    fireEvent.click(within(drawer).getByText(`Impact analysis – ${system.value.name}`))
+    expect(place()).toBe(result)
+    fireEvent.pointerDown(pane, { clientX: 100, clientY: 100 })
+    fireEvent.pointerMove(pane, { clientX: 260, clientY: 180 })
+    fireEvent.pointerUp(pane)
+    fireEvent.click(pane)
+    expect(place()).toBe(result)
+    expect(screen.getByRole('region', { name: 'Result' })).toBeInTheDocument()
+    fireEvent.pointerDown(pane, { clientX: 100, clientY: 100 })
+    fireEvent.pointerUp(pane)
+    fireEvent.click(pane)
+    await waitFor(() => expect(place()).toBe(base))
+    await screen.findByRole('complementary', { name: 'Inspector' })
+  })
+
+  it('leaves the drawer on a click on a card of the exposed graph, and not on one inside it', async () => {
+    const view = renderAt(result, moving(explorer))
+    const drawer = await screen.findByRole('region', { name: 'Result' })
+    await waitFor(() => expect(nodes(view)).toBeGreaterThan(0))
+    fireEvent.click(within(drawer).getByText(`Impact analysis – ${system.value.name}`))
+    expect(place()).toBe(result)
+    fireEvent.click(view.container.querySelector('.react-flow__node') as HTMLElement)
+    await waitFor(() => expect(place()).toBe(base))
+    await screen.findByRole('complementary', { name: 'Inspector' })
+  })
+
+  it('leaves the drawer on a click on an arrow of the exposed graph', async () => {
+    const spot = placementsFor(system.value as ProductSystem).find((one) => one.code === 'widget')
+    if (spot === undefined) throw new Error('the fixture holds no widget card')
+    const around = { x: spot.x - 24, y: spot.y - 24, width: spot.width + 48, height: spot.height + 48 }
+    vi.mocked(api.layout).mockResolvedValue(
+      layoutAnswer(system.value as ProductSystem, { stages: [{ stage: 'assembly', codes: ['widget'], regions: [around, { x: -400, y: 0, width: 348, height: 240 }] }], shared_suppliers: [] }),
+    )
+    const view = renderAt(result, moving(explorer))
+    await screen.findByRole('region', { name: 'Result' })
+    await waitFor(() => expect(nodes(view)).toBeGreaterThan(0))
+    // the frame's query client keeps one answer for the whole file, so the case gives this drawing its own
+    act(() => useUi.getState().setCanvasVariant('heavy'))
+    await waitFor(() => expect(view.container.querySelectorAll('.react-flow__edge-tether')).toHaveLength(1))
+    fireEvent.click(view.container.querySelector('path.react-flow__edge-path') as SVGPathElement)
+    await waitFor(() => expect(place()).toBe(base))
+    expect(screen.queryByRole('region', { name: 'Result' })).not.toBeInTheDocument()
+    vi.mocked(api.layout).mockResolvedValue(layoutAnswer(system.value as ProductSystem))
+    act(() => useUi.getState().setCanvasVariant(null))
+  })
+
+  it('follows the link a click on a card lands on once, the drawer leaving with it', async () => {
+    const view = renderAt(result, moving(explorer))
+    await screen.findByRole('region', { name: 'Result' })
+    await waitFor(() => expect(nodes(view)).toBeGreaterThan(0))
+    const link = view.container.querySelector('.react-flow__node a') as HTMLAnchorElement
+    const to = link.getAttribute('href')
+    fireEvent.click(link)
+    await waitFor(() => expect(place()).toBe(to))
+    expect(screen.queryByRole('region', { name: 'Result' })).not.toBeInTheDocument()
     await screen.findByRole('complementary', { name: 'Inspector' })
   })
 
@@ -389,7 +510,7 @@ describe('window', () => {
     act(() => useUi.getState().setCanvasVariant('heavy'))
     fireEvent.keyDown(within(nameIsland()).getByRole('menuitem', { name: 'View' }), { key: 'Enter' })
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Reset layout' }))
-    await waitFor(() => expect(api.releaseCards).toHaveBeenCalledWith(system.value.id, 'heavy'))
+    await waitFor(() => expect(api.releaseCards).toHaveBeenCalledWith(system.value.id, 'heavy', []))
   })
 
   it('docks the canvas toolbar at the top centre, in the row of the name island, and the zoom in the dock', async () => {
@@ -505,13 +626,25 @@ describe('window', () => {
     expect(within(screen.getByRole('complementary', { name: 'Inspector' })).getByRole('link', { name: 'Details' })).toHaveAttribute('aria-current', 'page')
   })
 
-  it('widens the inspector and returns it to its width', async () => {
+  it('widens the inspector over the whole canvas and returns it to the width it was dragged to', async () => {
+    window.innerWidth = 1440
+    useUi.setState({ inspectorWidth: 800 })
     renderAt(`${base}/general`, <App router={false} />)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Widen the inspector' })).toBeInTheDocument())
+    expect(screen.getByRole('complementary', { name: 'Inspector' }).style.width).toBe('800px')
     fireEvent.click(screen.getByRole('button', { name: 'Widen the inspector' }))
     expect(useUi.getState().inspector).toBe('widened')
+    const widened = screen.getByRole('complementary', { name: 'Inspector' })
+    expect(widened.className).toContain('col-span-2')
+    expect(widened.className).toContain('col-start-2')
+    expect(widened.style.width).toBe('')
+    // the panel holds the whole of the canvas, past the four fifths a drag is held to
+    expect(widened.style.maxWidth).toBe('')
+    expect(screen.queryByRole('region', { name: 'Build timeline' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Return to width' }))
     expect(useUi.getState().inspector).toBe('open')
+    expect(screen.getByRole('complementary', { name: 'Inspector' }).style.width).toBe('800px')
+    expect(screen.getByRole('region', { name: 'Build timeline' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Widen the inspector' })).toBeInTheDocument()
   })
 
@@ -600,6 +733,181 @@ describe('window', () => {
     await waitFor(() => expect(screen.getByRole('link', { name: 'Details' })).toHaveAttribute('aria-current', 'page'))
   })
 
+  it('shows a closed inspector again on a card of the process the address already shows', async () => {
+    const widget = (system.value as ProductSystem).processes.find((p) => p.code === 'widget')!
+    const view = renderAt(paths.process(system.value.id, widget.code), <><App router={false} /><Place /></>)
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Details' })).toHaveAttribute('aria-current', 'page'))
+    fireEvent.click(screen.getByRole('button', { name: 'Close the inspector' }))
+    expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument()
+    fireEvent.click(view.container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    await screen.findByRole('complementary', { name: 'Inspector' })
+    expect(screen.getByRole('link', { name: 'Details' })).toHaveAttribute('aria-current', 'page')
+    expect(place()).toBe(paths.process(system.value.id, widget.code))
+  })
+
+  it('keeps the subtab of the process the address already shows on a click of its card', async () => {
+    const widget = (system.value as ProductSystem).processes.find((p) => p.code === 'widget')!
+    const io = paths.process(system.value.id, widget.code, 'io')
+    const view = renderAt(io, <><App router={false} /><Place /></>)
+    await waitFor(() => expect(nodes(view)).toBeGreaterThan(0))
+    fireEvent.click(view.container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    await waitFor(() => expect(useUi.getState().inspector).toBe('open'))
+    expect(useUi.getState().chosenProcess).toBe(widget.id)
+    expect(place()).toBe(io)
+  })
+
+  it('shows a closed inspector again on the menu item that opens the details of the process the address already shows', async () => {
+    const widget = (system.value as ProductSystem).processes.find((p) => p.code === 'widget')!
+    const view = renderAt(paths.process(system.value.id, widget.code), <><App router={false} /><Place /></>)
+    await waitFor(() => expect(screen.getByRole('toolbar', { name: 'Card' })).toBeInTheDocument())
+    expect(useUi.getState().chosenProcess).toBe(widget.id)
+    fireEvent.click(screen.getByRole('button', { name: 'Close the inspector' }))
+    expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: 'Open details' }))
+    await screen.findByRole('complementary', { name: 'Inspector' })
+    expect(place()).toBe(paths.process(system.value.id, widget.code))
+    expect(view.container.querySelectorAll('.react-flow__node').length).toBeGreaterThan(0)
+  })
+
+  it('leaves a closed inspector closed on a modified activation of a details link', async () => {
+    const widget = (system.value as ProductSystem).processes.find((p) => p.code === 'widget')!
+    renderAt(paths.process(system.value.id, widget.code), <><App router={false} /><Place /></>)
+    await waitFor(() => expect(screen.getByRole('toolbar', { name: 'Card' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Close the inspector' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Open details' }), { metaKey: true })
+    expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument()
+    expect(place()).toBe(paths.process(system.value.id, widget.code))
+  })
+
+  it('shows a closed inspector again on the title of the process the address already shows', async () => {
+    const widget = (system.value as ProductSystem).processes.find((p) => p.code === 'widget')!
+    const view = renderAt(paths.process(system.value.id, widget.code), <><App router={false} /><Place /></>)
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Details' })).toHaveAttribute('aria-current', 'page'))
+    fireEvent.click(screen.getByRole('button', { name: 'Close the inspector' }))
+    const title = view.container.querySelector('.react-flow__node[data-id="widget"] a') as HTMLAnchorElement
+    fireEvent.click(title)
+    await screen.findByRole('complementary', { name: 'Inspector' })
+    expect(screen.getByRole('link', { name: 'Details' })).toHaveAttribute('aria-current', 'page')
+    expect(place()).toBe(paths.process(system.value.id, widget.code))
+  })
+
+  it('shows a closed inspector again on the system’s name, and keeps its address', async () => {
+    const general = paths.systemPage(system.value.id, 'general')
+    renderAt(general, <><App router={false} /><Place /></>)
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Details' })).toHaveAttribute('aria-current', 'page'))
+    fireEvent.click(screen.getByRole('button', { name: 'Close the inspector' }))
+    expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument()
+    fireEvent.click(within(nameIsland()).getByRole('link', { name: new RegExp(system.value.name) }))
+    await screen.findByRole('complementary', { name: 'Inspector' })
+    expect(place()).toBe(general)
+  })
+
+  it('opens the sheet on the system’s name below 768 px', async () => {
+    resizePage(700)
+    const general = paths.systemPage(system.value.id, 'general')
+    renderAt(general, <><App router={false} /><Place /></>)
+    await waitFor(() => expect(useUi.getState().canvasSystemId).toBe(system.value.id))
+    expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument()
+    fireEvent.click(within(nameIsland()).getByRole('link', { name: new RegExp(system.value.name) }))
+    await screen.findByRole('complementary', { name: 'Inspector' })
+    expect(useUi.getState().sheetOpen).toBe(true)
+    expect(place()).toBe(general)
+  })
+
+  it('shows a closed inspector again on a pin chip at its own address', async () => {
+    const general = paths.systemPage(system.value.id, 'general')
+    const tab: EditorTab = { id: `system:${system.value.id}`, kind: 'system', title: system.value.name, path: general }
+    useUi.setState({ pinned: [tab], inspector: 'closed' })
+    renderAt(general, <App router={false} />)
+    await waitFor(() => expect(useUi.getState().canvasSystemId).toBe(system.value.id))
+    expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument()
+    fireEvent.click(within(screen.getByLabelText('Pinned')).getByRole('link', { name: new RegExp(system.value.name) }))
+    await screen.findByRole('complementary', { name: 'Inspector' })
+  })
+
+  describe('the way into a product system', () => {
+    const entries = [
+      {
+        where: 'the product systems list',
+        open: async () => {
+          const table = await screen.findByRole('table')
+          fireEvent.click(within(table).getByRole('link', { name: new RegExp(`^${system.value.name}`) }))
+        },
+      },
+      {
+        where: 'the navigation tree',
+        open: async () => {
+          fireEvent.click(within(screen.getByRole('toolbar', { name: 'Frame' })).getByRole('button', { name: 'Navigation' }))
+          const nav = await screen.findByRole('complementary', { name: 'Navigation' })
+          fireEvent.click(await within(nav).findByRole('link', { name: new RegExp(`^${system.value.name}`) }))
+        },
+      },
+      {
+        where: 'the palette',
+        open: async () => {
+          fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+          fireEvent.change(await screen.findByPlaceholderText('Go to a process, a database, a page or a command…'), { target: { value: system.value.name } })
+          fireEvent.click(await screen.findByRole('option', { name: new RegExp(`^${system.value.name}`) }))
+        },
+      },
+    ]
+
+    for (const one of entries) {
+      it(`opens a system on its General information from ${one.where}`, async () => {
+        renderAt('/', <><App router={false} /><Place /></>)
+        await one.open()
+        await waitFor(() => expect(place()).toBe(paths.systemPage(system.value.id, 'general')))
+        await screen.findByRole('complementary', { name: 'Inspector' })
+        expect(screen.getByRole('link', { name: 'Details' })).toHaveAttribute('aria-current', 'page')
+      })
+
+      it(`opens a system on its graph below 768 px from ${one.where}`, async () => {
+        resizePage(700)
+        renderAt('/', <><App router={false} /><Place /></>)
+        await one.open()
+        await waitFor(() => expect(place()).toBe(paths.system(system.value.id)))
+        expect(useUi.getState().sheetOpen).toBe(false)
+        expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument()
+      })
+    }
+  })
+
+  it('moves the details to the card of another process a click activates', async () => {
+    const widget = (system.value as ProductSystem).processes.find((p) => p.code === 'widget')!
+    const frame = (system.value as ProductSystem).processes.find((p) => p.code === 'frame')!
+    const view = renderAt(paths.process(system.value.id, widget.code), <><App router={false} /><Place /></>)
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Details' })).toHaveAttribute('aria-current', 'page'))
+    fireEvent.click(view.container.querySelector('.react-flow__node[data-id="frame"]') as HTMLElement)
+    await waitFor(() => expect(place()).toBe(paths.process(system.value.id, frame.code)))
+    expect(useUi.getState().details?.id).toBe(`process:${system.value.id}:${frame.code}`)
+    expect(useUi.getState().chosenProcess).toBe(frame.id)
+    await screen.findByRole('complementary', { name: 'Inspector' })
+  })
+
+  it('dismisses the inspector on a blank click of the graph, and the card opens it again', async () => {
+    const view = renderAt(base, <><App router={false} /><Place /></>)
+    await waitFor(() => expect(nodes(view)).toBeGreaterThan(0))
+    await screen.findByRole('complementary', { name: 'Inspector' })
+    fireEvent.click(view.container.querySelector('.react-flow__pane') as HTMLElement)
+    expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show the inspector' })).toBeInTheDocument()
+    expect(place()).toBe(base)
+    fireEvent.click(view.container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    await screen.findByRole('complementary', { name: 'Inspector' })
+    expect(screen.getByRole('link', { name: 'Details' })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('dismisses the sheet on a blank click of the graph below 768 px', async () => {
+    resizePage(700)
+    const view = renderAt(base, <><App router={false} /><Place /></>)
+    await waitFor(() => expect(nodes(view)).toBeGreaterThan(0))
+    act(() => useUi.getState().setSheetOpen(true))
+    await screen.findByRole('complementary', { name: 'Inspector' })
+    fireEvent.click(view.container.querySelector('.react-flow__pane') as HTMLElement)
+    expect(useUi.getState().sheetOpen).toBe(false)
+    expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument()
+  })
+
   it('closes the inspector and shows it again on Ctrl+Alt+B', async () => {
     renderAt(base, <App router={false} />)
     await waitFor(() => expect(screen.getByRole('link', { name: 'Activity' })).toBeInTheDocument())
@@ -622,11 +930,25 @@ describe('window', () => {
   it('pins what Details holds as a chip that unpins', async () => {
     renderAt(`${base}/general`, <App router={false} />)
     await waitFor(() => expect(screen.getByText(`General information – ${system.value.name}`)).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Pin' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pin product system for quick access' }))
     const chips = screen.getByLabelText('Pinned')
     expect(within(chips).getByRole('link', { name: new RegExp(system.value.name) })).toBeInTheDocument()
     fireEvent.click(within(chips).getByRole('button', { name: `Unpin ${system.value.name}` }))
     expect(screen.queryByLabelText('Pinned')).not.toBeInTheDocument()
+  })
+
+  it('keeps the pin of a process named after the process and unpins it where it was pinned', async () => {
+    const widget = (system.value as ProductSystem).processes.find((p) => p.code === 'widget')!
+    renderAt(paths.process(system.value.id, widget.code), <App router={false} />)
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Details' })).toHaveAttribute('aria-current', 'page'))
+    fireEvent.click(screen.getByRole('button', { name: 'Pin process for quick access' }))
+    const held = screen.getByRole('button', { name: 'Unpin process' })
+    expect(held).toHaveAttribute('aria-pressed', 'true')
+    expect(held).toHaveTextContent('Pinned')
+    fireEvent.click(held)
+    expect(useUi.getState().pinned).toEqual([])
+    expect(screen.getByRole('button', { name: 'Pin process for quick access' })).toBeInTheDocument()
+    expect(within(screen.getByRole('complementary', { name: 'Inspector' })).queryByText('Pinned')).not.toBeInTheDocument()
   })
 
   it('states the validation and the open requests as badges', async () => {
@@ -671,7 +993,7 @@ describe('window', () => {
     await waitFor(() => expect(within(nav).getByText(system.value.name)).toBeInTheDocument())
     expect(within(nav).getByText('Background databases')).toBeInTheDocument()
     const link = within(nav).getByText(system.value.name).closest('a')
-    expect(link?.getAttribute('href')).toContain(`${base}?token=t`)
+    expect(link?.getAttribute('href')).toContain(`${paths.systemPage(system.value.id, 'general')}?token=t`)
   })
 
   it('tells two systems of one name apart in the navigation and marks the one on the canvas', async () => {
@@ -775,7 +1097,7 @@ describe('window', () => {
 
 describe('the narrow frame', () => {
   beforeEach(() => {
-    useUi.setState({ pinned: [], details: null, lastDetails: null, canvasSystemId: null, inspector: 'open', inspectorWidth: null, timelineOpen: true, toolsOffset: null, origins: { explorer: null, results: null }, sheetOpen: false, toolsOpen: false, navOpen: false, chosenEntry: null, since: {}, seen: {} })
+    useUi.setState({ pinned: [], details: null, lastDetails: null, canvasSystemId: null, inspector: 'open', inspectorWidth: null, resultWidth: null, timelineOpen: true, toolsOffset: null, origins: { explorer: null, results: null }, sheetOpen: false, toolsOpen: false, navOpen: false, chosenEntry: null, since: {}, seen: {} })
   })
 
   afterEach(() => {
@@ -846,7 +1168,7 @@ describe('the narrow frame', () => {
     await waitFor(() => expect(nodes(view)).toBeGreaterThan(0))
     act(() => useUi.getState().chooseEntry({ systemId: system.value.id, seq: 1, hash: log.value[0].result_hash }))
     const line = await screen.findByRole('toolbar', { name: 'Build line' })
-    expect(within(line).queryByRole('button', { name: 'Calculate an impact result' })).toBeNull()
+    expect(within(line).queryByRole('button', { name: 'New calculation…' })).toBeNull()
   })
 
   it('shows and hides the sheet on Ctrl+Alt+B, closing the canvas tools with it and leaving the inspector as it was', async () => {
@@ -892,8 +1214,8 @@ describe('the narrow frame', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Canvas tools' }))
     const bar = await screen.findByRole('toolbar', { name: 'Canvas' })
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Inspector' })).toBeNull())
-    expect(within(bar).queryByRole('button', { name: 'Calculate an impact result' })).toBeNull()
-    expect(within(screen.getByRole('toolbar', { name: 'Build line' })).getByRole('button', { name: 'Calculate an impact result' })).toBeInTheDocument()
+    expect(within(bar).queryByRole('button', { name: 'New calculation…' })).toBeNull()
+    expect(within(screen.getByRole('toolbar', { name: 'Build line' })).getByRole('button', { name: 'New calculation…' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Zoom in' })).toBeInTheDocument()
   })
 
@@ -905,6 +1227,68 @@ describe('the narrow frame', () => {
     expect(await screen.findByRole('complementary', { name: 'Inspector' })).toBeInTheDocument()
     fireEvent.keyDown(window, { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Inspector' })).toBeNull())
+  })
+
+  it('returns from the ordinary and the widened sheet on Back to graph, keeping the address, the choice and the pins', async () => {
+    window.innerWidth = 700
+    const widget = (system.value as ProductSystem).processes.find((p) => p.code === 'widget')!
+    const io = paths.process(system.value.id, widget.code, 'io')
+    const kept = { id: `process:${system.value.id}:frame`, kind: 'process' as const, title: 'Frame', path: paths.process(system.value.id, 'frame') }
+    useUi.setState({ pinned: [kept] })
+    const view = renderAt(io, <><App router={false} /><Place /></>)
+    await waitFor(() => expect(nodes(view)).toBeGreaterThan(0))
+    fireEvent.click(view.container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    const sheet = await screen.findByRole('complementary', { name: 'Inspector' })
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Back to graph' }))
+    expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument()
+    expect(useUi.getState().sheetOpen).toBe(false)
+    expect(place()).toBe(io)
+    expect(useUi.getState().chosenProcess).toBe(widget.id)
+    expect(useUi.getState().pinned).toEqual([kept])
+    fireEvent.click(view.container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    const again = await screen.findByRole('complementary', { name: 'Inspector' })
+    expect(place()).toBe(io)
+    fireEvent.click(within(again).getByRole('button', { name: 'Widen the inspector' }))
+    fireEvent.click(within(screen.getByRole('complementary', { name: 'Inspector' })).getByRole('button', { name: 'Back to graph' }))
+    expect(screen.queryByRole('complementary', { name: 'Inspector' })).not.toBeInTheDocument()
+    expect(place()).toBe(io)
+  })
+
+  it('shortens the sheet and returns it from the header, keeping the address, the choice and the tab', async () => {
+    window.innerWidth = 700
+    const widget = (system.value as ProductSystem).processes.find((p) => p.code === 'widget')!
+    const io = paths.process(system.value.id, widget.code, 'io')
+    const view = renderAt(io, <><App router={false} /><Place /></>)
+    await waitFor(() => expect(nodes(view)).toBeGreaterThan(0))
+    fireEvent.click(view.container.querySelector('.react-flow__node[data-id="widget"]') as HTMLElement)
+    const sheet = await screen.findByRole('complementary', { name: 'Inspector' })
+    expect(sheet.className).toContain('h-[62%]')
+    expect(within(sheet).queryByRole('button', { name: 'Show more details' })).toBeNull()
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Show more graph' }))
+    expect(screen.getByRole('complementary', { name: 'Inspector' }).className).toContain('h-[38%]')
+    expect(place()).toBe(io)
+    expect(useUi.getState().chosenProcess).toBe(widget.id)
+    expect(within(sheet).getByRole('link', { name: 'Details' })).toHaveAttribute('aria-current', 'page')
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Show more details' }))
+    expect(screen.getByRole('complementary', { name: 'Inspector' }).className).toContain('h-[62%]')
+    expect(place()).toBe(io)
+    expect(useUi.getState().chosenProcess).toBe(widget.id)
+  })
+
+  it('keeps the widened sheet full and offers no sheet height from 768 px', async () => {
+    window.innerWidth = 700
+    const view = renderAt(`${base}/general`, <App router={false} />)
+    await waitFor(() => expect(nodes(view)).toBeGreaterThan(0))
+    useUi.getState().setSheetOpen(true)
+    const sheet = await screen.findByRole('complementary', { name: 'Inspector' })
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Widen the inspector' }))
+    expect(within(sheet).queryByRole('button', { name: 'Show more graph' })).toBeNull()
+    expect(within(sheet).queryByRole('button', { name: 'Show more details' })).toBeNull()
+    view.unmount()
+    window.innerWidth = 1024
+    renderAt(`${base}/general`, <App router={false} />)
+    const panel = await screen.findByRole('complementary', { name: 'Inspector' })
+    expect(within(panel).queryByRole('button', { name: 'Show more graph' })).toBeNull()
   })
 
   it('closes the canvas tools on Esc', async () => {
@@ -964,6 +1348,9 @@ describe('the narrow frame', () => {
     const docked = await screen.findByRole('region', { name: 'Result' })
     expect(within(docked).getByRole('group', { name: 'Result band' })).toBeInTheDocument()
     expect(await within(docked).findByRole('heading', { name: /Sankey diagram/ })).toBeInTheDocument()
+    expect(docked.className).toContain('col-span-2')
+    expect(docked).not.toHaveAttribute('data-clear')
+    expect(within(docked).queryByRole('separator', { name: 'Resize the result drawer' })).toBeNull()
     expect(screen.queryByRole('region', { name: 'Page' })).not.toBeInTheDocument()
     expect(screen.queryByRole('toolbar', { name: 'Build line' })).toBeNull()
     expect(screen.queryByRole('complementary', { name: 'Inspector' })).toBeNull()

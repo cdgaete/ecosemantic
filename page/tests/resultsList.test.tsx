@@ -82,6 +82,7 @@ it('says none is recorded and starts a new calculation', async () => {
   vi.mocked(api.calculations).mockResolvedValue(answer([]))
   renderAt(`/systems/${id}/results`, <Screens />)
   expect(await screen.findByText(/No calculation is recorded/)).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: /New calculation/ }))
+  const header = screen.getByRole('heading', { name: `Results – ${agentSystem.value.name}` }).closest('div')?.parentElement as HTMLElement
+  fireEvent.click(within(header).getByRole('button', { name: 'New calculation…' }))
   expect(await screen.findByText(`Calculation – ${agentSystem.value.name}`)).toBeInTheDocument()
 })

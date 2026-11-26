@@ -4,7 +4,7 @@ import { categoryLabel, cutNotice, formatAgo, formatAmount, formatShare, methodB
 import { RequestAction } from '@/requests/RequestAction'
 import { DataTable, type Column } from '@/window/DataTable'
 import { EditorHeader } from '@/window/EditorHeader'
-import { FieldGrid } from '@/window/FieldGrid'
+import { FieldGrid, PENDING } from '@/window/FieldGrid'
 import { Hint } from '@/window/Hint'
 import { Section } from '@/window/Section'
 import { BarChart } from './figures/BarChart'
@@ -34,10 +34,10 @@ export function GeneralPage({ result }: { result: Result }) {
       <Section title="General information" sectionKey={`results:${id}:general`} actions={action}>
         <FieldGrid
           rows={[
-            { label: 'Product system', value: system?.name ?? '' },
-            { label: 'Reference process', value: rootProcess?.name ?? (root ?? '') },
-            { label: 'Target amount', value: targetOf(impact.data?.value.demand, system) ?? '' },
-            { label: 'Impact assessment method', value: params?.impact_method ?? firstMethod?.spec ?? '' },
+            { label: 'Product system', value: system === undefined ? PENDING : system.name },
+            { label: 'Reference process', value: system === undefined ? PENDING : rootProcess?.name ?? root },
+            { label: 'Target amount', value: impact.isPending ? PENDING : targetOf(impact.data?.value.demand, system) },
+            { label: 'Impact assessment method', value: params?.impact_method ?? (impact.isPending ? PENDING : firstMethod?.spec) },
             {
               label: 'Scored on',
               value: state === null ? 'base values' : `${state.kind} ${state.name}`,

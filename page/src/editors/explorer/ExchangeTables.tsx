@@ -11,7 +11,7 @@ function provider(exchange: BackgroundExchange, flows: Record<string, FlowSide>,
   if (exchange.cut_off !== null) return <span className="text-muted-foreground">cut off: {exchange.cut_off}</span>
   const input = exchange.input
   if (!input) return ''
-  if (input.kind === 'background') return exchange.supplier ? providerLink(links.process(input.database, input.id), 'product', namedWithLocation(exchange.supplier, exchange.supplier_location)) : ''
+  if (input.kind === 'background') return exchange.supplier ? providerLink({ to: links.process(input.database, input.id), icon: 'product', label: namedWithLocation(exchange.supplier, exchange.supplier_location) }) : ''
   return elementaryProvider(flows[input.id])
 }
 

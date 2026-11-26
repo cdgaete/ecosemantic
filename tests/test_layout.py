@@ -54,6 +54,7 @@ from ecosemantic.ports.types import Side
 from ecosemantic.routes import Route
 from ecosemantic.routes import route as routed
 from ecosemantic.troubles import score, troubles
+from tests.layout_fixtures import hundred, staged_nine
 
 DATABASE = Database(
     name="d", elementary_flows="b", scheme="ecoinvent", version="1", system_model="cutoff"
@@ -136,7 +137,8 @@ async def test_the_arrangement_carries_the_card_geometry(
     async with Client(full_server) as client:
         answer = (
             await client.call_tool(
-                "graph_layout", {"product_system_id": str(fixture_system_stored.id)}
+                "graph_layout",
+                {"product_system_id": str(fixture_system_stored.id), "detail": "full"},
             )
         ).structured_content["value"]
     card = card_geometry()
@@ -705,3 +707,109 @@ def test_shared_suppliers_count_the_stages_their_consumers_hold_not_the_span() -
         "packaging",
     ]
     assert shared_suppliers(drawn) == [SharedSupplier(code="grid", processes=2, stages=2)]
+
+
+def staged_chain() -> ProductSystem:
+    """A functional unit whose stage feeds nothing, the smelting stage it takes from, the
+    extraction stage below that and the energy stage every one of them takes electricity from."""
+    return system(
+        tagged(process("refinery", ["smelter", "grid"]), "refining"),
+        tagged(process("smelter", ["mine", "grid"]), "smelting"),
+        tagged(process("mine", ["grid"]), "extraction"),
+        tagged(process("grid"), "energy"),
+    )
+
+
+def test_a_stage_band_is_the_next_stage_with_the_fewest_arrows_into_the_rest() -> None:
+    drawn = copper()
+    placed = {p.code: p for p in arrange(drawn, ["refinery"], {}, emitted(drawn))}
+    # sen feeds every stage and sits leftmost; each stage is right of the one it feeds
+    assert placed["sen"].x < placed["mine"].x < placed["concentrator"].x < placed["transport"].x
+    assert placed["transport"].x < placed["smelter"].x < placed["refinery"].x
+
+
+def test_a_staged_dag_whose_unit_stage_feeds_nothing_has_no_backward_arrow() -> None:
+    drawn = staged_chain()
+    placed = arrange(drawn, ["refinery"], {}, emitted(drawn))
+    stages = card_stages(drawn)
+    spots = {p.code: p for p in placed}
+    backwards = [
+        (arrow.provider, arrow.consumer)
+        for arrow in routed(placed, links(drawn), link_texts(drawn, None))
+        if arrow.provider != arrow.consumer
+        and stages[arrow.provider] is not None
+        and stages[arrow.consumer] is not None
+        and spots[arrow.consumer].x <= spots[arrow.provider].x
+    ]
+    assert backwards == []
+    assert spots["grid"].x < spots["mine"].x < spots["smelter"].x < spots["refinery"].x
+
+
+def test_a_released_staged_nine_has_no_backward_arrow_no_shared_end_and_scores_below_23() -> None:
+    drawn = staged_nine()
+    placed = arrange(drawn, anchors(drawn), {}, emitted(drawn))
+    found = routed(placed, links(drawn), link_texts(drawn, None))
+    assert [t for t in troubles(placed, found) if t.kind == "edge_backwards"] == []
+    ends: dict[tuple[float, float], int] = {}
+    for arrow in found:
+        ends[arrow.points[-1]] = ends.get(arrow.points[-1], 0) + 1
+    assert [point for point, count in ends.items() if count > 1] == []
+    assert score(troubles(placed, found)) < 23
+
+
+def test_the_two_searches_measure_no_more_drawings_than_the_budget_allows() -> None:
+    drawn = hundred()
+    arrows = len(links(drawn))
+    spent = layout_module.Evaluations(limit=layout_module.evaluation_budget(arrows))
+    arrange(drawn, anchors(drawn), {}, emitted(drawn), budget=spent)
+    assert spent.limit == 400_000 // arrows**2
+    assert spent.used == spent.limit
+
+
+def test_a_small_drawing_stops_spending_its_budget_once_no_swap_lowers_it() -> None:
+    drawn = system(process("fu", ["a", "b"]), process("a"), process("b"))
+    spent = layout_module.Evaluations(limit=layout_module.evaluation_budget(len(links(drawn))))
+    arrange(drawn, ["fu"], {}, emitted(drawn), budget=spent)
+    assert 0 < spent.used < spent.limit
+
+
+def test_a_cycle_is_arranged_within_its_budget() -> None:
+    drawn = system(process("fu", ["a"]), process("a", ["fu"]), process("b", ["a"]))
+    spent = layout_module.Evaluations(limit=layout_module.evaluation_budget(len(links(drawn))))
+    placed = arrange(drawn, ["fu"], {}, emitted(drawn), budget=spent)
+    assert sorted(p.code for p in placed) == ["a", "b", "fu"]
+    assert spent.used <= spent.limit
+
+
+def test_a_drawing_with_no_arrow_places_every_card_apart() -> None:
+    drawn = system(process("a"), process("b"), process("c"))
+    spent = layout_module.Evaluations(limit=layout_module.evaluation_budget(0))
+    placed = arrange(drawn, [], {}, emitted(drawn), budget=spent)
+    assert sorted(p.code for p in placed) == ["a", "b", "c"]
+    assert overlapping(placed) == []
+    assert spent.used <= spent.limit
+
+
+def test_neither_search_moves_a_held_card() -> None:
+    drawn = staged_nine()
+    held = {"concentrator": (1234.0, 567.0), "grid": (0.0, 0.0)}
+    placed = {p.code: p for p in arrange(drawn, anchors(drawn), held, emitted(drawn))}
+    assert (placed["concentrator"].x, placed["concentrator"].y) == (1234.0, 567.0)
+    assert (placed["grid"].x, placed["grid"].y) == (0.0, 0.0)
+    assert placed["concentrator"].held and placed["grid"].held
+    assert overlapping(list(placed.values())) == []
+
+
+def test_two_reads_of_one_drawing_answer_the_same_positions() -> None:
+    drawn = staged_nine()
+    first = arrange(drawn, anchors(drawn), {}, emitted(drawn))
+    second = arrange(drawn, anchors(drawn), {}, emitted(drawn))
+    assert [(p.code, p.x, p.y) for p in first] == [(p.code, p.x, p.y) for p in second]
+
+
+def test_the_height_pass_leaves_the_reference_at_the_middle_height() -> None:
+    drawn = staged_nine()
+    placed = {p.code: p for p in arrange(drawn, anchors(drawn), {}, emitted(drawn))}
+    others = [p for p in placed.values() if p.code != "refinery"]
+    middle = (min(p.y for p in others) + max(p.y + p.height for p in others)) / 2
+    assert abs(placed["refinery"].y + placed["refinery"].height / 2 - middle) < 1.0

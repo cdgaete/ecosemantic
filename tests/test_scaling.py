@@ -10,7 +10,7 @@ from ecosemantic.model.canonical import content_hash
 from ecosemantic.model.entities import Database, Exchange, Process, ProductSystem
 from ecosemantic.model.refs import ForegroundRef, LinkedProcessRef, SystemRef
 from ecosemantic.ports.types import Activity
-from ecosemantic.scaling import scale
+from ecosemantic.scaling import scale, scaled_rows
 from tests.conftest import frame_system, widget_linking
 
 DATABASE = Database(
@@ -92,6 +92,37 @@ def test_a_linked_systems_card_is_its_reference_processs_production_at_its_level
     card = found[linked_code(link)]
     assert card.activity == 0.25
     assert card.amounts == {production.id: 0.25 * production.amount}
+
+
+def test_a_card_s_rows_are_its_exchanges_and_a_linked_card_s_its_production() -> None:
+    frame = frame_system()
+    frame = frame.model_copy(update={"hash": content_hash(frame)})
+    widget = widget_linking(frame)
+    link = next(e.input for e in widget.processes[0].exchanges if isinstance(e.input, SystemRef))
+    found = scale(
+        widget,
+        {frame.id: frame},
+        [
+            Activity(ref=ForegroundRef(code="widget"), level=1.0),
+            Activity(
+                ref=LinkedProcessRef(
+                    product_system_id=frame.id, at_hash=content_hash(frame), code="frame"
+                ),
+                level=0.25,
+            ),
+        ],
+    )
+    exchanges = widget.processes[0].exchanges
+    rows = scaled_rows(widget, {frame.id: frame}, found, "widget")
+    assert [row.exchange_id for row in rows] == [e.id for e in exchanges]
+    assert [row.name for row in rows] == [e.name for e in exchanges]
+    assert [row.unit for row in rows] == [e.unit for e in exchanges]
+    assert [row.amount for row in rows] == [found["widget"].amounts[e.id] for e in exchanges]
+    production = next(e for e in frame.processes[0].exchanges if e.type == "production")
+    [linked_row] = scaled_rows(widget, {frame.id: frame}, found, linked_code(link))
+    assert linked_row.exchange_id == production.id
+    assert (linked_row.name, linked_row.unit) == (production.name, production.unit)
+    assert linked_row.amount == pytest.approx(0.25 * production.amount)
 
 
 def test_a_linked_system_without_a_reference_process_is_refused() -> None:

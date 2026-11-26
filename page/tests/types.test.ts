@@ -388,7 +388,7 @@ const VALIDATION_REPORT_KEYS = {
   errors: true,
 } satisfies Record<keyof ValidationReport, true>
 
-const ARRANGEMENT_KEYS = { map: true, cards: true, edges: true, troubles: true, score: true, bounds: true, scaling: true, stages: true, shared_suppliers: true, card: true } satisfies Record<keyof Arrangement, true>
+const ARRANGEMENT_KEYS = { kind: true, map: true, cards: true, edges: true, troubles: true, score: true, bounds: true, scaling: true, stages: true, shared_suppliers: true, card: true } satisfies Record<keyof Arrangement, true>
 
 const STAGE_REGIONS_KEYS = { stage: true, codes: true, regions: true } satisfies Record<keyof StageRegions, true>
 const REGION_KEYS = { x: true, y: true, width: true, height: true } satisfies Record<keyof Region, true>
@@ -404,7 +404,11 @@ const PLACEMENT_KEYS = {
   height: true,
   depth: true,
   shown_inputs: true,
+  shown_outputs: true,
+  folded_inputs: true,
+  folded_outputs: true,
   held: true,
+  placed_by: true,
   inputs: true,
   outputs: true,
   output: true,

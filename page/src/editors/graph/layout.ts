@@ -88,11 +88,14 @@ export function clearCentre(canvas: Size, clearance: Clearance): Point {
 export type ToolbarSide = 'top' | 'bottom'
 
 export const TOOLBAR_OFFSET = 8
+export const POINTER_WIDTH = 10
+export const POINTER_INSET = 18
 
 export interface ToolbarPlacement {
   left: number
   width: number | null
   side: ToolbarSide
+  pointer: number
 }
 
 export interface ToolbarFit {
@@ -106,10 +109,40 @@ export function toolbarFor({ card, natural, height, clear }: ToolbarFit): Toolba
   const room = Math.floor(Math.max(clear.width, 0))
   const width = Math.ceil(natural.width) <= room ? null : room
   const span = width ?? natural.width
-  const centred = card.x + card.width / 2 - span / 2
+  const centre = card.x + card.width / 2
+  const centred = centre - span / 2
   const left = Math.min(Math.max(centred, clear.x), clear.x + clear.width - span)
   const above = card.y - TOOLBAR_OFFSET - height
-  return { left, width, side: above >= clear.y ? 'top' : 'bottom' }
+  const inset = Math.min(POINTER_INSET, span / 2)
+  return {
+    left,
+    width,
+    side: above >= clear.y ? 'top' : 'bottom',
+    pointer: Math.min(Math.max(centre - left, inset), span - inset),
+  }
+}
+
+export interface Reveal {
+  box: Bounds
+  viewport: Viewport
+  clear: Bounds
+}
+
+/**
+ * The viewport that moves just enough, at the zoom it holds, for `box` to sit inside `clear`; null when it already does,
+ * when the region has no room, or when it cannot hold the box.
+ */
+export function revealFor({ box, viewport, clear }: Reveal): Viewport | null {
+  if (clear.width <= 0 || clear.height <= 0) return null
+  const width = box.width * viewport.zoom
+  const height = box.height * viewport.zoom
+  if (width > clear.width || height > clear.height) return null
+  const left = viewport.x + box.x * viewport.zoom
+  const top = viewport.y + box.y * viewport.zoom
+  const x = left < clear.x ? clear.x - left : Math.min(clear.x + clear.width - width - left, 0)
+  const y = top < clear.y ? clear.y - top : Math.min(clear.y + clear.height - height - top, 0)
+  if (x === 0 && y === 0) return null
+  return { x: viewport.x + x, y: viewport.y + y, zoom: viewport.zoom }
 }
 
 export function viewportFor({ target, anchor, canvas, clearance, zoom }: Fit): Viewport {

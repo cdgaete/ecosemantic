@@ -1,19 +1,21 @@
-import type { Process } from '@/api/types'
+import type { Json, Process } from '@/api/types'
 import { RequestAction } from '@/requests/RequestAction'
 import { MACHINE } from '@/window/DataTable'
-import { EditorHeader } from '@/window/EditorHeader'
 import { FieldGrid } from '@/window/FieldGrid'
 import { Section } from '@/window/Section'
-import type { CanvasVariant } from '@/window/useCanvasState'
 
 const NAMED = ['life_cycle_stage', 'hierarchy_level', 'supply_chain_tier']
 
-export function ProcessGeneralPage({ systemId, process, state }: { systemId: string; process: Process; state: CanvasVariant | null }) {
+function metadataText(value: Json | undefined): string | null {
+  if (value === null || value === undefined) return null
+  return typeof value === 'object' ? JSON.stringify(value) : String(value)
+}
+
+export function ProcessGeneralPage({ systemId, process }: { systemId: string; process: Process }) {
   const extra = Object.entries(process.metadata).filter(([k]) => !NAMED.includes(k))
   const key = (s: string) => `process:${systemId}:${process.code}:${s}`
   return (
     <>
-      <EditorHeader icon="process" page="General information" entity={process.name} state={state} />
       <Section title="General information" sectionKey={key('general')} actions={<RequestAction systemId={systemId} entity="process" entityId={process.code} />}>
         <FieldGrid
           rows={[
@@ -22,17 +24,18 @@ export function ProcessGeneralPage({ systemId, process, state }: { systemId: str
             { label: 'Reference product', value: process.reference_product },
             { label: 'Unit', value: process.unit },
             { label: 'Location', value: process.location },
-            { label: 'Comment', value: process.comment ?? '' },
+            { label: 'Comment', value: process.comment, empty: 'No comment provided' },
           ]}
         />
       </Section>
       <Section title="Metadata" sectionKey={key('metadata')} actions={<RequestAction systemId={systemId} entity="process" entityId={process.code} />}>
         <FieldGrid
+          empty="No metadata provided"
           rows={[
-            { label: 'Life-cycle stage', value: String(process.metadata['life_cycle_stage'] ?? '') },
-            { label: 'Hierarchy level', value: String(process.metadata['hierarchy_level'] ?? '') },
-            { label: 'Supply-chain tier', value: String(process.metadata['supply_chain_tier'] ?? '') },
-            ...extra.map(([k, v]) => ({ label: k, value: JSON.stringify(v) })),
+            { label: 'Life-cycle stage', value: metadataText(process.metadata['life_cycle_stage']) },
+            { label: 'Hierarchy level', value: metadataText(process.metadata['hierarchy_level']) },
+            { label: 'Supply-chain tier', value: metadataText(process.metadata['supply_chain_tier']) },
+            ...extra.map(([k, v]) => ({ label: k, value: metadataText(v) })),
           ]}
         />
       </Section>

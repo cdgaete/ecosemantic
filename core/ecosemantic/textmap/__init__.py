@@ -7,8 +7,8 @@ import math
 import uuid
 from collections.abc import Callable, Sequence
 
-from ecosemantic.errors import Invalid
-from ecosemantic.geometry import FOLD_AFTER, ROW_HEIGHT, Placement, StageRegions, linked_code
+from ecosemantic.errors import Invalid, MapTooLarge
+from ecosemantic.geometry import ROW_HEIGHT, Placement, StageRegions, linked_code
 from ecosemantic.model.entities import Exchange, ProductSystem
 from ecosemantic.model.refs import SystemRef
 from ecosemantic.quantity import written
@@ -17,6 +17,7 @@ from ecosemantic.troubles import passes_through
 
 SCALE_X = 10.0
 SCALE_Y = ROW_HEIGHT / 2
+MAX_MAP_CELLS = 500_000
 LEGEND = (
     "1 char = 10 px across, 1 line = 11 px down; ● a card's output, ▶ an arrow entering an "
     "input row, ┼ two arrows crossing, # an arrow over a card"
@@ -36,6 +37,11 @@ GLYPHS: dict[frozenset[str], str] = {
     frozenset("LRUD"): "┼",
 }
 STEPS = {(-1, 0): "U", (1, 0): "D", (0, -1): "L", (0, 1): "R"}
+
+
+def _grid(width: int, height: int) -> list[list[str]]:
+    """A canvas of `height` lines of `width` blanks, which a map is drawn on."""
+    return [[" "] * width for _ in range(height)]
 
 
 def _glyph(directions: frozenset[str]) -> str:
@@ -161,10 +167,11 @@ def as_text(
     stages: Sequence[StageRegions] = (),
 ) -> str:
     """The legend, then the canvas: cards as boxes titled by code, and by scaled output when
-    scaled, with the first `FOLD_AFTER` input rows named and one row reading how many inputs sit
-    behind the fold; arrows in box-drawing characters, `▶` on the row an arrow feeds, `┼` where
+    scaled, with the rows the card shows of each side named and, where a fold hides rows, one row
+    reading how many; arrows in box-drawing characters, `▶` on the row an arrow feeds, `┼` where
     arrows of two providers cross, `#` where an arrow runs over a card. Each region of `stages`
-    is drawn in `·` under the cards, with its stage's name on its top border."""
+    is drawn in `·` under the cards, with its stage's name on its top border. A grid of more
+    than `MAX_MAP_CELLS` cells is refused before it is allocated."""
     if not placements:
         return LEGEND + "\n(no processes)"
     xs = [p.x for p in placements] + [p.x + p.width for p in placements]
@@ -179,6 +186,10 @@ def as_text(
     left, top = min(xs), min(ys)
     width = math.ceil((max(xs) - left) / SCALE_X) + 1
     height = math.floor((max(ys) - top) / SCALE_Y) + 1
+    if width * height > MAX_MAP_CELLS:
+        raise MapTooLarge(
+            f"the drawing needs more than {MAX_MAP_CELLS} cells; move or release a card"
+        )
 
     def col(x: float) -> int:
         return round((x - left) / SCALE_X)
@@ -186,7 +197,7 @@ def as_text(
     def row(y: float) -> int:
         return math.floor((y - top) / SCALE_Y)
 
-    grid = [[" "] * width for _ in range(height)]
+    grid = _grid(width, height)
     owner: dict[tuple[int, int], str] = {}
     exchanges = {e.id: e for p in system.processes for e in p.exchanges}
     linked_units = {
@@ -212,7 +223,7 @@ def as_text(
         for line in range(l0, l1 + 1):
             for c in range(c0, c1 + 1):
                 owner[(line, c)] = p.code
-        for port in p.inputs[:FOLD_AFTER]:
+        for port in p.inputs[: p.shown_inputs]:
             _write(
                 grid,
                 row(p.y + port.y),
@@ -220,21 +231,30 @@ def as_text(
                 c1,
                 _row_text(p, exchanges[port.exchange_id], c1 - c0 - 2),
             )
-        if len(p.inputs) > FOLD_AFTER:
+        if len(p.inputs) > p.shown_inputs:
             _write(
                 grid,
-                row(p.y + p.inputs[FOLD_AFTER].y),
+                row(p.y + p.inputs[p.shown_inputs].y),
                 c0,
                 c1,
-                f"{len(p.inputs) - FOLD_AFTER} more inputs",
+                f"{len(p.inputs) - p.shown_inputs} more inputs",
             )
-        for n, exchange_id in enumerate(p.outputs):
+        shown_outputs = p.outputs[: p.shown_outputs]
+        for n, exchange_id in enumerate(shown_outputs):
             _write_right(
                 grid,
                 row(p.y + p.output + n * ROW_HEIGHT),
                 c0,
                 c1,
                 _row_text(p, exchanges[exchange_id], c1 - c0 - 2),
+            )
+        if len(p.outputs) > p.shown_outputs:
+            _write_right(
+                grid,
+                row(p.y + p.output + len(shown_outputs) * ROW_HEIGHT),
+                c0,
+                c1,
+                f"{len(p.outputs) - p.shown_outputs} more outputs",
             )
         grid[row(p.y + p.output)][c1] = "●"
     drawn: dict[tuple[int, int], tuple[str, frozenset[str]]] = {}

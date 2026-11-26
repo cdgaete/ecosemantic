@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 import type { FlowSide } from '@/api/useFlowSides'
 import { formatAmount } from '@/lib/format'
 import { AppLink } from '@/lib/router'
@@ -38,9 +38,24 @@ export function providerColumn<T>(provider: (row: T) => ReactNode): Column<T> {
   return { key: 'provider', header: 'Provider', render: provider }
 }
 
-export function providerLink(to: string, icon: IconName, label: string): ReactNode {
+export interface ProviderLink {
+  to: string
+  icon: IconName
+  label: string
+  follow?: (from: Element) => void
+}
+
+function throughRouter(follow: (from: Element) => void) {
+  return (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    follow(event.currentTarget)
+  }
+}
+
+export function providerLink({ to, icon, label, follow }: ProviderLink): ReactNode {
   return (
-    <AppLink to={to} className="flex items-center gap-1 text-accent">
+    <AppLink to={to} className="flex items-center gap-1 text-accent" onClick={follow === undefined ? undefined : throughRouter(follow)}>
       <Icon name={icon} />
       {label}
     </AppLink>

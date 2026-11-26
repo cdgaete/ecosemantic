@@ -24,6 +24,11 @@ class Invalid(EcoSemanticError):
     """The input is well-formed but wrong for the operation."""
 
 
+class MapTooLarge(Invalid):
+    """The text map the drawing needs holds more cells than a caller is served; the drawing
+    itself answers without one."""
+
+
 def said(message: object) -> str:
     """A validation message as a caller reads it, without the prefix pydantic gives the refusal
     a validator raises."""
@@ -49,10 +54,16 @@ def build_label(fingerprint: str | None) -> str:
     return "no build" if fingerprint is None else f"build {fingerprint[:12]}"
 
 
+def unreadable_message(subject: str, error: ValidationError) -> str:
+    """What a stored document this version cannot read answers: its subject and the first field
+    it refuses."""
+    return f"{subject} cannot be read by this version: {field_error(error)}"
+
+
 def unreadable(subject: str, error: ValidationError, hint: str) -> Unavailable:
     """A stored document this version cannot read, named by its subject, with the first field it
     refuses and the remedy `hint` names."""
-    return Unavailable(f"{subject} cannot be read by this version: {field_error(error)}", hint=hint)
+    return Unavailable(unreadable_message(subject, error), hint=hint)
 
 
 class Refusal(BaseModel):
@@ -135,6 +146,11 @@ class Unavailable(EcoSemanticError):
     def __init__(self, message: str, hint: str | None = None) -> None:
         super().__init__(message)
         self.hint = hint
+
+
+class UnreadableLayout(Unavailable):
+    """A stored layout this version cannot read; it carries no hint, since its remedy is a tool
+    call that names no file."""
 
 
 class NotSupported(EcoSemanticError):

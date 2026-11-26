@@ -1,13 +1,14 @@
-import { ArrowLeft, History } from 'lucide-react'
+import { ArrowLeft, History, Info } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { said } from '@/activity/digest'
 import { useLog, useServer, useSystem } from '@/api/queries'
 import { Button } from '@/components/ui/button'
+import { paths, useGo } from '@/lib/paths'
 import { AppLink } from '@/lib/router'
-import { useGo } from '@/lib/paths'
 import { cn } from '@/lib/utils'
 import { RequestsBadge, ValidationBadge } from './Badges'
+import { DetailLink } from './DetailLink'
 import { NARROW_BELOW } from './inspector'
 import { LiveStatus } from './LiveStatus'
 import { pageTitle } from './pageTitle'
@@ -37,6 +38,28 @@ function BuildButton({ back, entries }: { back: SheetReturn; entries: number }) 
     >
       <History /> {`Build · ${said(entries, 'entry', 'entries')}`}
     </Button>
+  )
+}
+
+const DETAILS = 'Product system details'
+
+function SystemName({ name, systemId }: { name: string; systemId: string }) {
+  return (
+    <DetailLink
+      to={paths.systemPage(systemId, 'general')}
+      className="group rounded-sm hover:underline focus-visible:underline focus-visible:outline-2 focus-visible:outline-ring"
+    >
+      {name}
+      <span
+        role="img"
+        aria-label={DETAILS}
+        title={DETAILS}
+        className="whitespace-nowrap text-muted-foreground transition-colors duration-150 group-hover:text-foreground"
+      >
+        {' '}
+        <Info aria-hidden="true" className="inline size-3.5 align-[-0.15em]" />
+      </span>
+    </DetailLink>
   )
 }
 
@@ -83,7 +106,7 @@ export function NameIsland({ menus, systemId }: { menus: ReactNode; systemId: st
           <div className={cn('flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1', narrow && 'flex-1')}>
             {back === null ? null : <BackButton back={back} />}
             <h1 className={cn('line-clamp-2 text-base font-semibold [overflow-wrap:anywhere]', narrow && 'min-w-0 flex-1')} title={name}>
-              {name}
+              <SystemName name={name} systemId={systemId} />
             </h1>
           </div>
           {narrow ? (

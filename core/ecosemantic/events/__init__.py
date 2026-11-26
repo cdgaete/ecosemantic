@@ -121,8 +121,10 @@ class NotifyingStorage:
     async def get_layout(self, product_system_id: uuid.UUID) -> Layout:
         return await self.inner.get_layout(product_system_id)
 
-    async def put_layout(self, product_system_id: uuid.UUID, layout: Layout) -> Layout:
-        stored = await self.inner.put_layout(product_system_id, layout)
+    async def put_layout(
+        self, product_system_id: uuid.UUID, layout: Layout, *, expected: Layout | None
+    ) -> Layout:
+        stored = await self.inner.put_layout(product_system_id, layout, expected=expected)
         self.bus.publish(Event(kind="layout", product_system_id=product_system_id))
         return stored
 

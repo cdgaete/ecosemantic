@@ -29,6 +29,7 @@ from ecosemantic.view.handling import (
 )
 
 GATE_PARAMETER = "token"
+EXPANDED = "expanded"
 IMPACT_TOOL = "calculate_impact"
 STARTED_PARAMETER = "started"
 
@@ -77,6 +78,11 @@ async def json_object(request: Request) -> dict[str, JsonValue]:
 def arguments(query: Mapping[str, str]) -> dict[str, JsonValue]:
     """Query parameters as tool arguments; the token stays out, the tool's schema types the rest."""
     return {key: value for key, value in query.items() if key != GATE_PARAMETER}
+
+
+def expansion(request: Request) -> list[str] | None:
+    """The cards whose rows the page shows in full, each named once; None when it names none."""
+    return request.query_params.getlist(EXPANDED) or None
 
 
 def routes(server: FastMCP, callers: Callers) -> list[Route]:
@@ -293,7 +299,12 @@ def routes(server: FastMCP, callers: Callers) -> list[Route]:
             server,
             context,
             "graph_layout",
-            {"product_system_id": request.path_params["id"], "variant": args.get("variant")},
+            {
+                "product_system_id": request.path_params["id"],
+                "variant": args.get("variant"),
+                "expanded": expansion(request),
+                "detail": "drawing",
+            },
         )
 
     @for_caller(callers)
@@ -303,7 +314,7 @@ def routes(server: FastMCP, callers: Callers) -> list[Route]:
             server,
             context,
             "arrange_graph",
-            {"product_system_id": request.path_params["id"], **body},
+            {"product_system_id": request.path_params["id"], **body, "detail": "drawing"},
         )
 
     @for_caller(callers)
@@ -317,6 +328,8 @@ def routes(server: FastMCP, callers: Callers) -> list[Route]:
                 "placements": [],
                 "release_all": True,
                 "variant": arguments(request.query_params).get("variant"),
+                "expanded": expansion(request),
+                "detail": "drawing",
             },
         )
 

@@ -19,7 +19,25 @@ vi.mock('@/api/client', async (importOriginal) => {
 const doc = system.value as ProductSystem
 const part = (systems.value as { id: string; name: string }[]).find((s) => s.id !== doc.id)!
 
-const placement: Placement = { code: 'system', x: 0, y: 0, width: 300, height: 74, depth: 0, shown_inputs: 0, held: false, inputs: [], outputs: [], output: 37, activity: null, scaled: null }
+const placement: Placement = {
+  code: 'system',
+  x: 0,
+  y: 0,
+  width: 300,
+  height: 74,
+  depth: 0,
+  shown_inputs: 0,
+  shown_outputs: 0,
+  folded_inputs: 0,
+  folded_outputs: 0,
+  held: false,
+  placed_by: null,
+  inputs: [],
+  outputs: [],
+  output: 37,
+  activity: null,
+  scaled: null,
+}
 const card: CardGeometry = { width: 300, header_height: 40, section_padding: 6, section_label: 18, row_height: 22 }
 
 function linking(): ProductSystem {

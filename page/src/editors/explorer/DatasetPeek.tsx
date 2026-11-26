@@ -3,6 +3,7 @@ import { useBackgroundProcess } from '@/api/queries'
 import { paths } from '@/lib/paths'
 import { AppLink } from '@/lib/router'
 import { EditorHeader } from '@/window/EditorHeader'
+import { SupplierReturn } from '@/window/SupplierReturn'
 import { useEditorTab } from '@/window/useEditorTab'
 import { besideGraph } from './links'
 import { ProcessDetail } from './ProcessDetail'
@@ -24,6 +25,7 @@ export function DatasetPeek() {
     <>
       <EditorHeader icon="product" page="Dataset" entity={name} />
       <div className="flex min-w-0 flex-col px-4 pb-3">
+        <SupplierReturn className="pt-2" />
         <AppLink to={paths.background(database, ref)} className="self-start text-xs text-accent hover:underline">
           Open in the explorer
         </AppLink>

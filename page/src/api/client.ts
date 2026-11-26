@@ -127,9 +127,12 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   }
 }
 
-function query(params: Record<string, string | number | undefined>): string {
+function query(params: Record<string, string | number | string[] | undefined>): string {
   const search = new URLSearchParams()
-  for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== '') search.set(key, String(value))
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === '') continue
+    for (const one of Array.isArray(value) ? value : [String(value)]) search.append(key, one)
+  }
   const text = search.toString()
   return text ? `?${text}` : ''
 }
@@ -194,11 +197,15 @@ export const api = {
   version: (id: string, hash: string) => call<ProductSystem>(`${systems}/${id}/versions/${hash}`),
   validation: (id: string, target?: string, signal?: AbortSignal) => call<Answer<ValidationReport>>(`${systems}/${id}/validation${query({ target })}`, { signal }),
   anchors: (id: string, signal?: AbortSignal) => call<Answer<string[]>>(`${systems}/${id}/anchors`, { signal }),
-  layout: (id: string, variant: string | null = null, signal?: AbortSignal) =>
-    call<Answer<Arrangement>>(`${systems}/${id}/layout${query({ variant: variant ?? undefined })}`, { signal }),
-  placeCards: (id: string, placements: { code: string; x: number; y: number }[], variant: string | null = null) =>
-    call<Answer<Arrangement>>(`${systems}/${id}/layout`, { method: 'POST', body: JSON.stringify(variant === null ? { placements } : { placements, variant }) }),
-  releaseCards: (id: string, variant: string | null = null) => call<Answer<Arrangement>>(`${systems}/${id}/layout${query({ variant: variant ?? undefined })}`, { method: 'DELETE' }),
+  layout: (id: string, variant: string | null = null, expanded: string[] = [], signal?: AbortSignal) =>
+    call<Answer<Arrangement>>(`${systems}/${id}/layout${query({ variant: variant ?? undefined, expanded })}`, { signal }),
+  placeCards: (id: string, placements: { code: string; x: number; y: number }[], variant: string | null = null, expanded: string[] = []) =>
+    call<Answer<Arrangement>>(`${systems}/${id}/layout`, {
+      method: 'POST',
+      body: JSON.stringify({ placements, ...(variant === null ? {} : { variant }), ...(expanded.length === 0 ? {} : { expanded }) }),
+    }),
+  releaseCards: (id: string, variant: string | null = null, expanded: string[] = []) =>
+    call<Answer<Arrangement>>(`${systems}/${id}/layout${query({ variant: variant ?? undefined, expanded })}`, { method: 'DELETE' }),
   agents: (signal?: AbortSignal) => call<Value<AgentSummary[]>>('/api/agents', { signal }),
   activity: (params: { agent?: string; product_system_id?: string; after?: string }) => call<Value<Call[]>>(`/api/activity${query(params)}`),
   trail: (id: string, seq: number) => call<Value<Call[]>>(`${systems}/${id}/log/${seq}/trail`),

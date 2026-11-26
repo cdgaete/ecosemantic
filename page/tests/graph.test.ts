@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import * as path from 'node:path'
 import * as url from 'node:url'
 import { buildGraph, changedCards, changedSuppliers, droppedCards, hotFrom, edgeText, outlinesFrom } from '@/editors/graph/build'
-import { atRest, detailAt, framing, READABLE_ZOOM, routePath, viewportFor } from '@/editors/graph/layout'
+import { atRest, detailAt, framing, READABLE_ZOOM, revealFor, routePath, viewportFor } from '@/editors/graph/layout'
 import { layoutAnswer, routed } from './placements'
 import system from './fixtures/system.json'
 import log from './fixtures/log.json'
@@ -269,6 +269,39 @@ it('holds an arrow at rest only while both its cards sit where the layout placed
   expect(atRest('a', 'b', placed, new Map([['a', { x: 0, y: 40 }], ['b', { x: 421, y: 40 }]]))).toBe(false)
   expect(atRest('a', 'b', placed, new Map([['a', { x: 0, y: 40 }]]))).toBe(false)
   expect(atRest('a', 'c', placed, new Map([['a', { x: 0, y: 40 }], ['c', { x: 0, y: 0 }]]))).toBe(false)
+})
+
+describe('revealing a card header', () => {
+  const CLEAR = { x: 12, y: 12, width: 1000, height: 276 }
+  const HEADER = { x: 100, y: 400, width: 300, height: 40 }
+
+  it('moves nothing while the header sits inside the clear area', () => {
+    expect(revealFor({ box: HEADER, viewport: { x: 12, y: -200, zoom: 1 }, clear: CLEAR })).toBeNull()
+  })
+
+  it('lifts the view just enough to hold a header whose bottom the sheet covers', () => {
+    expect(revealFor({ box: HEADER, viewport: { x: 0, y: 0, zoom: 1 }, clear: CLEAR })).toEqual({ x: 0, y: -152, zoom: 1 })
+  })
+
+  it('drops the view just enough to hold a header past the top edge of the clear area', () => {
+    expect(revealFor({ box: HEADER, viewport: { x: 0, y: -500, zoom: 1 }, clear: CLEAR })).toEqual({ x: 0, y: -388, zoom: 1 })
+  })
+
+  it('moves sideways just enough to hold a header past either edge', () => {
+    expect(revealFor({ box: HEADER, viewport: { x: -200, y: -200, zoom: 1 }, clear: CLEAR })).toEqual({ x: -88, y: -200, zoom: 1 })
+    expect(revealFor({ box: HEADER, viewport: { x: 1000, y: -200, zoom: 1 }, clear: CLEAR })).toEqual({ x: 612, y: -200, zoom: 1 })
+  })
+
+  it('keeps the zoom it is given, moving the header at that zoom', () => {
+    expect(revealFor({ box: HEADER, viewport: { x: 0, y: 200, zoom: 0.5 }, clear: CLEAR })).toEqual({ x: 0, y: 68, zoom: 0.5 })
+  })
+
+  it('answers nothing for a region with no room or one the header does not fit', () => {
+    expect(revealFor({ box: HEADER, viewport: { x: 0, y: 0, zoom: 1 }, clear: { ...CLEAR, height: 0 } })).toBeNull()
+    expect(revealFor({ box: HEADER, viewport: { x: 0, y: 0, zoom: 1 }, clear: { ...CLEAR, width: 0 } })).toBeNull()
+    expect(revealFor({ box: HEADER, viewport: { x: 0, y: 0, zoom: 1 }, clear: { ...CLEAR, height: 30 } })).toBeNull()
+    expect(revealFor({ box: HEADER, viewport: { x: 0, y: 0, zoom: 1 }, clear: { ...CLEAR, width: 200 } })).toBeNull()
+  })
 })
 
 describe('edge label text', () => {

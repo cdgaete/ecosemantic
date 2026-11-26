@@ -1,10 +1,15 @@
 import { Background, MiniMap, MiniMapNode, ReactFlow, ReactFlowProvider, applyNodeChanges, useNodesInitialized, useReactFlow, useStore, type Edge, type MiniMapNodeProps, type NodeChange, type NodeTypes, type EdgeTypes } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useLayout, usePlaceCards, useReleaseCards, useSystemAs } from '@/api/queries'
-import type { ContributionResult, LogEntry, ProductSystem } from '@/api/types'
+import type { Arrangement, ContributionResult, LogEntry, ProductSystem } from '@/api/types'
+import { paths, processOfPath, useGo } from '@/lib/paths'
 import { useUi } from '@/store/ui'
-import { useClearance, type Clearance } from '@/window/clearance'
+import { ISLAND_GAP, useClearance, type Clearance } from '@/window/clearance'
+import { useSheetTop } from '@/window/cover'
+import { dismissInspector, openInspector } from '@/window/inspector'
+import { dockedOf, useLeaveSheet } from '@/window/sheets'
 import { InSlot } from '@/window/slots'
 import { ToolsGrip } from '@/window/ToolsGrip'
 import { CANVAS_EVENT, type CanvasCommand } from '@/window/shortcuts'
@@ -13,10 +18,10 @@ import { useMinWidth } from '@/window/useMinWidth'
 import { buildGraph, changedCards, changedSuppliers, droppedCards, edgeText, hotFrom, stageNodes, tetherEdges, STAGE_PREFIX, type GraphNode, type Outlines, type OwnShown, type Supplies } from './build'
 import { CanvasToolbar } from './CanvasToolbar'
 import { FlowEdge, type FlowEdgeData } from './FlowEdge'
-import { atRest, clearCentre, framing, READABLE_ZOOM, viewportFor, type Bounds, type Viewport, type ZoomLimits } from './layout'
+import { atRest, clearArea, clearCentre, detailAt, framing, READABLE_ZOOM, revealFor, viewportFor, type Bounds, type Point, type Viewport, type ZoomLimits } from './layout'
 import { LinkedNode } from './LinkedNode'
 import { ProcessNode } from './ProcessNode'
-import { StageBox, TetherEdge } from './StageBox'
+import { StageBox, StageTabs, TetherEdge } from './StageBox'
 import { ViewTools } from './ViewTools'
 
 const nodeTypes: NodeTypes = { process: ProcessNode, linked: LinkedNode, stage: StageBox }
@@ -32,6 +37,8 @@ interface GraphProps {
 }
 
 const MOVE = { duration: 250 }
+const TAP_SLOP = 4
+const HANDLES_CLICK = 'a, button, input, select, textarea, [role="button"], [role="slider"]'
 const QUIET_MS = 10_000
 const ZOOM = { min: 0.2, max: 1 }
 const READABLE = { min: READABLE_ZOOM, max: ZOOM.max }
@@ -40,10 +47,19 @@ function minimapCard({ id, ...rest }: MiniMapNodeProps) {
   return id.startsWith(STAGE_PREFIX) ? null : <MiniMapNode id={id} {...rest} />
 }
 
+/** The box a drawn card's title takes on screen, or null while the card is drawn without one. */
+function titleBox(frame: HTMLElement | null, code: string): DOMRect | null {
+  const card = Array.from(frame?.querySelectorAll<HTMLElement>('.react-flow__node') ?? []).find((node) => node.dataset.id === code)
+  const box = card?.querySelector<HTMLElement>('[data-title]')?.getBoundingClientRect()
+  return box !== undefined && box.width > 0 && box.height > 0 ? box : null
+}
+
 function Graph({ system, latest, outlines, owns, split, calculate }: GraphProps) {
   const flow = useReactFlow<GraphNode>()
   const theme = useUi((s) => s.theme)
   const chooseProcess = useUi((s) => s.chooseProcess)
+  const location = useLocation()
+  const go = useGo()
   const reference = system.reference_process
   const variant = useCanvasVariant(system)?.name ?? null
   const formulaValues = useUi((s) => s.formulaValues)
@@ -59,8 +75,14 @@ function Graph({ system, latest, outlines, owns, split, calculate }: GraphProps)
   const height = useStore((s) => s.height)
   const asVariant = useSystemAs(system.id, variant)
   const drawn = variant !== null && asVariant.data ? asVariant.data.value : system
-  const layout = useLayout(system.id, variant)
-  const place = usePlaceCards(system.id, variant)
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set<string>())
+  const processCodes = useMemo(() => new Set(drawn.processes.map((p) => p.code)), [drawn])
+  const shown = useMemo(
+    () => [...expanded].filter((code) => processCodes.has(code)).sort(),
+    [expanded, processCodes],
+  )
+  const layout = useLayout(system.id, variant, shown)
+  const place = usePlaceCards(system.id, variant, shown)
   const arranged = layout.data?.value ?? null
   const built = useMemo(
     () => (arranged === null ? { nodes: [], edges: [] } : buildGraph(drawn, arranged, hotFrom(latest), reference, outlines)),
@@ -77,16 +99,30 @@ function Graph({ system, latest, outlines, owns, split, calculate }: GraphProps)
     () => new Map<string, Supplies>((arranged?.shared_suppliers ?? []).map((one) => [one.code, { processes: one.processes, stages: one.stages }])),
     [arranged],
   )
+  const toggleRows = useCallback((code: string) => {
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (next.has(code)) next.delete(code)
+      else next.add(code)
+      return next
+    })
+  }, [])
+  const drawnNodes = useCallback(
+    (arrangement: Arrangement): GraphNode[] => [
+      ...boxes,
+      ...built.nodes.flatMap((node): GraphNode[] => {
+        const spot = placed.get(node.id)
+        if (spot === undefined) return []
+        const data = { ...node.data, placement: { ...spot, scaled: scaledShown ? spot.scaled : null }, card: arrangement.card }
+        return [{ ...node, position: { x: spot.x, y: spot.y }, data: node.type === 'process' ? { ...data, own: owns?.get(node.id) ?? null, supplies: supplies.get(node.id) ?? null, rows: { expanded: expanded.has(node.id), toggle: toggleRows } } : data } as GraphNode]
+      }),
+    ],
+    [built.nodes, boxes, placed, scaledShown, owns, supplies, expanded, toggleRows],
+  )
   useEffect(() => {
     if (arranged === null) return
-    const cards = built.nodes.flatMap((node): GraphNode[] => {
-      const spot = placed.get(node.id)
-      if (spot === undefined) return []
-      const data = { ...node.data, placement: { ...spot, scaled: scaledShown ? spot.scaled : null }, card: arranged.card }
-      return [{ ...node, position: { x: spot.x, y: spot.y }, data: node.type === 'process' ? { ...data, own: owns?.get(node.id) ?? null, supplies: supplies.get(node.id) ?? null } : data } as GraphNode]
-    })
-    setNodes([...boxes, ...cards])
-  }, [built, boxes, arranged, placed, scaledShown, owns, supplies])
+    setNodes(drawnNodes(arranged))
+  }, [drawnNodes, arranged])
   const edges = useMemo((): Edge[] => {
     const positions = new Map(nodes.map((node) => [node.id, node.position]))
     const flows = built.edges.map((edge) => {
@@ -100,7 +136,12 @@ function Graph({ system, latest, outlines, owns, split, calculate }: GraphProps)
     setNodes((current) => {
       const next = applyNodeChanges(changes, current)
       const dropped = droppedCards(changes, next)
-      if (dropped.length > 0) place.mutate(dropped)
+      if (dropped.length > 0)
+        place.mutate(dropped, {
+          onError: () => {
+            if (arranged !== null) setNodes(drawnNodes(arranged))
+          },
+        })
       return next
     })
   }
@@ -113,6 +154,9 @@ function Graph({ system, latest, outlines, owns, split, calculate }: GraphProps)
   useEffect(() => {
     overview.current = false
     setFollowing(true)
+  }, [system.id])
+  useEffect(() => {
+    setExpanded((current) => (current.size === 0 ? current : new Set<string>()))
   }, [system.id])
   const fitOf = useCallback(
     (target: Bounds, anchor: Bounds | null, zoom: ZoomLimits = READABLE): Viewport => viewportFor({ target, anchor, canvas: { width, height }, clearance, zoom }),
@@ -196,6 +240,42 @@ function Graph({ system, latest, outlines, owns, split, calculate }: GraphProps)
     },
     [placed, flow, pause, width, height, clearance],
   )
+  const sheetOpen = useUi((s) => s.sheetOpen)
+  const sheetTop = useSheetTop((s) => s.sheetTop)
+  const here = processOfPath(location.pathname)
+  const revealedCode = here !== null && here.systemId === system.id ? here.code : null
+  const revealKey = narrow && sheetOpen && revealedCode !== null ? `${system.id}:${revealedCode}` : null
+  const revealed = useRef<string | null>(null)
+  useEffect(() => {
+    if (revealKey === null) {
+      revealed.current = null
+      return
+    }
+    if (revealed.current === revealKey) return
+    const card = arranged?.card
+    if (revealedCode === null || sheetTop === null || card === undefined) return
+    const spot = placed.get(revealedCode)
+    if (spot === undefined) return
+    revealed.current = revealKey
+    const area = clearArea({ width, height }, clearance)
+    const origin = frame.current?.getBoundingClientRect() ?? { left: 0, top: 0 }
+    const bottom = Math.min(area.y + area.height, sheetTop - origin.top - ISLAND_GAP)
+    const view = flow.getViewport()
+    const measured = detailAt(view.zoom) === 'header' ? titleBox(frame.current, revealedCode) : null
+    const box =
+      measured === null
+        ? { x: spot.x, y: spot.y, width: spot.width, height: card.header_height }
+        : {
+            x: (measured.left - origin.left - view.x) / view.zoom,
+            y: (measured.top - origin.top - view.y) / view.zoom,
+            width: measured.width / view.zoom,
+            height: measured.height / view.zoom,
+          }
+    const next = revealFor({ box, viewport: view, clear: { ...area, height: bottom - area.y } })
+    if (next === null) return
+    pause()
+    void flow.setViewport(next, MOVE)
+  }, [revealKey, revealedCode, arranged, placed, sheetTop, clearance, width, height, flow, pause])
   useEffect(() => {
     const listen = (event: Event) => {
       const command = (event as CustomEvent<CanvasCommand>).detail
@@ -207,7 +287,30 @@ function Graph({ system, latest, outlines, owns, split, calculate }: GraphProps)
     window.addEventListener(CANVAS_EVENT, listen)
     return () => window.removeEventListener(CANVAS_EVENT, listen)
   }, [fit, focus, reorganise, show])
-  const release = useReleaseCards(system.id, variant)
+  const leaveSheet = useLeaveSheet()
+  const press = useRef<Point | null>(null)
+  const dragged = useRef(false)
+  const pressAt = (event: ReactPointerEvent<HTMLDivElement>) => {
+    press.current = { x: event.clientX, y: event.clientY }
+    dragged.current = false
+  }
+  const moveTo = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const from = press.current
+    if (from === null || dragged.current) return
+    if (Math.hypot(event.clientX - from.x, event.clientY - from.y) > TAP_SLOP) dragged.current = true
+  }
+  const clickGraph = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const target = event.target
+    if (dragged.current || (target instanceof Element && target.closest(HANDLES_CLICK) !== null)) return
+    leaveSheet()
+  }
+  const allShown = processCodes.size > 0 && [...processCodes].every((code) => expanded.has(code))
+  const someShown = [...processCodes].some((code) => expanded.has(code))
+  const setAllRows = useCallback(
+    (on: boolean) => setExpanded(on ? new Set(processCodes) : new Set<string>()),
+    [processCodes],
+  )
+  const release = useReleaseCards(system.id, variant, shown)
   const reset = useCallback(() => {
     release.mutate()
     setFollowing(true)
@@ -224,6 +327,7 @@ function Graph({ system, latest, outlines, owns, split, calculate }: GraphProps)
     ...(scaling === null ? [] : [scaling]),
     ...(asVariant.error ? [asVariant.error.message] : []),
     ...(layout.error && !asVariant.error ? [layout.error.message] : []),
+    ...(place.error ? [place.error.message] : []),
   ]
   const started = useRef<Viewport | null>(null)
   const startMove = (event: MouseEvent | TouchEvent | null, at: Viewport) => {
@@ -237,15 +341,28 @@ function Graph({ system, latest, outlines, owns, split, calculate }: GraphProps)
     pause()
   }
   return (
-    <div ref={frame} className="relative h-full">
+    <div ref={frame} className="relative h-full" onPointerDown={pressAt} onPointerMove={moveTo} onClick={clickGraph}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
-        onNodeClick={(_, node) => chooseProcess(node.type === 'process' ? node.data.process.id : null)}
-        onPaneClick={() => chooseProcess(null)}
+        onNodeClick={(event, node) => {
+          if (node.type !== 'process') {
+            chooseProcess(null)
+            return
+          }
+          const { process, systemId } = node.data
+          chooseProcess(process.id)
+          if (dockedOf(location.pathname) || (event.target instanceof Element && event.target.closest(HANDLES_CLICK) !== null)) return
+          if (here === null || here.systemId !== systemId || here.code !== process.code) go(paths.process(systemId, process.code))
+          openInspector()
+        }}
+        onPaneClick={() => {
+          chooseProcess(null)
+          dismissInspector(location.pathname)
+        }}
         onMoveStart={startMove}
         onMove={moveBy}
         onNodeDragStart={pause}
@@ -255,6 +372,7 @@ function Graph({ system, latest, outlines, owns, split, calculate }: GraphProps)
         proOptions={{ hideAttribution: true }}
       >
         <Background />
+        <StageTabs boxes={boxes} />
         {minimap ? (
           <InSlot name="minimap">
             <MiniMap
@@ -302,6 +420,8 @@ function Graph({ system, latest, outlines, owns, split, calculate }: GraphProps)
           focus={focus}
           reorganise={reorganise}
           reset={reset}
+          rowsShown={allShown ? 'all' : someShown ? 'some' : 'none'}
+          setAllRows={setAllRows}
         />
       </InSlot>
       <InSlot name="view">

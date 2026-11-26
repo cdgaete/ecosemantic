@@ -444,26 +444,49 @@ class ProductSystem:
             get_product_system_log, product_system_id=str(self.id), limit=limit, cursor=cursor
         )
 
-    def graph_layout(self, variant: str | None = None) -> Answer[Arrangement]:
-        """The `graph_layout` tool."""
-        return self.workspace.call(graph_layout, product_system_id=str(self.id), variant=variant)
+    def graph_layout(
+        self, variant: str | None = None, expanded: list[str] | None = None
+    ) -> Answer[Arrangement]:
+        """The `graph_layout` tool, with the drawing's map and `expanded`'s cards showing every
+        row."""
+        answer = self.workspace.call(
+            graph_layout,
+            product_system_id=str(self.id),
+            variant=variant,
+            detail="full",
+            expanded=expanded,
+        )
+        if not isinstance(answer.value, Arrangement):
+            raise TypeError(f'detail="full" answered {answer.value.kind}, not the drawing')
+        return Answer[Arrangement](value=answer.value, hint=answer.hint, view_url=answer.view_url)
 
     def arrange_graph(
         self,
         placements: list[CardSpot],
         release: list[str] | None = None,
         release_all: bool = False,
+        release_agent_holds: bool = False,
+        only_if_better: bool = False,
         variant: str | None = None,
+        expanded: list[str] | None = None,
     ) -> Answer[Arrangement]:
-        """The `arrange_graph` tool."""
-        return self.workspace.call(
+        """The `arrange_graph` tool, with the drawing's map and `expanded`'s cards showing every
+        row."""
+        answer = self.workspace.call(
             arrange_graph,
             product_system_id=str(self.id),
             placements=placements,
             release=release,
             release_all=release_all,
+            release_agent_holds=release_agent_holds,
+            only_if_better=only_if_better,
             variant=variant,
+            detail="full",
+            expanded=expanded,
         )
+        if not isinstance(answer.value, Arrangement):
+            raise TypeError(f'detail="full" answered {answer.value.kind}, not the drawing')
+        return Answer[Arrangement](value=answer.value, hint=answer.hint, view_url=answer.view_url)
 
     def export_tables(self, path: str, replace: bool = False) -> Answer[WrittenPath]:
         """The `export_tables` tool."""

@@ -53,16 +53,27 @@ describe('the frame', () => {
     view.unmount()
     vi.mocked(api.server).mockResolvedValue({ ...server, client: null } as unknown as ServerInfo)
     renderAt('/', <NameIsland menus={null} systemId={id} />)
-    expect(await screen.findByRole('heading', { name: system.value.name })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: (named: string) => named.startsWith(system.value.name) })).toBeInTheDocument()
     expect(screen.queryByText(/Connected:/)).not.toBeInTheDocument()
   })
 
   it('wraps a long system name on two lines and holds it whole in its title', async () => {
     vi.mocked(api.system).mockResolvedValue({ ...system, value: { ...system.value, name: LONG } } as SystemRead)
     renderAt('/', <NameIsland menus={null} systemId={id} />)
-    const heading = await screen.findByRole('heading', { name: LONG })
+    const heading = await screen.findByRole('heading', { name: (named: string) => named.startsWith(LONG) })
     expect(heading).toHaveClass('line-clamp-2')
     expect(heading).toHaveAttribute('title', LONG)
+  })
+
+  it('links the system’s name to its General information, marked by an info icon', async () => {
+    vi.mocked(api.system).mockResolvedValue(system as SystemRead)
+    renderAt(`/systems/${id}/general`, <NameIsland menus={null} systemId={id} />)
+    const heading = await screen.findByRole('heading', { name: (named: string) => named.startsWith(system.value.name) })
+    const link = within(heading).getByRole('link')
+    expect(link).toHaveAccessibleName(/Product system details$/)
+    expect(link).toHaveAttribute('href', `/systems/${id}/general`)
+    const mark = within(link).getByRole('img', { name: 'Product system details' })
+    expect(mark).toHaveAttribute('title', 'Product system details')
   })
 
   it('unpins a chip', () => {

@@ -321,6 +321,7 @@ async def test_each_caller_s_pages_hold_their_store_alone(context: ServerContext
             "value"
         ]
         missing = await theirs.get(f"/api/product-systems/{ana_system.id}")
+        stray_layout = await theirs.get(f"/api/product-systems/{ana_system.id}/layout")
         crossed = [
             await theirs.get(f"/api/runs/{ana_run}"),
             await theirs.post(f"/api/runs/{ana_run}/cancel"),
@@ -339,6 +340,8 @@ async def test_each_caller_s_pages_hold_their_store_alone(context: ServerContext
     assert [run["id"] for run in theirs_runs] == [str(ben_run)]
     assert stray_runs == []
     assert missing.status_code == 404
+    assert stray_layout.status_code == 404
+    assert stray_layout.json()["error"] == "not_found"
     assert [response.status_code for response in crossed] == [404] * 3
     assert [response.json()["error"] for response in crossed] == ["not_found"] * 3
     assert mine_run.status_code == 200

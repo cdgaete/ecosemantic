@@ -9,7 +9,7 @@ import { paths, useGo } from '@/lib/paths'
 import { AppLink } from '@/lib/router'
 import { RequestAction } from '@/requests/RequestAction'
 import { EditorHeader } from '@/window/EditorHeader'
-import { FieldGrid } from '@/window/FieldGrid'
+import { FieldGrid, PENDING } from '@/window/FieldGrid'
 import { Section } from '@/window/Section'
 import { useEditorTab } from '@/window/useEditorTab'
 import { SimulationResults } from './SimulationResults'
@@ -97,8 +97,8 @@ export function SimulationEditor() {
       <Section title="Settings" sectionKey={`simulation:${runId}:settings`} actions={action}>
         <FieldGrid
           rows={[
-            { label: 'Product system', value: system?.name ?? '' },
-            { label: 'Demand', value: demand(run, system) },
+            { label: 'Product system', value: read.isPending ? PENDING : system?.name ?? '' },
+            { label: 'Demand', value: read.isPending ? PENDING : demand(run, system) },
             { label: 'Impact method', value: run.methods[0]?.impact_method ?? '' },
             { label: 'Iterations', value: iterations(run) },
             { label: 'Seed', value: String(run.config.seed) },

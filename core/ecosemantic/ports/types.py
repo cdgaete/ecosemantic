@@ -21,6 +21,7 @@ from pydantic import (
 from ecosemantic.errors import Conflict, ErrorEnvelope, Invalid, NotSupported
 from ecosemantic.model.entities import (
     Actor,
+    ActorKind,
     ExchangeType,
     Method,
     Person,
@@ -1150,10 +1151,11 @@ def source_credential(source: SourceName) -> CredentialKind | None:
 
 
 class Spot(BaseModel):
-    """Where one card was put."""
+    """Where one card was put, and who put it there; None for a hold that records no placer."""
 
-    x: float
-    y: float
+    x: float = Field(allow_inf_nan=False)
+    y: float = Field(allow_inf_nan=False)
+    placed_by: ActorKind | None = None
 
 
 class Layout(BaseModel):

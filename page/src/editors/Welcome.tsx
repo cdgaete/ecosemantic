@@ -8,13 +8,16 @@ import { useUi } from '@/store/ui'
 import { CanvasBadge, ValidationMark } from '@/window/Badges'
 import { DataTable, type Column } from '@/window/DataTable'
 import { Icon } from '@/window/Icon'
+import { NARROW_BELOW } from '@/window/inspector'
+import { useMinWidth } from '@/window/useMinWidth'
 import { SourceList } from './databases/SourceList'
 
 function Name({ card, shared, current }: { card: SystemCard; shared: Set<string>; current: boolean }) {
   const id = distinguishingId(card, shared)
+  const narrow = !useMinWidth(NARROW_BELOW)
   return (
     <span className="block min-w-0">
-      <AppLink to={paths.system(card.id)} aria-current={current ? 'true' : undefined} className="flex items-center gap-2 font-medium hover:underline">
+      <AppLink to={paths.systemEntry(card.id, narrow)} aria-current={current ? 'true' : undefined} className="flex items-center gap-2 font-medium hover:underline">
         <Icon name="system" />
         <span className="break-words">{card.name}</span>
         {id ? <span className="shrink-0 text-xs font-normal text-muted-foreground">{id}</span> : null}

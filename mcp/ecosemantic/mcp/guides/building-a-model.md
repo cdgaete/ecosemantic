@@ -12,6 +12,7 @@ A product system is a graph of foreground processes over one background database
 6. `set_parameters` before any formula names a parameter.
 7. `create_exchange` for each input, emission and resource, with an amount or a formula. A negative input of a waste treatment, whose production is negative, sends waste to it; a negative input of a provider whose production is positive is a credit. An alternative supplier is an ordinary process whose amount a parameter sets.
 8. `validate_product_system` until it reports valid, then calculate.
+9. Leave the drawing for last, once the model and its results are settled: `graph_layout` and `arrange_graph` change no number, and each answers a bounded, compact reply by default, the whole drawing under `detail="drawing"` or `detail="full"` when a report needs it. A client that can hand work to a subagent or a separate session arranges the graph there and brings back only the score, the troubles left and the page link `view_link` gives.
 
 ## Worked example: a widget on the fixture database
 

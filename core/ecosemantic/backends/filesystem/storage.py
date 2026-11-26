@@ -31,7 +31,7 @@ from ecosemantic.package.package import (
 from ecosemantic.package.requests import next_request, read_requests, resolve, write_requests
 from ecosemantic.package.sidecar import SIDECAR_DIR, read_layout, read_sidecar, write_layout
 from ecosemantic.ports.resolver import Resolver
-from ecosemantic.ports.storage import no_product_system
+from ecosemantic.ports.storage import no_product_system, stale_layout
 from ecosemantic.ports.types import (
     Layout,
     LogEntry,
@@ -137,8 +137,12 @@ class FilesystemStorage:
         with self._held(product_system_id) as root:
             return read_layout(root)
 
-    def _put_layout(self, product_system_id: uuid.UUID, layout: Layout) -> Layout:
+    def _put_layout(
+        self, product_system_id: uuid.UUID, layout: Layout, expected: Layout | None
+    ) -> Layout:
         with self._held(product_system_id) as root:
+            if expected is not None and read_layout(root) != expected:
+                raise stale_layout(product_system_id)
             write_layout(root, layout)
             return layout
 
@@ -228,8 +232,10 @@ class FilesystemStorage:
     async def get_layout(self, product_system_id: uuid.UUID) -> Layout:
         return await asyncio.to_thread(self._layout, product_system_id)
 
-    async def put_layout(self, product_system_id: uuid.UUID, layout: Layout) -> Layout:
-        return await asyncio.to_thread(self._put_layout, product_system_id, layout)
+    async def put_layout(
+        self, product_system_id: uuid.UUID, layout: Layout, *, expected: Layout | None
+    ) -> Layout:
+        return await asyncio.to_thread(self._put_layout, product_system_id, layout, expected)
 
     async def post_request(self, product_system_id: uuid.UUID, draft: RequestDraft) -> Request:
         return await asyncio.to_thread(self._post, product_system_id, draft)

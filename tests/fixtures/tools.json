@@ -6,10 +6,37 @@
       "open_world_hint": false,
       "read_only_hint": false
     },
-    "description": "Put named cards at given places and answer the drawing that results. A card put here is held exactly as one a person dragged: the automatic arrangement packs the others around it and never moves it. Name cards in release to let them go back to the automatic layout; placements and release naming one card is refused. Pass release_all to let every held card go, drawn or not, before placements apply; release_all beside release is refused. Move cards, read the map and the score, and move again until the score is 0 or stops falling. The answer is graph_layout's: activity, scaled amounts, labels and scaling, under the variant when one is named; where a card is held does not depend on the variant.",
+    "description": "Put named cards at given places and answer what changed. A card put here is held exactly as one a person dragged: the automatic arrangement packs the others around it and never moves it, and an explicit placement is saved even when it worsens the score; a nonzero score alone is not a reason to move another card. Name cards in release to let them go back to the automatic layout; placements and release naming one card is refused. Pass release_all to let every held card go, drawn or not, before placements apply; release_all beside release is refused. Pass release_agent_holds to let go every hold an agent placed and keep a person's, a service's and one that records no placer, before placements apply; the scores before and after say whether the release drew a better drawing or a worse one, and it saves either way. Pass only_if_better to save that release only when the drawing it leads to scores lower than the stored one, the two compared under the variant named at every detail: it is the one call that tidies a graph, keeping where a person, a service and a hold that records no placer put their cards. When the release is no better, nothing is written and the answer is the stored drawing, with saved false, the same score before and after and no changed card. It is refused beside placements, which are always saved, beside release_all, which is a reset, and without release or release_agent_holds, nothing having been let go to judge. release_agent_holds beside release_all is refused. Use this tool when placement is part of the request. Arrange the cards once the model and its results are settled, in a subagent or a separate session when the client has one, and bring back the score, the troubles left and the page link. detail selects the answer. compact, the default, answers what the call changed: whether it saved, the score before and after, where 0 means nothing is wrong, how many troubles of each kind the drawing now carries, the cards whose place, hold or placer differs from the drawing before, a card the arrangement moved by itself included, with each card's x, y, held and placed_by before and after and the cards the call named first, and the issues the call added and resolved, the heaviest first, in one page of 6 changed cards, 2 added and 2 resolved with their totals, and the product system's page link where a view is served; release_all, which reads no stored layout, answers null for the score before, the changed cards and those differences. detail=\"drawing\" answers the whole arrangement as the page draws it, its map null, and detail=\"full\" that arrangement with a map in characters whose legend is the first line: each card's place, size and row anchors, each arrow's corner points and label, the troubles, score, bounds and scaling compact reads, and every card's activity and scaled amounts and every label's per-unit and scaled text, under the variant when one is named; where a card is held does not depend on the variant. expanded names the cards whose rows the page shows in full, so the drawing answered has the size and the anchors the page displays; it moves nothing and saves no row, and a card this system does not draw is refused.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
+        "detail": {
+          "default": "compact",
+          "enum": [
+            "compact",
+            "drawing",
+            "full"
+          ],
+          "type": "string"
+        },
+        "expanded": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "only_if_better": {
+          "default": false,
+          "type": "boolean"
+        },
         "placements": {
           "items": {
             "description": "One card put somewhere.",
@@ -18,9 +45,13 @@
                 "type": "string"
               },
               "x": {
+                "maximum": 100000.0,
+                "minimum": -100000.0,
                 "type": "number"
               },
               "y": {
+                "maximum": 100000.0,
+                "minimum": -100000.0,
                 "type": "number"
               }
             },
@@ -49,6 +80,10 @@
             }
           ],
           "default": null
+        },
+        "release_agent_holds": {
+          "default": false,
+          "type": "boolean"
         },
         "release_all": {
           "default": false,
@@ -87,185 +122,448 @@
           "default": null
         },
         "value": {
-          "description": "Where every card of a product system is drawn and how every arrow runs: the map an agent\nreads, the numbers the page draws, what is wrong with the drawing and its score. `card` is the\ngeometry every card is drawn at.",
-          "properties": {
-            "bounds": {
-              "additionalProperties": {
-                "type": "number"
-              },
-              "type": "object"
-            },
-            "card": {
-              "description": "A card's size in the pixels the page draws it at: its width, its header, the padding around\na section and the label over its rows, and the height of one row.",
+          "oneOf": [
+            {
+              "description": "What a write changed: whether it saved, the score before and after, how many troubles of\neach kind the drawing now carries, the changed cards with their state on both sides, and the\nissues the write added and resolved, each in one page. Nothing of what came before a write\nthat read no stored layout.",
               "properties": {
-                "header_height": {
-                  "type": "number"
-                },
-                "row_height": {
-                  "type": "number"
-                },
-                "section_label": {
-                  "type": "number"
-                },
-                "section_padding": {
-                  "type": "number"
-                },
-                "width": {
-                  "type": "number"
-                }
-              },
-              "required": [
-                "width",
-                "header_height",
-                "section_padding",
-                "section_label",
-                "row_height"
-              ],
-              "type": "object"
-            },
-            "cards": {
-              "items": {
-                "description": "Where one card is drawn, its rows in drawn order with their anchors, the offset of its\noutput anchor, and whether someone put it there.",
-                "properties": {
-                  "activity": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null
-                  },
-                  "code": {
-                    "type": "string"
-                  },
-                  "depth": {
-                    "type": "integer"
-                  },
-                  "height": {
-                    "type": "number"
-                  },
-                  "held": {
-                    "default": false,
-                    "type": "boolean"
-                  },
-                  "inputs": {
-                    "default": [],
-                    "items": {
-                      "description": "Where one input row is anchored, as its offset from the top of its card.",
+                "added": {
+                  "anyOf": [
+                    {
                       "properties": {
-                        "exchange_id": {
-                          "format": "uuid",
-                          "type": "string"
+                        "items": {
+                          "items": {
+                            "description": "One thing wrong with the drawing, with the cards it concerns and the exchanges of the\narrows it concerns.",
+                            "properties": {
+                              "codes": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "exchange_ids": {
+                                "items": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "kind": {
+                                "enum": [
+                                  "cards_overlap",
+                                  "edge_through_card",
+                                  "edges_overlap",
+                                  "edge_backwards",
+                                  "edges_cross",
+                                  "label_overlap"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "codes",
+                              "exchange_ids"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
                         },
-                        "y": {
-                          "type": "number"
+                        "omitted": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
                         }
                       },
                       "required": [
-                        "exchange_id",
-                        "y"
+                        "items",
+                        "total",
+                        "omitted"
                       ],
                       "type": "object"
                     },
-                    "type": "array"
-                  },
-                  "output": {
-                    "type": "number"
-                  },
-                  "outputs": {
-                    "default": [],
-                    "items": {
-                      "format": "uuid",
-                      "type": "string"
-                    },
-                    "type": "array"
-                  },
-                  "scaled": {
-                    "anyOf": [
-                      {
-                        "additionalProperties": {
-                          "type": "number"
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "changed": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "items": {
+                          "items": {
+                            "description": "One card whose place, hold or placer differs between the two drawings.",
+                            "properties": {
+                              "after": {
+                                "description": "Where one card is drawn, whether someone holds it there and who.",
+                                "properties": {
+                                  "held": {
+                                    "type": "boolean"
+                                  },
+                                  "placed_by": {
+                                    "anyOf": [
+                                      {
+                                        "enum": [
+                                          "agent",
+                                          "person",
+                                          "service"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "x": {
+                                    "type": "number"
+                                  },
+                                  "y": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "x",
+                                  "y",
+                                  "held",
+                                  "placed_by"
+                                ],
+                                "type": "object"
+                              },
+                              "before": {
+                                "description": "Where one card is drawn, whether someone holds it there and who.",
+                                "properties": {
+                                  "held": {
+                                    "type": "boolean"
+                                  },
+                                  "placed_by": {
+                                    "anyOf": [
+                                      {
+                                        "enum": [
+                                          "agent",
+                                          "person",
+                                          "service"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "x": {
+                                    "type": "number"
+                                  },
+                                  "y": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "x",
+                                  "y",
+                                  "held",
+                                  "placed_by"
+                                ],
+                                "type": "object"
+                              },
+                              "code": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "before",
+                              "after"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
                         },
-                        "propertyNames": {
-                          "format": "uuid"
+                        "omitted": {
+                          "type": "integer"
                         },
-                        "type": "object"
+                        "total": {
+                          "type": "integer"
+                        }
                       },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null
-                  },
-                  "shown_inputs": {
-                    "default": 0,
+                      "required": [
+                        "items",
+                        "total",
+                        "omitted"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "kind": {
+                  "const": "write",
+                  "default": "write",
+                  "type": "string"
+                },
+                "resolved": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "items": {
+                          "items": {
+                            "description": "One thing wrong with the drawing, with the cards it concerns and the exchanges of the\narrows it concerns.",
+                            "properties": {
+                              "codes": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "exchange_ids": {
+                                "items": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "kind": {
+                                "enum": [
+                                  "cards_overlap",
+                                  "edge_through_card",
+                                  "edges_overlap",
+                                  "edge_backwards",
+                                  "edges_cross",
+                                  "label_overlap"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "codes",
+                              "exchange_ids"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "omitted": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "items",
+                        "total",
+                        "omitted"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "saved": {
+                  "type": "boolean"
+                },
+                "score_after": {
+                  "type": "integer"
+                },
+                "score_before": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "troubles": {
+                  "additionalProperties": {
                     "type": "integer"
                   },
-                  "width": {
-                    "type": "number"
+                  "propertyNames": {
+                    "enum": [
+                      "cards_overlap",
+                      "edge_through_card",
+                      "edges_overlap",
+                      "edge_backwards",
+                      "edges_cross",
+                      "label_overlap"
+                    ]
                   },
-                  "x": {
-                    "type": "number"
-                  },
-                  "y": {
-                    "type": "number"
-                  }
+                  "type": "object"
                 },
-                "required": [
-                  "code",
-                  "x",
-                  "y",
-                  "width",
-                  "height",
-                  "depth",
-                  "output"
-                ],
-                "type": "object"
+                "variant": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                }
               },
-              "type": "array"
+              "required": [
+                "saved",
+                "score_after",
+                "troubles",
+                "kind"
+              ],
+              "type": "object"
             },
-            "edges": {
-              "items": {
-                "description": "One arrow's path as the page draws it, corner by corner.",
-                "properties": {
-                  "consumer": {
-                    "type": "string"
+            {
+              "description": "Where every card of a product system is drawn and how every arrow runs: the map an agent\nreads where the answer asked for it, the numbers the page draws, what is wrong with the\ndrawing and its score. `card` is the geometry every card is drawn at.",
+              "properties": {
+                "bounds": {
+                  "additionalProperties": {
+                    "type": "number"
                   },
-                  "exchange_id": {
-                    "format": "uuid",
-                    "type": "string"
+                  "type": "object"
+                },
+                "card": {
+                  "description": "A card's size in the pixels the page draws it at: its width, its header, the padding around\na section and the label over its rows, and the height of one row.",
+                  "properties": {
+                    "header_height": {
+                      "type": "number"
+                    },
+                    "row_height": {
+                      "type": "number"
+                    },
+                    "section_label": {
+                      "type": "number"
+                    },
+                    "section_padding": {
+                      "type": "number"
+                    },
+                    "width": {
+                      "type": "number"
+                    }
                   },
-                  "label": {
-                    "description": "The box an arrow's quantity text occupies, and the texts it carries.",
+                  "required": [
+                    "width",
+                    "header_height",
+                    "section_padding",
+                    "section_label",
+                    "row_height"
+                  ],
+                  "type": "object"
+                },
+                "cards": {
+                  "items": {
+                    "description": "Where one card is drawn, the rows it shows of each side in drawn order with their anchors,\nthe offset of its output anchor, whether someone put it there and who that was. `folded`\ncounts the rows a fold hides, so a card whose rows are all shown still says what collapsing\nit would take away.",
                     "properties": {
-                      "formula": {
+                      "activity": {
                         "anyOf": [
                           {
-                            "type": "string"
+                            "type": "number"
                           },
                           {
                             "type": "null"
                           }
-                        ]
+                        ],
+                        "default": null
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "depth": {
+                        "type": "integer"
+                      },
+                      "folded_inputs": {
+                        "default": 0,
+                        "type": "integer"
+                      },
+                      "folded_outputs": {
+                        "default": 0,
+                        "type": "integer"
                       },
                       "height": {
                         "type": "number"
                       },
-                      "per_unit": {
-                        "type": "string"
+                      "held": {
+                        "default": false,
+                        "type": "boolean"
                       },
-                      "scaled": {
+                      "inputs": {
+                        "default": [],
+                        "items": {
+                          "description": "Where one input row is anchored, as its offset from the top of its card.",
+                          "properties": {
+                            "exchange_id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "y": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "exchange_id",
+                            "y"
+                          ],
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "output": {
+                        "type": "number"
+                      },
+                      "outputs": {
+                        "default": [],
+                        "items": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "placed_by": {
                         "anyOf": [
                           {
+                            "enum": [
+                              "agent",
+                              "person",
+                              "service"
+                            ],
                             "type": "string"
                           },
                           {
                             "type": "null"
                           }
-                        ]
+                        ],
+                        "default": null
+                      },
+                      "scaled": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": {
+                              "type": "number"
+                            },
+                            "propertyNames": {
+                              "format": "uuid"
+                            },
+                            "type": "object"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null
+                      },
+                      "shown_inputs": {
+                        "type": "integer"
+                      },
+                      "shown_outputs": {
+                        "type": "integer"
                       },
                       "width": {
                         "type": "number"
@@ -278,184 +576,272 @@
                       }
                     },
                     "required": [
+                      "code",
                       "x",
                       "y",
                       "width",
                       "height",
-                      "per_unit",
-                      "scaled",
-                      "formula"
+                      "depth",
+                      "shown_inputs",
+                      "shown_outputs",
+                      "output"
                     ],
                     "type": "object"
                   },
-                  "points": {
-                    "items": {
-                      "maxItems": 2,
-                      "minItems": 2,
-                      "prefixItems": [
-                        {
-                          "type": "number"
-                        },
-                        {
-                          "type": "number"
-                        }
-                      ],
-                      "type": "array"
-                    },
-                    "type": "array"
-                  },
-                  "provider": {
-                    "type": "string"
-                  }
+                  "type": "array"
                 },
-                "required": [
-                  "provider",
-                  "consumer",
-                  "exchange_id",
-                  "points",
-                  "label"
-                ],
-                "type": "object"
-              },
-              "type": "array"
-            },
-            "map": {
-              "type": "string"
-            },
-            "scaling": {
-              "anyOf": [
-                {
+                "edges": {
+                  "items": {
+                    "description": "One arrow's path as the page draws it, corner by corner.",
+                    "properties": {
+                      "consumer": {
+                        "type": "string"
+                      },
+                      "exchange_id": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "label": {
+                        "description": "The box an arrow's quantity text occupies, and the texts it carries.",
+                        "properties": {
+                          "formula": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "height": {
+                            "type": "number"
+                          },
+                          "per_unit": {
+                            "type": "string"
+                          },
+                          "scaled": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "width": {
+                            "type": "number"
+                          },
+                          "x": {
+                            "type": "number"
+                          },
+                          "y": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y",
+                          "width",
+                          "height",
+                          "per_unit",
+                          "scaled",
+                          "formula"
+                        ],
+                        "type": "object"
+                      },
+                      "points": {
+                        "items": {
+                          "maxItems": 2,
+                          "minItems": 2,
+                          "prefixItems": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ],
+                          "type": "array"
+                        },
+                        "type": "array"
+                      },
+                      "provider": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "provider",
+                      "consumer",
+                      "exchange_id",
+                      "points",
+                      "label"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "kind": {
+                  "const": "arrangement",
+                  "default": "arrangement",
                   "type": "string"
                 },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "score": {
-              "type": "integer"
-            },
-            "shared_suppliers": {
-              "items": {
-                "description": "A card of no stage: how many processes it feeds and how many of the system's stages those\nprocesses span.",
-                "properties": {
-                  "code": {
-                    "type": "string"
-                  },
-                  "processes": {
-                    "type": "integer"
-                  },
-                  "stages": {
-                    "type": "integer"
-                  }
-                },
-                "required": [
-                  "code",
-                  "processes",
-                  "stages"
-                ],
-                "type": "object"
-              },
-              "type": "array"
-            },
-            "stages": {
-              "items": {
-                "description": "One stage's cards in the order the drawing places them, and the regions that hold them.",
-                "properties": {
-                  "codes": {
-                    "items": {
+                "map": {
+                  "anyOf": [
+                    {
                       "type": "string"
                     },
-                    "type": "array"
-                  },
-                  "regions": {
-                    "items": {
-                      "description": "A rectangle in the drawing's own coordinates, holding the cards of one stage.",
-                      "properties": {
-                        "height": {
-                          "type": "number"
-                        },
-                        "width": {
-                          "type": "number"
-                        },
-                        "x": {
-                          "type": "number"
-                        },
-                        "y": {
-                          "type": "number"
-                        }
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "scaling": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "score": {
+                  "type": "integer"
+                },
+                "shared_suppliers": {
+                  "items": {
+                    "description": "A card of no stage: how many processes it feeds and how many of the system's stages those\nprocesses span.",
+                    "properties": {
+                      "code": {
+                        "type": "string"
                       },
-                      "required": [
-                        "x",
-                        "y",
-                        "width",
-                        "height"
-                      ],
-                      "type": "object"
+                      "processes": {
+                        "type": "integer"
+                      },
+                      "stages": {
+                        "type": "integer"
+                      }
                     },
-                    "type": "array"
-                  },
-                  "stage": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "stage",
-                  "codes",
-                  "regions"
-                ],
-                "type": "object"
-              },
-              "type": "array"
-            },
-            "troubles": {
-              "items": {
-                "description": "One thing wrong with the drawing, with the cards it concerns.",
-                "properties": {
-                  "codes": {
-                    "items": {
-                      "type": "string"
-                    },
-                    "type": "array"
-                  },
-                  "kind": {
-                    "enum": [
-                      "cards_overlap",
-                      "edge_through_card",
-                      "edges_overlap",
-                      "edge_backwards",
-                      "edges_cross",
-                      "label_overlap"
+                    "required": [
+                      "code",
+                      "processes",
+                      "stages"
                     ],
-                    "type": "string"
+                    "type": "object"
                   },
-                  "message": {
-                    "type": "string"
-                  }
+                  "type": "array"
                 },
-                "required": [
-                  "kind",
-                  "message",
-                  "codes"
-                ],
-                "type": "object"
+                "stages": {
+                  "items": {
+                    "description": "One stage's cards in the order the drawing places them, and the regions that hold them.",
+                    "properties": {
+                      "codes": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "regions": {
+                        "items": {
+                          "description": "A rectangle in the drawing's own coordinates, holding the cards of one stage.",
+                          "properties": {
+                            "height": {
+                              "type": "number"
+                            },
+                            "width": {
+                              "type": "number"
+                            },
+                            "x": {
+                              "type": "number"
+                            },
+                            "y": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "x",
+                            "y",
+                            "width",
+                            "height"
+                          ],
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "stage": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "stage",
+                      "codes",
+                      "regions"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "troubles": {
+                  "items": {
+                    "description": "One thing wrong with the drawing, with the cards it concerns and the exchanges of the\narrows it concerns, in the order `codes` names them.",
+                    "properties": {
+                      "codes": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "exchange_ids": {
+                        "items": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "kind": {
+                        "enum": [
+                          "cards_overlap",
+                          "edge_through_card",
+                          "edges_overlap",
+                          "edge_backwards",
+                          "edges_cross",
+                          "label_overlap"
+                        ],
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "message",
+                      "codes",
+                      "exchange_ids"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
               },
-              "type": "array"
+              "required": [
+                "map",
+                "cards",
+                "edges",
+                "troubles",
+                "score",
+                "bounds",
+                "scaling",
+                "stages",
+                "shared_suppliers",
+                "card",
+                "kind"
+              ],
+              "type": "object"
             }
-          },
-          "required": [
-            "map",
-            "cards",
-            "edges",
-            "troubles",
-            "score",
-            "bounds",
-            "scaling",
-            "stages",
-            "shared_suppliers",
-            "card"
-          ],
-          "type": "object"
+          ]
         },
         "view_url": {
           "anyOf": [
@@ -11890,10 +12276,67 @@
       "open_world_hint": false,
       "read_only_hint": true
     },
-    "description": "Where every process of a product system is drawn and how every arrow runs, exactly as the page draws it: a map in characters with its legend on the first line, each card's place, size and row anchors, each arrow's corner points and label, what is wrong with the drawing, and a score where 0 means nothing is wrong. The drawing is scaled to one unit of the reference process's product: each card carries its activity, how many times its process runs, and scaled, each exchange's amount at that activity; each label carries its per-unit and its scaled text, and the map titles each card with its scaled output and writes each row's scaled amount. When the engine cannot solve the system, scaling names why and nothing is scaled. Name a case or a scenario as variant to draw every row, arrow and label under it, as calculate_impact evaluates a variant. A system whose processes carry life_cycle_stage is drawn one band of columns per stage, from the functional unit's stage at the right, processes of no stage leftmost; stages lists each stage's cards and regions, and shared_suppliers each process of no stage that feeds several stages. Read it before arrange_graph.",
+    "description": "Where a product system's cards are drawn, and what is wrong with the drawing. detail selects the answer. compact, the default, reads the drawing compactly: the score, where 0 means nothing is wrong, the bounds, why nothing is scaled, how many troubles of each kind and how many cards each placer holds, then the cards' codes, places, sizes, holds and placers and the issues with the cards and exchanges each concerns, the heaviest first, in pages of 10 cards and 3 issues with their totals and a cursor for the next page. detail=\"amounts\" answers the scaled numbers alone, without drawing anything: without card every card's activity, and with card that card's rows of exchange id, name, scaled amount and unit, in pages of 30 activities or 15 rows; read the scaled amounts there when a check needs them. drawing answers the whole arrangement as the page draws it, its map null: each card's place, size and row anchors, each arrow's corner points and label, and the same troubles, score and bounds compact reads. full answers that arrangement with a map in characters whose legend is the first line. card focuses on that card: its own row, every arrow it carries and every issue that names it. exchange_id focuses on one arrow: the two cards it joins, its first and last point, the label the drawing shows and the issues that name it; the two exchanges one pair of cards carries are told apart by it. A focus answers 5 arrows and 3 issues a page. cursor is the page to read, none the first. A card with more input or output rows than it shows folds them behind a row that says how many; the inputs that draw an arrow and the production output are always shown, at an anchor of their own. expanded names the cards whose rows the page shows in full, so a read matches the drawing on screen; it is refused under amounts, which draws nothing. The drawing is scaled to one unit of the reference process's product: each card carries its activity, how many times its process runs, and its scaled amounts, and each label its per-unit and its scaled text. Name a case or a scenario as variant to read every row, arrow and label under it, as calculate_impact evaluates a variant, and when the engine cannot solve the system, scaling names why and nothing is scaled. A system whose processes carry life_cycle_stage is drawn one band of columns per stage, from the functional unit's stage at the right, processes of no stage leftmost; stages lists each stage's cards and regions, and shared_suppliers each process of no stage that feeds several stages. Read the drawing once the model and its results are settled, in a subagent or a separate session when the client has one. Read it when a placement needs inspection, not before every write.",
     "input_schema": {
       "additionalProperties": false,
       "properties": {
+        "card": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "detail": {
+          "default": "compact",
+          "enum": [
+            "compact",
+            "amounts",
+            "drawing",
+            "full"
+          ],
+          "type": "string"
+        },
+        "exchange_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "expanded": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "product_system_id": {
           "type": "string"
         },
@@ -11929,179 +12372,254 @@
           "default": null
         },
         "value": {
-          "description": "Where every card of a product system is drawn and how every arrow runs: the map an agent\nreads, the numbers the page draws, what is wrong with the drawing and its score. `card` is the\ngeometry every card is drawn at.",
-          "properties": {
-            "bounds": {
-              "additionalProperties": {
-                "type": "number"
-              },
-              "type": "object"
-            },
-            "card": {
-              "description": "A card's size in the pixels the page draws it at: its width, its header, the padding around\na section and the label over its rows, and the height of one row.",
+          "oneOf": [
+            {
+              "description": "What a drawing holds, counted and in pages: its score, bounds and scaling, how many\ntroubles of each kind it carries, how many cards each placer holds, then its cards and its\nissues, the heaviest issue first.",
               "properties": {
-                "header_height": {
-                  "type": "number"
+                "bounds": {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "type": "object"
                 },
-                "row_height": {
-                  "type": "number"
+                "cards": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "description": "Where one card is drawn, how big it is, whether someone holds it there and who.",
+                        "properties": {
+                          "code": {
+                            "type": "string"
+                          },
+                          "height": {
+                            "type": "number"
+                          },
+                          "held": {
+                            "type": "boolean"
+                          },
+                          "placed_by": {
+                            "anyOf": [
+                              {
+                                "enum": [
+                                  "agent",
+                                  "person",
+                                  "service"
+                                ],
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "width": {
+                            "type": "number"
+                          },
+                          "x": {
+                            "type": "number"
+                          },
+                          "y": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "code",
+                          "x",
+                          "y",
+                          "width",
+                          "height",
+                          "held",
+                          "placed_by"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "omitted": {
+                      "type": "integer"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total",
+                    "omitted"
+                  ],
+                  "type": "object"
                 },
-                "section_label": {
-                  "type": "number"
+                "holds": {
+                  "description": "How many of the cards the drawing holds each placer put there; a hold that records no\nplacer is counted `unrecorded`.",
+                  "properties": {
+                    "agent": {
+                      "type": "integer"
+                    },
+                    "person": {
+                      "type": "integer"
+                    },
+                    "service": {
+                      "type": "integer"
+                    },
+                    "unrecorded": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "person",
+                    "agent",
+                    "service",
+                    "unrecorded"
+                  ],
+                  "type": "object"
                 },
-                "section_padding": {
-                  "type": "number"
+                "issues": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "description": "One thing wrong with the drawing, with the cards it concerns and the exchanges of the\narrows it concerns.",
+                        "properties": {
+                          "codes": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "exchange_ids": {
+                            "items": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "kind": {
+                            "enum": [
+                              "cards_overlap",
+                              "edge_through_card",
+                              "edges_overlap",
+                              "edge_backwards",
+                              "edges_cross",
+                              "label_overlap"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "codes",
+                          "exchange_ids"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "omitted": {
+                      "type": "integer"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total",
+                    "omitted"
+                  ],
+                  "type": "object"
                 },
-                "width": {
-                  "type": "number"
+                "kind": {
+                  "const": "compact",
+                  "default": "compact",
+                  "type": "string"
+                },
+                "next_cursor": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "scaling": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "score": {
+                  "type": "integer"
+                },
+                "troubles": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "propertyNames": {
+                    "enum": [
+                      "cards_overlap",
+                      "edge_through_card",
+                      "edges_overlap",
+                      "edge_backwards",
+                      "edges_cross",
+                      "label_overlap"
+                    ]
+                  },
+                  "type": "object"
+                },
+                "variant": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 }
               },
               "required": [
-                "width",
-                "header_height",
-                "section_padding",
-                "section_label",
-                "row_height"
+                "score",
+                "bounds",
+                "troubles",
+                "holds",
+                "cards",
+                "issues",
+                "kind"
               ],
               "type": "object"
             },
-            "cards": {
-              "items": {
-                "description": "Where one card is drawn, its rows in drawn order with their anchors, the offset of its\noutput anchor, and whether someone put it there.",
-                "properties": {
-                  "activity": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null
-                  },
-                  "code": {
-                    "type": "string"
-                  },
-                  "depth": {
-                    "type": "integer"
-                  },
-                  "height": {
-                    "type": "number"
-                  },
-                  "held": {
-                    "default": false,
-                    "type": "boolean"
-                  },
-                  "inputs": {
-                    "default": [],
-                    "items": {
-                      "description": "Where one input row is anchored, as its offset from the top of its card.",
-                      "properties": {
-                        "exchange_id": {
-                          "format": "uuid",
-                          "type": "string"
-                        },
-                        "y": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "exchange_id",
-                        "y"
-                      ],
-                      "type": "object"
-                    },
-                    "type": "array"
-                  },
-                  "output": {
-                    "type": "number"
-                  },
-                  "outputs": {
-                    "default": [],
-                    "items": {
-                      "format": "uuid",
-                      "type": "string"
-                    },
-                    "type": "array"
-                  },
-                  "scaled": {
-                    "anyOf": [
-                      {
-                        "additionalProperties": {
-                          "type": "number"
-                        },
-                        "propertyNames": {
-                          "format": "uuid"
-                        },
-                        "type": "object"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null
-                  },
-                  "shown_inputs": {
-                    "default": 0,
-                    "type": "integer"
-                  },
-                  "width": {
-                    "type": "number"
-                  },
-                  "x": {
-                    "type": "number"
-                  },
-                  "y": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "code",
-                  "x",
-                  "y",
-                  "width",
-                  "height",
-                  "depth",
-                  "output"
-                ],
-                "type": "object"
-              },
-              "type": "array"
-            },
-            "edges": {
-              "items": {
-                "description": "One arrow's path as the page draws it, corner by corner.",
-                "properties": {
-                  "consumer": {
-                    "type": "string"
-                  },
-                  "exchange_id": {
-                    "format": "uuid",
-                    "type": "string"
-                  },
-                  "label": {
-                    "description": "The box an arrow's quantity text occupies, and the texts it carries.",
+            {
+              "description": "One card or one arrow of a drawing, with the cards it draws, the arrows it carries and the\nissues that concern it, in pages.",
+              "properties": {
+                "cards": {
+                  "items": {
+                    "description": "Where one card is drawn, how big it is, whether someone holds it there and who.",
                     "properties": {
-                      "formula": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
+                      "code": {
+                        "type": "string"
                       },
                       "height": {
                         "type": "number"
                       },
-                      "per_unit": {
-                        "type": "string"
+                      "held": {
+                        "type": "boolean"
                       },
-                      "scaled": {
+                      "placed_by": {
                         "anyOf": [
                           {
+                            "enum": [
+                              "agent",
+                              "person",
+                              "service"
+                            ],
                             "type": "string"
                           },
                           {
@@ -12120,184 +12638,760 @@
                       }
                     },
                     "required": [
+                      "code",
                       "x",
                       "y",
                       "width",
                       "height",
-                      "per_unit",
-                      "scaled",
-                      "formula"
+                      "held",
+                      "placed_by"
                     ],
                     "type": "object"
                   },
-                  "points": {
+                  "type": "array"
+                },
+                "issues": {
+                  "properties": {
                     "items": {
-                      "maxItems": 2,
-                      "minItems": 2,
-                      "prefixItems": [
-                        {
-                          "type": "number"
+                      "items": {
+                        "description": "One thing wrong with the drawing, with the cards it concerns and the exchanges of the\narrows it concerns.",
+                        "properties": {
+                          "codes": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "exchange_ids": {
+                            "items": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "kind": {
+                            "enum": [
+                              "cards_overlap",
+                              "edge_through_card",
+                              "edges_overlap",
+                              "edge_backwards",
+                              "edges_cross",
+                              "label_overlap"
+                            ],
+                            "type": "string"
+                          }
                         },
-                        {
-                          "type": "number"
-                        }
-                      ],
+                        "required": [
+                          "kind",
+                          "codes",
+                          "exchange_ids"
+                        ],
+                        "type": "object"
+                      },
                       "type": "array"
                     },
-                    "type": "array"
+                    "omitted": {
+                      "type": "integer"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
                   },
-                  "provider": {
-                    "type": "string"
-                  }
+                  "required": [
+                    "items",
+                    "total",
+                    "omitted"
+                  ],
+                  "type": "object"
                 },
-                "required": [
-                  "provider",
-                  "consumer",
-                  "exchange_id",
-                  "points",
-                  "label"
-                ],
-                "type": "object"
-              },
-              "type": "array"
-            },
-            "map": {
-              "type": "string"
-            },
-            "scaling": {
-              "anyOf": [
-                {
+                "kind": {
+                  "const": "focus",
+                  "default": "focus",
                   "type": "string"
                 },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "score": {
-              "type": "integer"
-            },
-            "shared_suppliers": {
-              "items": {
-                "description": "A card of no stage: how many processes it feeds and how many of the system's stages those\nprocesses span.",
-                "properties": {
-                  "code": {
-                    "type": "string"
-                  },
-                  "processes": {
-                    "type": "integer"
-                  },
-                  "stages": {
-                    "type": "integer"
-                  }
-                },
-                "required": [
-                  "code",
-                  "processes",
-                  "stages"
-                ],
-                "type": "object"
-              },
-              "type": "array"
-            },
-            "stages": {
-              "items": {
-                "description": "One stage's cards in the order the drawing places them, and the regions that hold them.",
-                "properties": {
-                  "codes": {
-                    "items": {
+                "next_cursor": {
+                  "anyOf": [
+                    {
                       "type": "string"
                     },
-                    "type": "array"
-                  },
-                  "regions": {
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "routes": {
+                  "properties": {
                     "items": {
-                      "description": "A rectangle in the drawing's own coordinates, holding the cards of one stage.",
+                      "items": {
+                        "description": "One arrow as a caller reads it: the exchange it carries, the two cards it joins, where it\nstarts and ends, and the text the drawing shows beside it.",
+                        "properties": {
+                          "consumer": {
+                            "type": "string"
+                          },
+                          "exchange_id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "first": {
+                            "maxItems": 2,
+                            "minItems": 2,
+                            "prefixItems": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "number"
+                              }
+                            ],
+                            "type": "array"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "last": {
+                            "maxItems": 2,
+                            "minItems": 2,
+                            "prefixItems": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "number"
+                              }
+                            ],
+                            "type": "array"
+                          },
+                          "provider": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "exchange_id",
+                          "provider",
+                          "consumer",
+                          "first",
+                          "last",
+                          "label"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "omitted": {
+                      "type": "integer"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total",
+                    "omitted"
+                  ],
+                  "type": "object"
+                },
+                "variant": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "cards",
+                "routes",
+                "issues",
+                "kind"
+              ],
+              "type": "object"
+            },
+            {
+              "description": "Every card's activity, or one card's activity and rows of scaled amounts, in pages, as the\ndrawing scales them; `scaling` names why nothing is scaled. Nothing here is placed, routed or\nscored.",
+              "properties": {
+                "activities": {
+                  "anyOf": [
+                    {
                       "properties": {
-                        "height": {
-                          "type": "number"
+                        "items": {
+                          "items": {
+                            "description": "How many times one card's process runs.",
+                            "properties": {
+                              "activity": {
+                                "type": "number"
+                              },
+                              "code": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "activity"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
                         },
-                        "width": {
-                          "type": "number"
+                        "omitted": {
+                          "type": "integer"
                         },
-                        "x": {
-                          "type": "number"
-                        },
-                        "y": {
-                          "type": "number"
+                        "total": {
+                          "type": "integer"
                         }
                       },
                       "required": [
-                        "x",
-                        "y",
-                        "width",
-                        "height"
+                        "items",
+                        "total",
+                        "omitted"
                       ],
                       "type": "object"
                     },
-                    "type": "array"
-                  },
-                  "stage": {
-                    "type": "string"
-                  }
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 },
-                "required": [
-                  "stage",
-                  "codes",
-                  "regions"
-                ],
-                "type": "object"
-              },
-              "type": "array"
-            },
-            "troubles": {
-              "items": {
-                "description": "One thing wrong with the drawing, with the cards it concerns.",
-                "properties": {
-                  "codes": {
-                    "items": {
+                "card": {
+                  "anyOf": [
+                    {
+                      "description": "One card's activity and one page of its scaled exchanges, in the process's own order.",
+                      "properties": {
+                        "activity": {
+                          "type": "number"
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "rows": {
+                          "properties": {
+                            "items": {
+                              "items": {
+                                "description": "One exchange of a card as its scaled amount: which exchange, what it is called, how much\nof it at the card's activity, and its unit.",
+                                "properties": {
+                                  "amount": {
+                                    "type": "number"
+                                  },
+                                  "exchange_id": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "unit": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "exchange_id",
+                                  "name",
+                                  "amount",
+                                  "unit"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "omitted": {
+                              "type": "integer"
+                            },
+                            "total": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "items",
+                            "total",
+                            "omitted"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "activity",
+                        "rows"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "kind": {
+                  "const": "amounts",
+                  "default": "amounts",
+                  "type": "string"
+                },
+                "next_cursor": {
+                  "anyOf": [
+                    {
                       "type": "string"
                     },
-                    "type": "array"
-                  },
-                  "kind": {
-                    "enum": [
-                      "cards_overlap",
-                      "edge_through_card",
-                      "edges_overlap",
-                      "edge_backwards",
-                      "edges_cross",
-                      "label_overlap"
-                    ],
-                    "type": "string"
-                  },
-                  "message": {
-                    "type": "string"
-                  }
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 },
-                "required": [
-                  "kind",
-                  "message",
-                  "codes"
-                ],
-                "type": "object"
+                "scaling": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                },
+                "variant": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
+                }
               },
-              "type": "array"
+              "required": [
+                "kind"
+              ],
+              "type": "object"
+            },
+            {
+              "description": "Where every card of a product system is drawn and how every arrow runs: the map an agent\nreads where the answer asked for it, the numbers the page draws, what is wrong with the\ndrawing and its score. `card` is the geometry every card is drawn at.",
+              "properties": {
+                "bounds": {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "type": "object"
+                },
+                "card": {
+                  "description": "A card's size in the pixels the page draws it at: its width, its header, the padding around\na section and the label over its rows, and the height of one row.",
+                  "properties": {
+                    "header_height": {
+                      "type": "number"
+                    },
+                    "row_height": {
+                      "type": "number"
+                    },
+                    "section_label": {
+                      "type": "number"
+                    },
+                    "section_padding": {
+                      "type": "number"
+                    },
+                    "width": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "width",
+                    "header_height",
+                    "section_padding",
+                    "section_label",
+                    "row_height"
+                  ],
+                  "type": "object"
+                },
+                "cards": {
+                  "items": {
+                    "description": "Where one card is drawn, the rows it shows of each side in drawn order with their anchors,\nthe offset of its output anchor, whether someone put it there and who that was. `folded`\ncounts the rows a fold hides, so a card whose rows are all shown still says what collapsing\nit would take away.",
+                    "properties": {
+                      "activity": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "depth": {
+                        "type": "integer"
+                      },
+                      "folded_inputs": {
+                        "default": 0,
+                        "type": "integer"
+                      },
+                      "folded_outputs": {
+                        "default": 0,
+                        "type": "integer"
+                      },
+                      "height": {
+                        "type": "number"
+                      },
+                      "held": {
+                        "default": false,
+                        "type": "boolean"
+                      },
+                      "inputs": {
+                        "default": [],
+                        "items": {
+                          "description": "Where one input row is anchored, as its offset from the top of its card.",
+                          "properties": {
+                            "exchange_id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "y": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "exchange_id",
+                            "y"
+                          ],
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "output": {
+                        "type": "number"
+                      },
+                      "outputs": {
+                        "default": [],
+                        "items": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "placed_by": {
+                        "anyOf": [
+                          {
+                            "enum": [
+                              "agent",
+                              "person",
+                              "service"
+                            ],
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null
+                      },
+                      "scaled": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": {
+                              "type": "number"
+                            },
+                            "propertyNames": {
+                              "format": "uuid"
+                            },
+                            "type": "object"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "default": null
+                      },
+                      "shown_inputs": {
+                        "type": "integer"
+                      },
+                      "shown_outputs": {
+                        "type": "integer"
+                      },
+                      "width": {
+                        "type": "number"
+                      },
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "x",
+                      "y",
+                      "width",
+                      "height",
+                      "depth",
+                      "shown_inputs",
+                      "shown_outputs",
+                      "output"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "edges": {
+                  "items": {
+                    "description": "One arrow's path as the page draws it, corner by corner.",
+                    "properties": {
+                      "consumer": {
+                        "type": "string"
+                      },
+                      "exchange_id": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "label": {
+                        "description": "The box an arrow's quantity text occupies, and the texts it carries.",
+                        "properties": {
+                          "formula": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "height": {
+                            "type": "number"
+                          },
+                          "per_unit": {
+                            "type": "string"
+                          },
+                          "scaled": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "width": {
+                            "type": "number"
+                          },
+                          "x": {
+                            "type": "number"
+                          },
+                          "y": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y",
+                          "width",
+                          "height",
+                          "per_unit",
+                          "scaled",
+                          "formula"
+                        ],
+                        "type": "object"
+                      },
+                      "points": {
+                        "items": {
+                          "maxItems": 2,
+                          "minItems": 2,
+                          "prefixItems": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ],
+                          "type": "array"
+                        },
+                        "type": "array"
+                      },
+                      "provider": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "provider",
+                      "consumer",
+                      "exchange_id",
+                      "points",
+                      "label"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "kind": {
+                  "const": "arrangement",
+                  "default": "arrangement",
+                  "type": "string"
+                },
+                "map": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "scaling": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "score": {
+                  "type": "integer"
+                },
+                "shared_suppliers": {
+                  "items": {
+                    "description": "A card of no stage: how many processes it feeds and how many of the system's stages those\nprocesses span.",
+                    "properties": {
+                      "code": {
+                        "type": "string"
+                      },
+                      "processes": {
+                        "type": "integer"
+                      },
+                      "stages": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "processes",
+                      "stages"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "stages": {
+                  "items": {
+                    "description": "One stage's cards in the order the drawing places them, and the regions that hold them.",
+                    "properties": {
+                      "codes": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "regions": {
+                        "items": {
+                          "description": "A rectangle in the drawing's own coordinates, holding the cards of one stage.",
+                          "properties": {
+                            "height": {
+                              "type": "number"
+                            },
+                            "width": {
+                              "type": "number"
+                            },
+                            "x": {
+                              "type": "number"
+                            },
+                            "y": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "x",
+                            "y",
+                            "width",
+                            "height"
+                          ],
+                          "type": "object"
+                        },
+                        "type": "array"
+                      },
+                      "stage": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "stage",
+                      "codes",
+                      "regions"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "troubles": {
+                  "items": {
+                    "description": "One thing wrong with the drawing, with the cards it concerns and the exchanges of the\narrows it concerns, in the order `codes` names them.",
+                    "properties": {
+                      "codes": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "exchange_ids": {
+                        "items": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "kind": {
+                        "enum": [
+                          "cards_overlap",
+                          "edge_through_card",
+                          "edges_overlap",
+                          "edge_backwards",
+                          "edges_cross",
+                          "label_overlap"
+                        ],
+                        "type": "string"
+                      },
+                      "message": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "message",
+                      "codes",
+                      "exchange_ids"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "map",
+                "cards",
+                "edges",
+                "troubles",
+                "score",
+                "bounds",
+                "scaling",
+                "stages",
+                "shared_suppliers",
+                "card",
+                "kind"
+              ],
+              "type": "object"
             }
-          },
-          "required": [
-            "map",
-            "cards",
-            "edges",
-            "troubles",
-            "score",
-            "bounds",
-            "scaling",
-            "stages",
-            "shared_suppliers",
-            "card"
-          ],
-          "type": "object"
+          ]
         },
         "view_url": {
           "anyOf": [

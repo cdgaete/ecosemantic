@@ -84,7 +84,7 @@ function boxes(container: HTMLElement, stage: string): HTMLElement[] {
 }
 
 function tabOf(container: HTMLElement, stage: string): HTMLElement {
-  return container.querySelector<HTMLElement>(`[data-stage="${stage}"] [data-stage-tab]`)!
+  return container.querySelector<HTMLElement>(`[data-stage-tab="${stage}"]`)!
 }
 
 describe('the stage boxes', () => {
@@ -98,8 +98,7 @@ describe('the stage boxes', () => {
       expect(found).toHaveLength(2)
       return found
     })
-    expect(within(drawn[0]!).getByText(/^assembly/)).toBeInTheDocument()
-    expect(within(drawn[1]!).getByText(/^materials/)).toBeInTheDocument()
+    expect(drawn.map((box) => box.dataset.stage)).toEqual(['assembly', 'materials'])
     const cards = Array.from(container.querySelectorAll<HTMLElement>('.react-flow__node:not([data-id^="stage:"])'))
     expect(cards.length).toBeGreaterThan(0)
     const lowest = Math.min(...cards.map((card) => Number(card.style.zIndex)))
@@ -108,6 +107,28 @@ describe('the stage boxes', () => {
     expect(drawn[0]!.closest<HTMLElement>('.react-flow__node')!.style.transform.replace(/\s+/g, '')).toBe(`translate(${region.x}px,${region.y}px)`)
     expect(drawn[0]!.style.width).toBe(`${region.width}px`)
     expect(drawn[0]!.style.height).toBe(`${region.height}px`)
+  })
+
+  it('draws each stage caption in the label layer, which the connectors and the cards follow', async () => {
+    rendered.layout = layoutAnswer(doc, ONE_EACH)
+    const { container } = renderGraph()
+    const tabs = await waitFor(() => {
+      const found = Array.from(container.querySelectorAll<HTMLElement>('[data-stage-tab]'))
+      expect(found).toHaveLength(2)
+      return found
+    })
+    const layer = container.querySelector<HTMLElement>('.react-flow__edgelabel-renderer')!
+    for (const tab of tabs) {
+      expect(layer.contains(tab)).toBe(true)
+      expect(tab.closest('.react-flow__node')).toBeNull()
+    }
+    const paints = [...container.querySelector('.react-flow__viewport')!.children]
+    const edges = paints.indexOf(container.querySelector('.react-flow__edges')!)
+    const labels = paints.indexOf(layer)
+    const nodes = paints.indexOf(container.querySelector('.react-flow__nodes')!)
+    expect(edges).toBeGreaterThanOrEqual(0)
+    expect(labels).toBeGreaterThan(edges)
+    expect(nodes).toBeGreaterThan(labels)
   })
 
   it("a box labels its signed share in its stage's colour", async () => {

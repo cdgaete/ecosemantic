@@ -3,10 +3,14 @@ import { useLog } from '@/api/queries'
 import { formatAgo } from '@/lib/format'
 import { paths, useGo } from '@/lib/paths'
 import { useRequestDialog } from '@/requests/useRequestDialog'
+import { resultSearch } from '@/editors/results/calculations'
+import { CalculationActions } from '@/editors/results/ResultBand'
+import { useBand } from '@/editors/results/useBand'
+import { CalculateButton } from '@/editors/system/CalculateButton'
 import { useUi } from '@/store/ui'
 import { openInspector } from '@/window/inspector'
 import { IconButton } from '@/window/IconButton'
-import { CalculateButton } from '@/editors/system/CalculateButton'
+import { useMinWidth } from '@/window/useMinWidth'
 import { actorOf } from './agents'
 import { Message } from './Message'
 
@@ -19,6 +23,8 @@ interface BuildLineProps {
 
 export function BuildLine({ systemId, live, toolsOpen, onTools }: BuildLineProps) {
   const log = useLog(systemId)
+  const wide = useMinWidth(768)
+  const band = useBand(systemId, !wide)
   const go = useGo()
   const held = useUi((s) => (s.sheetOpen ? null : s.details))
   const recorded = log.data?.value ?? []
@@ -67,7 +73,13 @@ export function BuildLine({ systemId, live, toolsOpen, onTools }: BuildLineProps
       <IconButton label="Canvas tools" side="top" pressed={toolsOpen} onClick={onTools}>
         <SlidersHorizontal />
       </IconButton>
-      {live ? <CalculateButton systemId={systemId} /> : null}
+      {live ? (
+        wide ? (
+          <CalculateButton systemId={systemId} />
+        ) : (
+          <CalculationActions systemId={systemId} call={band?.call} search={band === null ? '' : resultSearch(band)} />
+        )
+      ) : null}
     </div>
   )
 }

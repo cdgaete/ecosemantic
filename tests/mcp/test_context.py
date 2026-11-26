@@ -8,7 +8,7 @@ import pytest
 from ecosemantic.local import build_context
 from ecosemantic.mcp.calls import InProgress, begin, end
 from ecosemantic.mcp.context import ServerContext
-from ecosemantic.model.entities import Actor
+from ecosemantic.model.entities import Actor, Person
 from ecosemantic.ports.calculation import CalculationPort
 from ecosemantic.ports.inventory import InventoryPort
 from ecosemantic.ports.resolver import Resolver
@@ -60,3 +60,35 @@ def test_inside_a_call_the_context_acts_as_the_agent(context: ServerContext) -> 
         assert context.acting() == Actor(kind="agent", id="electricity", name="claude-code")
     finally:
         end(token)
+
+
+def test_a_page_call_places_as_a_person_with_and_without_one_signed_in(
+    context: ServerContext,
+) -> None:
+    person = Person(id="a", name="Ana")
+    call = InProgress(context=context, agent="view", client="view", origin="view")
+    token = begin(call)
+    try:
+        anonymous = context.placing()
+        signed_in = context.for_person(person).placing()
+    finally:
+        end(token)
+    assert (anonymous, signed_in) == ("person", "person")
+
+
+def test_an_agent_call_places_as_an_agent_with_and_without_a_person(
+    context: ServerContext,
+) -> None:
+    person = Person(id="a", name="Ana")
+    call = InProgress(context=context, agent="claude", client="Claude", origin="agent")
+    token = begin(call)
+    try:
+        anonymous = context.placing()
+        signed_in = context.for_person(person).placing()
+    finally:
+        end(token)
+    assert (anonymous, signed_in) == ("agent", "agent")
+
+
+def test_outside_a_call_the_context_places_as_its_actor(context: ServerContext) -> None:
+    assert context.placing() == context.actor.kind
